@@ -12,7 +12,7 @@
    ```bash
    git clone [https://github.com/Mentolka1207/my-web-rts.git](https://github.com/Mentolka1207/my-web-rts.git)
 2. Откройте файл index.html в любом современном браузере.
-3. 
+ 
 🛠️ Технологический стек и архитектура
 
 В проекте реализован ряд фундаментальных систем, использующихся в масштабных коммерческих RTS (таких как Supreme Commander):
