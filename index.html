@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Minimal Web RTS: Flow Fields & FSM Combat with Health Bars</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        /* Стили для рамки выделения */
+        #selection-box {
+            border: 2px dashed #00ff77;
+            background-color: rgba(0, 255, 119, 0.15);
+            position: absolute;
+            pointer-events: none;
+            display: none;
+            box-shadow: 0 0 10px rgba(0, 255, 119, 0.5);
+        }
+        #instructions {
+            position: absolute;
+            top: 10px; left: 10px;
+            color: white; background: rgba(10, 15, 30, 0.85);
+            padding: 15px; border-radius: 8px;
+            line-height: 1.5;
+            z-index: 10;
+            border: 1px solid #334466;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        button {
+            background: #0077ff;
+            color: white;
+            border: 1px solid #00a2ff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 5px;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+        button:hover {
+            background: #00ff77;
+            color: black;
+            border-color: #00ff77;
+            box-shadow: 0 0 10px rgba(0, 255, 119, 0.5);
+        }
+    </style>
+    <!-- Подключаем Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="selection-box"></div>
+    <div id="instructions">
+        <strong>Управление:</strong><br>
+        • <strong>Клик ЛКМ</strong> — выделить одного юнита<br>
+        • Зажми <strong>ЛКМ и тяни</strong> — выделить рамкой несколько<br>
+        • Клик <strong>ПКМ</strong> — отправить выделенных юнитов в точку<br>
+        • Клавиша <strong>E</strong> — спавн вражеского дрона под курсором<br>
+        • Клавиши <strong>W, A, S, D</strong> — движение камеры<br><br>
+        <strong>Построение:</strong><br>
+        <button onclick="setFormation('line')">Шеренга</button>
+        <button onclick="setFormation('wedge')">Клин</button>
+    </div>
+    <div id="canvas-container"></div>
+
+    <script>
+        // --- 1. ГЕНЕРАТОРЫ ПРОЦЕДУРНЫХ ТЕКСТУР ---
+        function createGroundTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#222630'; ctx.fillRect(0, 0, 256, 256);
+            ctx.strokeStyle = '#3b4252'; ctx.lineWidth = 4;
+            ctx.strokeRect(0, 0, 256, 256);
+            ctx.strokeRect(128, 0, 128, 256); ctx.strokeRect(0, 128, 256, 128);
+            for (let i = 0; i < 2500; i++) {
+                const x = Math.random() * 256; const y = Math.random() * 256;
+                ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.08})`;
+                ctx.fillRect(x, y, 1, 1);
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(10, 10);
+            return texture;
+        }
+
+        function createWallTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#2e3440'; ctx.fillRect(0, 0, 128, 128);
+            ctx.strokeStyle = '#4c566a'; ctx.lineWidth = 6;
+            ctx.strokeRect(2, 2, 124, 124);
+            ctx.strokeStyle = '#00ff77'; ctx.lineWidth = 3; 
+            ctx.beginPath(); ctx.moveTo(0, 64); ctx.lineTo(128, 64); ctx.stroke();
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createUnitTexture(colorHex, glowHex) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#2e3440'; ctx.fillRect(0, 0, 128, 128);
+            ctx.strokeStyle = colorHex; ctx.lineWidth = 10; ctx.strokeRect(8, 8, 112, 112);
+            ctx.fillStyle = glowHex; ctx.shadowBlur = 15; ctx.shadowColor = glowHex;
+            ctx.beginPath(); ctx.arc(64, 64, 24, 0, Math.PI * 2); ctx.fill();
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // --- 2. НАСТРОЙКИ СЕТКИ И КАРТЫ ---
+        const GRID_SIZE = 22; 
+        const CELL_SIZE = 2;
+        const grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
+        
+        for (let i = 0; i < GRID_SIZE; i++) {
+            grid[0][i] = 1; grid[GRID_SIZE - 1][i] = 1; 
+            grid[i][0] = 1; grid[i][GRID_SIZE - 1] = 1; 
+        }
+
+        for(let i=0; i<25; i++) {
+            const rx = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+            const rz = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+            if ((rx > 4 || rz > 4) && (rx < GRID_SIZE - 5 || rz < GRID_SIZE - 5) && grid[rz][rx] === 0) {
+                grid[rz][rx] = 1; 
+            }
+        }
+
+        function worldToGrid(x, z) {
+            const col = Math.floor((x + (GRID_SIZE * CELL_SIZE) / 2) / CELL_SIZE);
+            const row = Math.floor((z + (GRID_SIZE * CELL_SIZE) / 2) / CELL_SIZE);
+            return { col, row };
+        }
+
+        function gridToWorld(col, row) {
+            const x = col * CELL_SIZE - (GRID_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
+            const z = row * CELL_SIZE - (GRID_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
+            return { x, z };
+        }
+
+        // --- НАСТРОЙКИ ПОСТРОЕНИЙ ---
+        let currentFormation = 'line'; 
+        const SPACING = 1.2; 
+
+        function setFormation(type) { currentFormation = type; }
+
+        function getFormationOffsets(numUnits, type) {
+            const offsets = [];
+            if (type === 'line') {
+                for (let i = 0; i < numUnits; i++) {
+                    const side = i % 2 === 0 ? 1 : -1;
+                    const step = Math.ceil(i / 2);
+                    offsets.push(new THREE.Vector2(side * step * SPACING, 0));
+                }
+            } else if (type === 'wedge') {
+                offsets.push(new THREE.Vector2(0, 0)); 
+                for (let i = 1; i < numUnits; i++) {
+                    const side = i % 2 === 0 ? 1 : -1;
+                    const step = Math.ceil(i / 2);
+                    offsets.push(new THREE.Vector2(side * step * SPACING, -step * SPACING));
+                }
+            }
+            return offsets;
+        }
+
+        // --- 3. КЛАСС FLOW FIELD ---
+        class FlowFieldGenerator {
+            constructor(gridWidth, gridHeight, cellSize) {
+                this.width = gridWidth; this.height = gridHeight; this.cellSize = cellSize;
+                this.costField = Array(this.height).fill(null).map((_, r) => 
+                    Array(this.width).fill(null).map((_, c) => grid[r][c] === 1 ? 255 : 1)
+                );
+                this.integrationField = Array(this.height).fill(null).map(() => Array(this.width).fill(65535));
+                this.flowField = Array(this.height).fill(null).map(() => 
+                    Array(this.width).fill(null).map(() => new THREE.Vector2(0, 0))
+                );
+            }
+
+            generateIntegrationField(targetCol, targetRow) {
+                for (let r = 0; r < this.height; r++) {
+                    for (let c = 0; c < this.width; c++) { this.integrationField[r][c] = 65535; }
+                }
+                const queue = [];
+                this.integrationField[targetRow][targetCol] = 0;
+                queue.push({ col: targetCol, row: targetRow });
+
+                while (queue.length > 0) {
+                    const current = queue.shift();
+                    const currentCost = this.integrationField[current.row][current.col];
+                    const neighbors = [
+                        { col: current.col + 1, row: current.row }, { col: current.col - 1, row: current.row },
+                        { col: current.col, row: current.row + 1 }, { col: current.col, row: current.row - 1 }
+                    ];
+                    for (const neighbor of neighbors) {
+                        if (neighbor.col < 0 || neighbor.col >= this.width || neighbor.row < 0 || neighbor.row >= this.height) continue;
+                        const stepCost = this.costField[neighbor.row][neighbor.col];
+                        if (stepCost === 255) continue; 
+                        const totalCost = currentCost + stepCost;
+                        if (totalCost < this.integrationField[neighbor.row][neighbor.col]) {
+                            this.integrationField[neighbor.row][neighbor.col] = totalCost;
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+            }
+
+            generateFlowField() {
+                for (let r = 0; r < this.height; r++) {
+                    for (let c = 0; c < this.width; c++) {
+                        if (this.costField[r][c] === 255) { this.flowField[r][c].set(0, 0); continue; }
+                        let minCost = this.integrationField[r][c];
+                        let bestDir = new THREE.Vector2(0, 0);
+                        for (let dx = -1; dx <= 1; dx++) {
+                            for (let dy = -1; dy <= 1; dy++) {
+                                if (dx === 0 && dy === 0) continue;
+                                const nc = c + dx; const nr = r + dy;
+                                if (nc < 0 || nc >= this.width || nr < 0 || nr >= this.height) continue;
+                                const neighborCost = this.integrationField[nr][nc];
+                                if (neighborCost < minCost) { minCost = neighborCost; bestDir.set(dx, dy); }
+                            }
+                        }
+                        this.flowField[r][c].copy(bestDir).normalize();
+                    }
+                }
+            }
+
+            updateTarget(targetCol, targetRow) {
+                this.generateIntegrationField(targetCol, targetRow);
+                this.generateFlowField();
+            }
+        }
+
+        const flowFieldGen = new FlowFieldGenerator(GRID_SIZE, GRID_SIZE, CELL_SIZE);
+
+        // --- 4. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ THREE.JS ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0f111a); 
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+        camera.position.set(0, 42, 32);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
+        scene.add(ambientLight);
+
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.3);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2); 
+        dirLight.position.set(30, 60, 30);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // --- 5. ОТРИСОВКА ИГРОВОГО МИРА С ТЕКСТУРАМИ ---
+        const groundTex = createGroundTexture();
+        const groundGeo = new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
+        const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.5, metalness: 0.3 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const gridHelper = new THREE.GridHelper(GRID_SIZE * CELL_SIZE, GRID_SIZE, 0x0088ff, 0x1f2430);
+        gridHelper.position.y = 0.01; 
+        scene.add(gridHelper);
+
+        const wallTex = createWallTexture();
+        const wallGeo = new THREE.BoxGeometry(CELL_SIZE * 0.98, 1.5, CELL_SIZE * 0.98);
+        const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.4, metalness: 0.4 });
+        for (let row = 0; row < GRID_SIZE; row++) {
+            for (let col = 0; col < GRID_SIZE; col++) {
+                if (grid[row][col] === 1) {
+                    const wall = new THREE.Mesh(wallGeo, wallMat);
+                    const pos = gridToWorld(col, row);
+                    wall.position.set(pos.x, 0.75, pos.z);
+                    scene.add(wall);
+                }
+            }
+        }
+
+        // --- 6. ЮНИТЫ И ВРАГИ ---
+        const normalUnitTex = createUnitTexture('#0077ff', '#00e1ff');
+        const selectedUnitTex = createUnitTexture('#00ff77', '#33ff99');
+        const enemyTex = createUnitTexture('#ff3333', '#ff0000'); 
+
+        const normalUnitMat = new THREE.MeshStandardMaterial({ map: normalUnitTex, metalness: 0.6, roughness: 0.2 });
+        const selectedUnitMat = new THREE.MeshStandardMaterial({ map: selectedUnitTex, metalness: 0.6, roughness: 0.2 });
+        const enemyMat = new THREE.MeshStandardMaterial({ map: enemyTex, metalness: 0.6, roughness: 0.2 });
+
+        const units = [];
+        const enemies = [];
+        const unitGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+
+        const States = { IDLE: 'IDLE', MOVE: 'MOVE', CHASE: 'CHASE', ATTACK: 'ATTACK' };
+
+        // Вспомогательная функция для создания полоски здоровья в 3D
+        function attachHealthBar(parentMesh, isAlly) {
+            const barGroup = new THREE.Group();
+            barGroup.position.set(0, 0.7, 0); // Позиционируем чуть выше юнита
+
+            // 1. Красный/темный фон полоски
+            const bgGeo = new THREE.PlaneGeometry(0.8, 0.1);
+            const bgMat = new THREE.MeshBasicMaterial({ color: 0x4a0e0e, side: THREE.DoubleSide });
+            const bgMesh = new THREE.Mesh(bgGeo, bgMat);
+            barGroup.add(bgMesh);
+
+            // 2. Индикатор здоровья (зеленый для союзников, красный для врагов)
+            // Чтобы полоска сжималась к ЛЕВОМУ краю, сдвинем геометрию на половину ширины вправо
+            const fgGeo = new THREE.PlaneGeometry(0.8, 0.1);
+            fgGeo.translate(0.4, 0, 0); // Переносим точку вращения/масштаба влево
+            
+            const fgColor = isAlly ? 0x00ff77 : 0xff3333;
+            const fgMat = new THREE.MeshBasicMaterial({ color: fgColor, side: THREE.DoubleSide });
+            const fgMesh = new THREE.Mesh(fgGeo, fgMat);
+            fgMesh.position.x = -0.4; // Возвращаем на место относительно фона
+            barGroup.add(fgMesh);
+
+            parentMesh.add(barGroup);
+
+            // Возвращаем ссылки для быстрого обновления масштаба и вращения
+            return {
+                group: barGroup,
+                fg: fgMesh
+            };
+        }
+
+        function createUnit(col, row) {
+            const mesh = new THREE.Mesh(unitGeo, normalUnitMat);
+            mesh.castShadow = true;
+            const pos = gridToWorld(col, row);
+            mesh.position.set(pos.x, 0.4, pos.z);
+            scene.add(mesh);
+
+            const hpBar = attachHealthBar(mesh, true);
+
+            units.push({
+                mesh: mesh,
+                selected: false,
+                state: States.IDLE,
+                personalTarget: null,
+                targetEnemy: null,
+                hp: 100,
+                maxHp: 100,
+                speed: 6.0,
+                radius: 0.45,
+                visionRange: 8.0,  
+                attackRange: 4.0,  
+                attackCooldown: 1.0, 
+                lastAttackTime: 0,
+                healthBar: hpBar // Ссылка на компоненты полоски здоровья
+            });
+        }
+
+        function createEnemy(x, z) {
+            const mesh = new THREE.Mesh(unitGeo, enemyMat);
+            mesh.castShadow = true;
+            mesh.position.set(x, 0.4, z);
+            scene.add(mesh);
+
+            const hpBar = attachHealthBar(mesh, false);
+
+            enemies.push({
+                mesh: mesh,
+                state: States.IDLE,
+                hp: 80,
+                maxHp: 80,
+                speed: 4.0,
+                radius: 0.45,
+                visionRange: 7.0,
+                attackRange: 3.5,
+                attackCooldown: 1.2,
+                lastAttackTime: 0,
+                targetAlly: null,
+                healthBar: hpBar // Ссылка на компоненты полоски здоровья
+            });
+        }
+
+        createUnit(2, 2); createUnit(2, 3); createUnit(3, 2); createUnit(3, 3); createUnit(4, 2);
+        createEnemy(12, 12); createEnemy(14, 12); createEnemy(13, 14);
+
+        // --- ЭФФЕКТЫ ВЫСТРЕЛОВ (ЛАЗЕРЫ) ---
+        function fireLaser(fromPos, toPos, colorHex) {
+            const points = [
+                new THREE.Vector3(fromPos.x, fromPos.y + 0.1, fromPos.z),
+                new THREE.Vector3(toPos.x, toPos.y + 0.1, toPos.z)
+            ];
+            const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+            const lineMat = new THREE.LineBasicMaterial({ color: colorHex, linewidth: 3 });
+            const laser = new THREE.Line(lineGeo, lineMat);
+            scene.add(laser);
+
+            setTimeout(() => {
+                scene.remove(laser);
+                lineGeo.dispose();
+                lineMat.dispose();
+            }, 80);
+        }
+
+        // --- 7. УЛУЧШЕННАЯ ЛОГИКА ВЫДЕЛЕНИЯ И КОМАНД ---
+        const mouse = new THREE.Vector2(); 
+        const startPoint = new THREE.Vector2();
+        let isSelecting = false; let isDragging = false;
+        const DRAG_THRESHOLD = 5; 
+        const selectionBoxEl = document.getElementById('selection-box');
+        const raycaster = new THREE.Raycaster();
+
+        window.addEventListener('mousedown', (e) => {
+            if (e.target.closest('#instructions')) return;
+            if (e.button === 0) { isSelecting = true; isDragging = false; startPoint.set(e.clientX, e.clientY); }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            if (!isSelecting) return;
+            const dragDistance = Math.hypot(e.clientX - startPoint.x, e.clientY - startPoint.y);
+            if (!isDragging && dragDistance > DRAG_THRESHOLD) { isDragging = true; selectionBoxEl.style.display = 'block'; }
+
+            if (!isDragging) return;
+            const minX = Math.min(startPoint.x, e.clientX); const maxX = Math.max(startPoint.x, e.clientX);
+            const minY = Math.min(startPoint.y, e.clientY); const maxY = Math.max(startPoint.y, e.clientY);
+
+            selectionBoxEl.style.left = minX + 'px'; selectionBoxEl.style.top = minY + 'px';
+            selectionBoxEl.style.width = (maxX - minX) + 'px'; selectionBoxEl.style.height = (maxY - minY) + 'px';
+
+            units.forEach(unit => {
+                const vector = unit.mesh.position.clone().project(camera);
+                const x = (vector.x * .5 + .5) * window.innerWidth;
+                const y = (-(vector.y * .5) + .5) * window.innerHeight;
+                if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+                    unit.selected = true; unit.mesh.material = selectedUnitMat;
+                } else if (!e.shiftKey) {
+                    unit.selected = false; unit.mesh.material = normalUnitMat;
+                }
+            });
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                isSelecting = false; selectionBoxEl.style.display = 'none';
+                if (!isDragging && !e.target.closest('#instructions')) {
+                    raycaster.setFromCamera(mouse, camera);
+
+                    const intersects = raycaster.intersectObjects(units.map(u => u.mesh));
+                    if (!e.shiftKey) { units.forEach(u => { u.selected = false; u.mesh.material = normalUnitMat; }); }
+                    if (intersects.length > 0) {
+                        const clickedUnit = units.find(u => u.mesh === intersects[0].object);
+                        if (clickedUnit) { clickedUnit.selected = true; clickedUnit.mesh.material = selectedUnitMat; }
+                    }
+                }
+                isDragging = false;
+            }
+        });
+
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (e.target.closest('#instructions')) return;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(ground);
+            if (intersects.length > 0) {
+                const targetPoint = intersects[0].point;
+                const targetGrid = worldToGrid(targetPoint.x, targetPoint.z);
+
+                if (targetGrid.col < 0 || targetGrid.col >= GRID_SIZE || targetGrid.row < 0 || targetGrid.row >= GRID_SIZE) return;
+                if (grid[targetGrid.row][targetGrid.col] === 1) return;
+
+                const selectedUnits = units.filter(u => u.selected);
+                if (selectedUnits.length === 0) return;
+
+                const groupCenter = new THREE.Vector3();
+                selectedUnits.forEach(u => groupCenter.add(u.mesh.position));
+                groupCenter.divideScalar(selectedUnits.length);
+
+                const angle = Math.atan2(targetPoint.z - groupCenter.z, targetPoint.x - groupCenter.x);
+                const offsets = getFormationOffsets(selectedUnits.length, currentFormation);
+
+                flowFieldGen.updateTarget(targetGrid.col, targetGrid.row);
+
+                selectedUnits.forEach((unit, index) => {
+                    const offset = offsets[index];
+                    const rotatedX = offset.x * Math.cos(-angle) - offset.y * Math.sin(-angle);
+                    const rotatedZ = offset.x * Math.sin(-angle) + offset.y * Math.cos(-angle);
+
+                    unit.personalTarget = new THREE.Vector3(targetPoint.x + rotatedX, 0.4, targetPoint.z + rotatedZ);
+                    unit.state = States.MOVE; 
+                    unit.targetEnemy = null;   
+                });
+            }
+        });
+
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+
+            if (e.code === 'KeyE') {
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObject(ground);
+                if (intersects.length > 0) {
+                    createEnemy(intersects[0].point.x, intersects[0].point.z);
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // --- 8. КЛАВИАТУРНОЕ УПРАВЛЕНИЕ КАМЕРОЙ ---
+        function updateCamera(delta) {
+            const camSpeed = 25 * delta;
+            if (keys['KeyW'] || keys['ArrowUp']) { camera.position.z -= camSpeed; }
+            if (keys['KeyS'] || keys['ArrowDown']) { camera.position.z += camSpeed; }
+            if (keys['KeyA'] || keys['ArrowLeft']) { camera.position.x -= camSpeed; }
+            if (keys['KeyD'] || keys['ArrowRight']) { camera.position.x += camSpeed; }
+        }
+
+        // --- 9. ИГРОВОЙ ЦИКЛ (СИМУЛЯЦИЯ БОЯ И ДВИЖЕНИЯ) ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const currentTime = clock.getElapsedTime();
+
+            updateCamera(delta);
+
+            // --- ОБРАБОТКА ЛОГИКИ СОЮЗНЫХ ЮНИТОВ (FSM) ---
+            units.forEach((unit) => {
+                const pos = unit.mesh.position;
+                if (unit.hp <= 0) return;
+
+                // Биллбординг: Разворачиваем полоску здоровья строго к камере
+                unit.healthBar.group.quaternion.copy(camera.quaternion);
+                // Обновляем визуальный масштаб полоски здоровья
+                unit.healthBar.fg.scale.x = Math.max(0, unit.hp / unit.maxHp);
+
+                let nearestEnemy = null;
+                let minDist = unit.visionRange;
+                enemies.forEach(enemy => {
+                    if (enemy.hp <= 0) return;
+                    const d = pos.distanceTo(enemy.mesh.position);
+                    if (d < minDist) { minDist = d; nearestEnemy = enemy; }
+                });
+
+                switch (unit.state) {
+                    case States.IDLE:
+                        if (nearestEnemy) {
+                            unit.targetEnemy = nearestEnemy;
+                            unit.state = States.CHASE;
+                        }
+                        break;
+
+                    case States.MOVE:
+                        if (nearestEnemy) {
+                            unit.targetEnemy = nearestEnemy;
+                            unit.state = States.CHASE;
+                            break;
+                        }
+
+                        if (unit.personalTarget) {
+                            const distanceToPersonalTarget = pos.distanceTo(unit.personalTarget);
+                            if (distanceToPersonalTarget < 0.15) {
+                                unit.state = States.IDLE;
+                                break;
+                            }
+
+                            const gridPos = worldToGrid(pos.x, pos.z);
+                            if (gridPos.col >= 0 && gridPos.col < GRID_SIZE && gridPos.row >= 0 && gridPos.row < GRID_SIZE) {
+                                if (grid[gridPos.row][gridPos.col] === 1) {
+                                    const freeWorldPos = gridToWorld(gridPos.col, gridPos.row);
+                                    const escapeDir = new THREE.Vector3().subVectors(pos, new THREE.Vector3(freeWorldPos.x, 0.4, freeWorldPos.z)).normalize();
+                                    pos.addScaledVector(escapeDir, 0.5);
+                                    break;
+                                }
+
+                                const flowVector = flowFieldGen.flowField[gridPos.row][gridPos.col];
+                                const dirToPersonalTarget = new THREE.Vector3().subVectors(unit.personalTarget, pos);
+                                dirToPersonalTarget.y = 0;
+                                const distance = dirToPersonalTarget.length();
+                                dirToPersonalTarget.normalize();
+
+                                let moveDir = new THREE.Vector3();
+                                if (distance < 4.0 || flowVector.lengthSq() === 0) {
+                                    moveDir.copy(dirToPersonalTarget);
+                                } else {
+                                    const flow3D = new THREE.Vector3(flowVector.x, 0, flowVector.y);
+                                    moveDir.lerpVectors(flow3D, dirToPersonalTarget, 0.25).normalize();
+                                }
+
+                                const step = Math.min(unit.speed * delta, distance);
+                                pos.addScaledVector(moveDir, step);
+                                const targetRotation = Math.atan2(-moveDir.z, moveDir.x);
+                                unit.mesh.rotation.y = THREE.MathUtils.lerp(unit.mesh.rotation.y, targetRotation, 10 * delta);
+                            }
+                        }
+                        break;
+
+                    case States.CHASE:
+                        if (!unit.targetEnemy || unit.targetEnemy.hp <= 0) {
+                            unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
+                            break;
+                        }
+
+                        const enemyPos = unit.targetEnemy.mesh.position;
+                        const distToEnemy = pos.distanceTo(enemyPos);
+
+                        if (distToEnemy <= unit.attackRange) {
+                            unit.state = States.ATTACK;
+                        } else if (distToEnemy > unit.visionRange) {
+                            unit.targetEnemy = null;
+                            unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
+                        } else {
+                            const runDir = new THREE.Vector3().subVectors(enemyPos, pos).normalize();
+                            pos.addScaledVector(runDir, unit.speed * delta);
+                            unit.mesh.rotation.y = Math.atan2(-runDir.z, runDir.x);
+                        }
+                        break;
+
+                    case States.ATTACK:
+                        if (!unit.targetEnemy || unit.targetEnemy.hp <= 0) {
+                            unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
+                            break;
+                        }
+
+                        const attEnemyPos = unit.targetEnemy.mesh.position;
+                        const distToAttEnemy = pos.distanceTo(attEnemyPos);
+
+                        if (distToAttEnemy > unit.attackRange) {
+                            unit.state = States.CHASE;
+                        } else {
+                            const lookDir = new THREE.Vector3().subVectors(attEnemyPos, pos).normalize();
+                            unit.mesh.rotation.y = Math.atan2(-lookDir.z, lookDir.x);
+
+                            if (currentTime - unit.lastAttackTime >= unit.attackCooldown) {
+                                unit.lastAttackTime = currentTime;
+                                unit.targetEnemy.hp -= 15; 
+                                fireLaser(pos, attEnemyPos, 0x00ff77); 
+                            }
+                        }
+                        break;
+                }
+            });
+
+            // --- ОБРАБОТКА ЛОГИКИ ВРАГОВ ---
+            enemies.forEach((enemy) => {
+                if (enemy.hp <= 0) return;
+                const pos = enemy.mesh.position;
+
+                // Биллбординг полоски здоровья для врагов
+                enemy.healthBar.group.quaternion.copy(camera.quaternion);
+                enemy.healthBar.fg.scale.x = Math.max(0, enemy.hp / enemy.maxHp);
+
+                let nearestAlly = null;
+                let minDist = enemy.visionRange;
+                units.forEach(ally => {
+                    if (ally.hp <= 0) return;
+                    const d = pos.distanceTo(ally.mesh.position);
+                    if (d < minDist) { minDist = d; nearestAlly = ally; }
+                });
+
+                if (nearestAlly) {
+                    const allyPos = nearestAlly.mesh.position;
+                    const dist = pos.distanceTo(allyPos);
+
+                    if (dist <= enemy.attackRange) {
+                        const lookDir = new THREE.Vector3().subVectors(allyPos, pos).normalize();
+                        enemy.mesh.rotation.y = Math.atan2(-lookDir.z, lookDir.x);
+
+                        if (currentTime - enemy.lastAttackTime >= enemy.attackCooldown) {
+                            enemy.lastAttackTime = currentTime;
+                            nearestAlly.hp -= 10;
+                            fireLaser(pos, allyPos, 0xff3333); 
+                        }
+                    } else {
+                        const walkDir = new THREE.Vector3().subVectors(allyPos, pos).normalize();
+                        pos.addScaledVector(walkDir, enemy.speed * delta);
+                        enemy.mesh.rotation.y = Math.atan2(-walkDir.z, walkDir.x);
+                    }
+                }
+            });
+
+            // --- УДАЛЕНИЕ ПОГИБШИХ ---
+            for (let i = units.length - 1; i >= 0; i--) {
+                if (units[i].hp <= 0) { scene.remove(units[i].mesh); units.splice(i, 1); }
+            }
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                if (enemies[i].hp <= 0) { scene.remove(enemies[i].mesh); enemies.splice(i, 1); }
+            }
+
+            // --- СТОЛКНОВЕНИЯ ---
+            const allUnits = [...units, ...enemies];
+            for (let i = 0; i < allUnits.length; i++) {
+                for (let j = i + 1; j < allUnits.length; j++) {
+                    const u1 = allUnits[i]; const u2 = allUnits[j];
+                    const diff = new THREE.Vector3().subVectors(u2.mesh.position, u1.mesh.position);
+                    diff.y = 0;
+                    const dist = diff.length(); const minDist = u1.radius + u2.radius;
+                    if (dist < minDist) {
+                        const overlap = minDist - dist; const resolveDir = diff.normalize();
+                        u1.mesh.position.addScaledVector(resolveDir, -overlap * 0.5);
+                        u2.mesh.position.addScaledVector(resolveDir, overlap * 0.5);
+                    }
+                }
+            }
+
+            allUnits.forEach(unit => {
+                const pos = unit.mesh.position;
+                const gridPos = worldToGrid(pos.x, pos.z);
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nc = gridPos.col + dx; const nr = gridPos.row + dy;
+                        if (nc >= 0 && nc < GRID_SIZE && nr >= 0 && nr < GRID_SIZE) {
+                            if (grid[nr][nc] === 1) {
+                                const wallPos = gridToWorld(nc, nr);
+                                const diff = new THREE.Vector3(pos.x - wallPos.x, 0, pos.z - wallPos.z);
+                                const dist = diff.length(); const wallRadius = 1.1; 
+                                if (dist < wallRadius + unit.radius) {
+                                    pos.addScaledVector(diff.normalize(), (wallRadius + unit.radius - dist) * 0.8);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
