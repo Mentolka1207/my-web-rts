@@ -55,7 +55,7 @@
         • Зажми <strong>ЛКМ и тяни</strong> — выделить рамкой группу<br>
         • Клик <strong>ПКМ</strong> — отправить рой в точку (Flow Field)<br>
         • Клавиша <strong>E</strong> — спавн вражеского патрульного дрона<br>
-        • Клавиши <strong>W, A, S, D</strong> — движение камеры<br><br>
+        • Клавиша <strong>W, A, S, D</strong> — движение камеры<br><br>
         <strong>Тактическое построение:</strong><br>
         <button onclick="setFormation('line')">Шеренга</button>
         <button onclick="setFormation('wedge')">Клин</button>
@@ -136,7 +136,7 @@
 
             // Световой конус выхлопа
             const plumeGeo = new THREE.ConeGeometry(0.06, 0.3, 4);
-            plumeGeo.translate(0, -0.15, 0); // Сдвигаем pivot к основанию конуса
+            plumeGeo.translate(0, -0.15, 0); 
             const plumeMat = new THREE.MeshBasicMaterial({
                 color: glowColorHex,
                 transparent: true,
@@ -188,7 +188,6 @@
 
             // Голографическое кольцо выделения под дроном
             const ringGeo = new THREE.RingGeometry(0.5, 0.56, 16);
-            ringGeo.rotation.x = -Math.PI / 2;
             const ringMat = new THREE.MeshBasicMaterial({
                 color: 0x00ffcc,
                 side: THREE.DoubleSide,
@@ -196,7 +195,10 @@
                 opacity: 0.7
             });
             const selectionRing = new THREE.Mesh(ringGeo, ringMat);
-            selectionRing.position.y = -0.65; // чуть выше уровня земли
+            
+            // ИСПРАВЛЕНО: Поворачиваем сетку (Mesh), а не геометрию!
+            selectionRing.rotation.x = -Math.PI / 2;
+            selectionRing.position.y = -0.65; 
             selectionRing.visible = false;
             droneGroup.add(selectionRing);
 
@@ -225,7 +227,6 @@
                 const data = drone.userData;
                 if (!data) return;
 
-                // 1. Попарное вращение пропеллеров
                 if (data.rotors) {
                     data.rotors.forEach((rotor, index) => {
                         const direction = index % 2 === 0 ? 1 : -1;
@@ -233,11 +234,9 @@
                     });
                 }
 
-                // 2. Мягкое парение в воздухе
                 const offset = data.hoverOffset || 0;
                 drone.position.y = 0.75 + Math.sin(time * 3.5 + offset) * 0.04;
 
-                // 3. Пульсация и растяжение реактивного выхлопа на основе скорости
                 if (data.enginePlume) {
                     const currentSpeed = data.velocity ? data.velocity.length() : 0;
                     const scaleStretch = 1.0 + currentSpeed * 2.5;
@@ -245,20 +244,18 @@
                     data.enginePlume.scale.set(1, scaleStretch + flicker, 1);
                 }
 
-                // 4. Динамический наклон (крен) корпуса при движении по вектору скорости
                 if (data.velocity) {
                     drone.rotation.z = THREE.MathUtils.lerp(drone.rotation.z, -data.velocity.x * 0.45, 0.1);
                     drone.rotation.x = THREE.MathUtils.lerp(drone.rotation.x, data.velocity.z * 0.45, 0.1);
                 }
 
-                // 5. Вращение кольца выделения
                 if (data.selectionRing && data.selectionRing.visible) {
                     data.selectionRing.rotation.z = time * 1.5;
                 }
             });
         }
 
-        // --- 2. ГЕНЕРАТОРЫ ПРОЦЕДУРНЫХ ТЕКСТУР ---
+        // --- 2. ГЕНЕРАТОРЫ ПРОЦЕДУРНОЙ ТЕКСТУР ---
         function createGroundTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 256; canvas.height = 256;
@@ -419,7 +416,6 @@
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x060814); 
 
-        // Сверхтехнологичный неоновый туман
         scene.fog = new THREE.FogExp2(0x060814, 0.024);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
@@ -429,10 +425,10 @@
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Мягкие тени
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
         container.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.15); // Приглушили общую подсветку для неонового контраста
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.15); 
         scene.add(ambientLight);
 
         const hemiLight = new THREE.HemisphereLight(0x00ffcc, 0x111524, 0.25);
@@ -466,7 +462,7 @@
             roughness: 0.2, 
             metalness: 0.8,
             emissive: 0x00ffcc,
-            emissiveIntensity: 0.15 // Неоновое свечение граней стен
+            emissiveIntensity: 0.15 
         });
         for (let row = 0; row < GRID_SIZE; row++) {
             for (let col = 0; col < GRID_SIZE; col++) {
@@ -481,13 +477,12 @@
             }
         }
 
-        // --- 7. ЮНИТЫ И ВРАГИ (ТЕКСТУРЫ И СПАВН) ---
+        // --- 7. ЮНИТЫ И ВРАГИ (СПАВН) ---
         const units = [];
         const enemies = [];
 
         const States = { IDLE: 'IDLE', MOVE: 'MOVE', CHASE: 'CHASE', ATTACK: 'ATTACK' };
 
-        // Полоски здоровья в 3D
         function attachHealthBar(parentMesh, isAlly) {
             const barGroup = new THREE.Group();
             barGroup.position.set(0, 0.7, 0); 
@@ -562,14 +557,11 @@
                 targetAlly: null,
                 healthBar: hpBar,
                 velocity: new THREE.Vector3(),
-                
-                // Дополнительные параметры для AI-патрулирования врагов
                 roamTarget: null,
-                roamCooldown: Math.random() * 2 // время до начала патрулирования
+                roamCooldown: Math.random() * 2 
             });
         }
 
-        // Стартовый спавн
         createUnit(2, 2); createUnit(2, 3); createUnit(3, 2); createUnit(3, 3); createUnit(4, 2);
         createEnemy(12, 12); createEnemy(14, 12); createEnemy(13, 14);
 
@@ -598,11 +590,6 @@
         const DRAG_THRESHOLD = 5; 
         const selectionBoxEl = document.getElementById('selection-box');
         const raycaster = new THREE.Raycaster();
-
-        window.addEventListener('mousedown', (e) => {
-            if (e.target.closest('#instructions')) return;
-            if (e.button === 0) { isSelecting = true; isDragging = false; startPoint.set(e.clientX, e.clientY); }
-        });
 
         window.addEventListener('mousemove', (e) => {
             mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -636,6 +623,11 @@
                     }
                 }
             });
+        });
+
+        window.addEventListener('mousedown', (e) => {
+            if (e.target.closest('#instructions')) return;
+            if (e.button === 0) { isSelecting = true; isDragging = false; startPoint.set(e.clientX, e.clientY); }
         });
 
         window.addEventListener('mouseup', (e) => {
@@ -721,7 +713,7 @@
 
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        // --- 9. УПРАВЛЕНИЕ КАМЕРОЙ ---
+        // --- 9. КАМЕРА ---
         function updateCamera(delta) {
             const camSpeed = 25 * delta;
             if (keys['KeyW'] || keys['ArrowUp']) { camera.position.z -= camSpeed; }
@@ -730,7 +722,7 @@
             if (keys['KeyD'] || keys['ArrowRight']) { camera.position.x += camSpeed; }
         }
 
-        // --- 10. ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ (AI И ФИЗИКА) ---
+        // --- 10. ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ ---
         const clock = new THREE.Clock();
 
         function animate() {
@@ -870,7 +862,7 @@
                 }
             });
 
-            // --- УЛУЧШЕННЫЙ FSM ВРАЖЕСКИХ ДРОНОВ (БОЙ + PATROLLING AI) ---
+            // --- FSM ВРАЖЕСКИХ ПАТРУЛЬНЫХ ДРОНОВ ---
             enemies.forEach((enemy) => {
                 if (enemy.hp <= 0) return;
                 const pos = enemy.mesh.position;
@@ -878,7 +870,6 @@
                 enemy.healthBar.group.quaternion.copy(camera.quaternion);
                 enemy.healthBar.fg.scale.x = Math.max(0, enemy.hp / enemy.maxHp);
 
-                // 1. Поиск ближайшей союзной цели
                 let nearestAlly = null;
                 let minDist = enemy.visionRange;
                 units.forEach(ally => {
@@ -887,9 +878,7 @@
                     if (d < minDist) { minDist = d; nearestAlly = ally; }
                 });
 
-                // 2. Дерево принятия решений вражеского AI
                 if (nearestAlly) {
-                    // ЕСЛИ ВРАГ ОБНАРУЖИЛ ЦЕЛЬ -> Прерываем патруль и атакуем
                     enemy.roamTarget = null;
                     const allyPos = nearestAlly.mesh.position;
                     const dist = pos.distanceTo(allyPos);
@@ -911,13 +900,11 @@
                         enemy.mesh.rotation.y = Math.atan2(-walkDir.z, walkDir.x);
                     }
                 } else {
-                    // ЕСЛИ ЦЕЛИ НЕТ -> AI-Режим Патрулирования (Active Roaming)
                     if (enemy.state === States.IDLE) {
                         enemy.velocity.set(0, 0, 0);
                         enemy.roamCooldown -= delta;
 
                         if (enemy.roamCooldown <= 0) {
-                            // Ищем случайную свободную ячейку
                             let found = false;
                             let col, row;
                             while (!found) {
@@ -933,7 +920,7 @@
                         const distToRoam = pos.distanceTo(enemy.roamTarget);
                         if (distToRoam < 0.25) {
                             enemy.state = States.IDLE;
-                            enemy.roamCooldown = Math.random() * 4 + 2; // задержка на сканирование 2-6 сек
+                            enemy.roamCooldown = Math.random() * 4 + 2; 
                             enemy.velocity.set(0, 0, 0);
                         } else {
                             const roamDir = new THREE.Vector3().subVectors(enemy.roamTarget, pos).normalize();
@@ -949,11 +936,9 @@
                 }
             });
 
-            // Анимации всех дронов
             const allAliveDrones = [...units, ...enemies].map(u => u.mesh).filter(Boolean);
             updateDronesAnimation(allAliveDrones, currentTime);
 
-            // Очистка погибших
             for (let i = units.length - 1; i >= 0; i--) {
                 if (units[i].hp <= 0) { scene.remove(units[i].mesh); units.splice(i, 1); }
             }
@@ -961,7 +946,7 @@
                 if (enemies[i].hp <= 0) { scene.remove(enemies[i].mesh); enemies.splice(i, 1); }
             }
 
-            // --- КОЛЛИЗИИ ДРОНОВ ---
+            // СТОЛКНОВЕНИЯ ДРОНОВ
             const allUnits = [...units, ...enemies];
             for (let i = 0; i < allUnits.length; i++) {
                 for (let j = i + 1; j < allUnits.length; j++) {
@@ -983,7 +968,7 @@
                 }
             }
 
-            // --- КОЛЛИЗИИ СО СТЕНАМИ ---
+            // КОЛЛИЗИИ СО СТЕНАМИ
             allUnits.forEach(unit => {
                 const pos = unit.mesh.position;
                 const gridPos = worldToGrid(pos.x, pos.z);
@@ -1017,7 +1002,6 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Запуск
         animate();
     </script>
 </body>
