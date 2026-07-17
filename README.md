@@ -1,4 +1,4 @@
-# 🛰️ Minimal Web RTS: Flow Fields & FSM Combat Engine
+# 🛰️ Minimal Web RTS: Neo-Drone Swarm & Patrolling AI
 
 Минималистичный трехмерный прототип стратегии в реальном времени (RTS) на **Three.js** (WebGL), демонстрирующий продвинутые алгоритмы поиска пути, группового поведения и искусственного интеллекта юнитов.
 
