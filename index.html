@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Minimal Web RTS: Neo-Drone Swarm & Patrolling AI</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; background-color: #060814; }
+        body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; background-color: #0b0d19; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         /* Стили для рамки выделения */
         #selection-box {
@@ -19,7 +19,7 @@
         #instructions {
             position: absolute;
             top: 10px; left: 10px;
-            color: white; background: rgba(6, 8, 20, 0.9);
+            color: white; background: rgba(11, 13, 25, 0.9);
             padding: 15px; border-radius: 8px;
             line-height: 1.5;
             z-index: 10;
@@ -88,59 +88,58 @@
         function createDroneUnit(colorHex, glowColorHex, isAlly) {
             const droneGroup = new THREE.Group();
 
-            // Киберпанк-материалы
             const bodyMat = new THREE.MeshStandardMaterial({
                 color: colorHex,
-                metalness: 0.9,
-                roughness: 0.1,
+                metalness: 0.8,
+                roughness: 0.15,
                 emissive: glowColorHex,
-                emissiveIntensity: 0.15
+                emissiveIntensity: 0.2
             });
             const frameMat = new THREE.MeshStandardMaterial({
-                color: 0x111318, // Матовый карбон
-                metalness: 0.9,
+                color: 0x1a1d24, 
+                metalness: 0.8,
                 roughness: 0.2
             });
             const rotorMat = new THREE.MeshStandardMaterial({
-                color: isAlly ? 0x00ffcc : 0xff3333, // Светящиеся лопасти
+                color: isAlly ? 0x00ffcc : 0xff3333, 
                 metalness: 0.2,
-                roughness: 0.6
+                roughness: 0.5
             });
             const ledMat = new THREE.MeshBasicMaterial({
-                color: glowColorHex // Лазерный целеуказатель
+                color: glowColorHex 
             });
 
-            // 1. Неоновый прожектор под дроном (Локальный свет)
-            const light = new THREE.PointLight(glowColorHex, 2.5, 4.5);
+            // Неоновый точечный прожектор под дроном
+            const light = new THREE.PointLight(glowColorHex, 2.5, 5.0);
             light.position.set(0, -0.2, 0);
             droneGroup.add(light);
 
-            // 2. Корпус дрона
+            // Корпус дрона
             const bodyGeo = new THREE.BoxGeometry(0.5, 0.12, 0.5);
             const body = new THREE.Mesh(bodyGeo, bodyMat);
             body.position.y = 0.15;
             droneGroup.add(body);
 
-            // 3. Сенсор направления ("глаз")
+            // Сенсор направления
             const eyeGeo = new THREE.BoxGeometry(0.18, 0.06, 0.06);
             const eye = new THREE.Mesh(eyeGeo, ledMat);
             eye.position.set(0, 0.15, 0.26);
             droneGroup.add(eye);
 
-            // 4. Реактивный сопло-двигатель сзади
+            // Сопло
             const thrusterGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.12, 8);
             const thruster = new THREE.Mesh(thrusterGeo, frameMat);
             thruster.position.set(0, 0.12, -0.25);
             thruster.rotation.x = Math.PI / 2;
             droneGroup.add(thruster);
 
-            // Световой конус выхлопа
+            // Конус выхлопа
             const plumeGeo = new THREE.ConeGeometry(0.06, 0.3, 4);
             plumeGeo.translate(0, -0.15, 0); 
             const plumeMat = new THREE.MeshBasicMaterial({
                 color: glowColorHex,
                 transparent: true,
-                opacity: 0.8,
+                opacity: 0.85,
                 side: THREE.DoubleSide
             });
             const plume = new THREE.Mesh(plumeGeo, plumeMat);
@@ -148,9 +147,8 @@
             plume.rotation.x = -Math.PI / 2;
             droneGroup.add(plume);
 
-            // 5. Рама
+            // Рама
             const armGeo = new THREE.BoxGeometry(0.06, 0.03, 0.8);
-            
             const arm1 = new THREE.Mesh(armGeo, frameMat);
             arm1.position.y = 0.15;
             arm1.rotation.y = Math.PI / 4;
@@ -161,7 +159,7 @@
             arm2.rotation.y = -Math.PI / 4;
             droneGroup.add(arm2);
 
-            // 6. Лопасти
+            // Лопасти
             const rotors = [];
             const distance = 0.28;
             const rotorPositions = [
@@ -186,17 +184,15 @@
                 rotors.push(blade);
             });
 
-            // Голографическое кольцо выделения под дроном
+            // Кольцо выделения
             const ringGeo = new THREE.RingGeometry(0.5, 0.56, 16);
             const ringMat = new THREE.MeshBasicMaterial({
                 color: 0x00ffcc,
                 side: THREE.DoubleSide,
                 transparent: true,
-                opacity: 0.7
+                opacity: 0.8
             });
             const selectionRing = new THREE.Mesh(ringGeo, ringMat);
-            
-            // ИСПРАВЛЕНО: Поворачиваем сетку (Mesh), а не геометрию!
             selectionRing.rotation.x = -Math.PI / 2;
             selectionRing.position.y = -0.65; 
             selectionRing.visible = false;
@@ -221,7 +217,7 @@
             return droneGroup;
         }
 
-        // Анимация вращения лопастей, парения, крена и выхлопа
+        // Анимация
         function updateDronesAnimation(activeDrones, time) {
             activeDrones.forEach(drone => {
                 const data = drone.userData;
@@ -260,13 +256,13 @@
             const canvas = document.createElement('canvas');
             canvas.width = 256; canvas.height = 256;
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#0a0d16'; ctx.fillRect(0, 0, 256, 256);
-            ctx.strokeStyle = '#1e2438'; ctx.lineWidth = 4;
+            ctx.fillStyle = '#121622'; ctx.fillRect(0, 0, 256, 256); // Сделали подложку ярче
+            ctx.strokeStyle = '#252f4a'; ctx.lineWidth = 4; // Ярче контур клеток
             ctx.strokeRect(0, 0, 256, 256);
             ctx.strokeRect(128, 0, 128, 256); ctx.strokeRect(0, 128, 256, 128);
             for (let i = 0; i < 2500; i++) {
                 const x = Math.random() * 256; const y = Math.random() * 256;
-                ctx.fillStyle = `rgba(0, 255, 204, ${Math.random() * 0.04})`;
+                ctx.fillStyle = `rgba(0, 255, 204, ${Math.random() * 0.06})`;
                 ctx.fillRect(x, y, 1, 1);
             }
             const texture = new THREE.CanvasTexture(canvas);
@@ -279,11 +275,22 @@
             const canvas = document.createElement('canvas');
             canvas.width = 128; canvas.height = 128;
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#111524'; ctx.fillRect(0, 0, 128, 128);
-            ctx.strokeStyle = '#222d4a'; ctx.lineWidth = 6;
+            ctx.fillStyle = '#161c30'; ctx.fillRect(0, 0, 128, 128);
+            ctx.strokeStyle = '#2b395c'; ctx.lineWidth = 6;
             ctx.strokeRect(2, 2, 124, 124);
             ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; 
             ctx.beginPath(); ctx.moveTo(0, 64); ctx.lineTo(128, 64); ctx.stroke();
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createUnitTexture(colorHex, glowHex) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#1a2238'; ctx.fillRect(0, 0, 128, 128);
+            ctx.strokeStyle = colorHex; ctx.lineWidth = 10; ctx.strokeRect(8, 8, 112, 112);
+            ctx.fillStyle = glowHex; ctx.shadowBlur = 15; ctx.shadowColor = glowHex;
+            ctx.beginPath(); ctx.arc(64, 64, 24, 0, Math.PI * 2); ctx.fill();
             return new THREE.CanvasTexture(canvas);
         }
 
@@ -414,9 +421,11 @@
         // --- 5. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ THREE.JS ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x060814); 
+        scene.background = new THREE.Color(0x0b0d19); 
 
-        scene.fog = new THREE.FogExp2(0x060814, 0.024);
+        // ИСПРАВЛЕНО: Линейный туман вместо густого экспоненциального! 
+        // Карта в центре теперь яркая, а края мягко уходят в горизонт.
+        scene.fog = new THREE.Fog(0x0b0d19, 60, 115);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
         camera.position.set(0, 42, 32);
@@ -428,30 +437,32 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
         container.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.15); 
+        // ИСПРАВЛЕНО: Подняли общую яркость фонового освещения до 0.48
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.48); 
         scene.add(ambientLight);
 
-        const hemiLight = new THREE.HemisphereLight(0x00ffcc, 0x111524, 0.25);
+        const hemiLight = new THREE.HemisphereLight(0x88ffff, 0x161c30, 0.4);
         scene.add(hemiLight);
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.95); 
+        // ИСПРАВЛЕНО: Подняли силу основного прожектора до 1.4
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.4); 
         dirLight.position.set(30, 60, 30);
         dirLight.castShadow = true;
         dirLight.shadow.mapSize.width = 2048;
         dirLight.shadow.mapSize.height = 2048;
-        dirLight.shadow.bias = -0.0005;
+        dirLight.shadow.bias = -0.0004;
         scene.add(dirLight);
 
         // --- 6. ОТРИСОВКА ИГРОВОГО МИРА С ТЕКСТУРАМИ ---
         const groundTex = createGroundTexture();
         const groundGeo = new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
-        const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.6, metalness: 0.2 });
+        const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.5, metalness: 0.2 });
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
 
-        const gridHelper = new THREE.GridHelper(GRID_SIZE * CELL_SIZE, GRID_SIZE, 0x00ffcc, 0x111524);
+        const gridHelper = new THREE.GridHelper(GRID_SIZE * CELL_SIZE, GRID_SIZE, 0x00ffcc, 0x222d4a);
         gridHelper.position.y = 0.01; 
         scene.add(gridHelper);
 
@@ -460,9 +471,9 @@
         const wallMat = new THREE.MeshStandardMaterial({ 
             map: wallTex, 
             roughness: 0.2, 
-            metalness: 0.8,
+            metalness: 0.7,
             emissive: 0x00ffcc,
-            emissiveIntensity: 0.15 
+            emissiveIntensity: 0.12 
         });
         for (let row = 0; row < GRID_SIZE; row++) {
             for (let col = 0; col < GRID_SIZE; col++) {
