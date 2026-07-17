@@ -2,29 +2,29 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Minimal Web RTS: Flow Fields & FSM Combat with Health Bars</title>
+    <title>Minimal Web RTS: Neo-Drone Swarm & Patrolling AI</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; background-color: #0f111a; }
+        body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; background-color: #060814; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         /* Стили для рамки выделения */
         #selection-box {
-            border: 2px dashed #00ff77;
-            background-color: rgba(0, 255, 119, 0.15);
+            border: 2px dashed #00ffcc;
+            background-color: rgba(0, 255, 204, 0.15);
             position: absolute;
             pointer-events: none;
             display: none;
-            box-shadow: 0 0 10px rgba(0, 255, 119, 0.5);
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.5);
             z-index: 5;
         }
         #instructions {
             position: absolute;
             top: 10px; left: 10px;
-            color: white; background: rgba(10, 15, 30, 0.85);
+            color: white; background: rgba(6, 8, 20, 0.9);
             padding: 15px; border-radius: 8px;
             line-height: 1.5;
             z-index: 10;
-            border: 1px solid #334466;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border: 1px solid #00ffcc33;
+            box-shadow: 0 4px 25px rgba(0,0,0,0.7);
         }
         button {
             background: #0077ff;
@@ -38,10 +38,10 @@
             transition: all 0.2s ease;
         }
         button:hover {
-            background: #00ff77;
+            background: #00ffcc;
             color: black;
-            border-color: #00ff77;
-            box-shadow: 0 0 10px rgba(0, 255, 119, 0.5);
+            border-color: #00ffcc;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
         }
     </style>
     <!-- Подключаем стабильный релиз Three.js -->
@@ -50,13 +50,13 @@
 <body>
     <div id="selection-box"></div>
     <div id="instructions">
-        <strong>Управление:</strong><br>
-        • <strong>Клик ЛКМ</strong> — выделить одного юнита<br>
-        • Зажми <strong>ЛКМ и тяни</strong> — выделить рамкой несколько<br>
-        • Клик <strong>ПКМ</strong> — отправить выделенных юнитов в точку<br>
-        • Клавиша <strong>E</strong> — спавн вражеского дрона под курсором<br>
-        • Клавиша <strong>W, A, S, D</strong> — движение камеры<br><br>
-        <strong>Построение:</strong><br>
+        <strong>Управление Swarm RTS:</strong><br>
+        • <strong>Клик ЛКМ</strong> — выделить одного дрона<br>
+        • Зажми <strong>ЛКМ и тяни</strong> — выделить рамкой группу<br>
+        • Клик <strong>ПКМ</strong> — отправить рой в точку (Flow Field)<br>
+        • Клавиша <strong>E</strong> — спавн вражеского патрульного дрона<br>
+        • Клавиши <strong>W, A, S, D</strong> — движение камеры<br><br>
+        <strong>Тактическое построение:</strong><br>
         <button onclick="setFormation('line')">Шеренга</button>
         <button onclick="setFormation('wedge')">Клин</button>
     </div>
@@ -85,41 +85,70 @@
         });
 
         // --- 1. ГЕНЕРАТОР ПРОЦЕДУРНОЙ МОДЕЛИ ДРОНА ---
-        function createDroneUnit(textureMap) {
+        function createDroneUnit(colorHex, glowColorHex, isAlly) {
             const droneGroup = new THREE.Group();
 
+            // Киберпанк-материалы
             const bodyMat = new THREE.MeshStandardMaterial({
-                map: textureMap,
-                metalness: 0.7,
-                roughness: 0.2
+                color: colorHex,
+                metalness: 0.9,
+                roughness: 0.1,
+                emissive: glowColorHex,
+                emissiveIntensity: 0.15
             });
             const frameMat = new THREE.MeshStandardMaterial({
-                color: 0x1f2937, // Углеволокно
+                color: 0x111318, // Матовый карбон
                 metalness: 0.9,
-                roughness: 0.1
+                roughness: 0.2
             });
             const rotorMat = new THREE.MeshStandardMaterial({
-                color: 0xf59e0b, // Оранжевые винты
-                metalness: 0.3,
-                roughness: 0.5
+                color: isAlly ? 0x00ffcc : 0xff3333, // Светящиеся лопасти
+                metalness: 0.2,
+                roughness: 0.6
             });
             const ledMat = new THREE.MeshBasicMaterial({
-                color: 0x00ffcc // Светящийся индикатор направления
+                color: glowColorHex // Лазерный целеуказатель
             });
 
-            // Корпус дрона
+            // 1. Неоновый прожектор под дроном (Локальный свет)
+            const light = new THREE.PointLight(glowColorHex, 2.5, 4.5);
+            light.position.set(0, -0.2, 0);
+            droneGroup.add(light);
+
+            // 2. Корпус дрона
             const bodyGeo = new THREE.BoxGeometry(0.5, 0.12, 0.5);
             const body = new THREE.Mesh(bodyGeo, bodyMat);
             body.position.y = 0.15;
             droneGroup.add(body);
 
-            // "Глаз"
+            // 3. Сенсор направления ("глаз")
             const eyeGeo = new THREE.BoxGeometry(0.18, 0.06, 0.06);
             const eye = new THREE.Mesh(eyeGeo, ledMat);
             eye.position.set(0, 0.15, 0.26);
             droneGroup.add(eye);
 
-            // Рама крест-накрест
+            // 4. Реактивный сопло-двигатель сзади
+            const thrusterGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.12, 8);
+            const thruster = new THREE.Mesh(thrusterGeo, frameMat);
+            thruster.position.set(0, 0.12, -0.25);
+            thruster.rotation.x = Math.PI / 2;
+            droneGroup.add(thruster);
+
+            // Световой конус выхлопа
+            const plumeGeo = new THREE.ConeGeometry(0.06, 0.3, 4);
+            plumeGeo.translate(0, -0.15, 0); // Сдвигаем pivot к основанию конуса
+            const plumeMat = new THREE.MeshBasicMaterial({
+                color: glowColorHex,
+                transparent: true,
+                opacity: 0.8,
+                side: THREE.DoubleSide
+            });
+            const plume = new THREE.Mesh(plumeGeo, plumeMat);
+            plume.position.set(0, 0.12, -0.31);
+            plume.rotation.x = -Math.PI / 2;
+            droneGroup.add(plume);
+
+            // 5. Рама
             const armGeo = new THREE.BoxGeometry(0.06, 0.03, 0.8);
             
             const arm1 = new THREE.Mesh(armGeo, frameMat);
@@ -132,7 +161,7 @@
             arm2.rotation.y = -Math.PI / 4;
             droneGroup.add(arm2);
 
-            // Пропеллеры
+            // 6. Лопасти
             const rotors = [];
             const distance = 0.28;
             const rotorPositions = [
@@ -142,7 +171,7 @@
                 { x: -distance, z: -distance }
             ];
 
-            rotorPositions.forEach((pos, index) => {
+            rotorPositions.forEach((pos) => {
                 const motorGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.06, 8);
                 const motor = new THREE.Mesh(motorGeo, frameMat);
                 motor.position.set(pos.x, 0.18, pos.z);
@@ -157,11 +186,27 @@
                 rotors.push(blade);
             });
 
+            // Голографическое кольцо выделения под дроном
+            const ringGeo = new THREE.RingGeometry(0.5, 0.56, 16);
+            ringGeo.rotation.x = -Math.PI / 2;
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0x00ffcc,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.7
+            });
+            const selectionRing = new THREE.Mesh(ringGeo, ringMat);
+            selectionRing.position.y = -0.65; // чуть выше уровня земли
+            selectionRing.visible = false;
+            droneGroup.add(selectionRing);
+
             droneGroup.userData = {
                 rotors: rotors,
                 hoverOffset: Math.random() * 100,
                 velocity: new THREE.Vector3(0, 0, 0),
-                bodyMesh: body 
+                bodyMesh: body,
+                enginePlume: plume,
+                selectionRing: selectionRing
             };
 
             droneGroup.traverse(child => {
@@ -174,25 +219,41 @@
             return droneGroup;
         }
 
-        // Анимация пропеллеров, левитации и наклонов
+        // Анимация вращения лопастей, парения, крена и выхлопа
         function updateDronesAnimation(activeDrones, time) {
             activeDrones.forEach(drone => {
                 const data = drone.userData;
                 if (!data) return;
 
+                // 1. Попарное вращение пропеллеров
                 if (data.rotors) {
                     data.rotors.forEach((rotor, index) => {
                         const direction = index % 2 === 0 ? 1 : -1;
-                        rotor.rotation.y += 0.5 * direction;
+                        rotor.rotation.y += 0.52 * direction;
                     });
                 }
 
+                // 2. Мягкое парение в воздухе
                 const offset = data.hoverOffset || 0;
-                drone.position.y = 0.7 + Math.sin(time * 3.5 + offset) * 0.05;
+                drone.position.y = 0.75 + Math.sin(time * 3.5 + offset) * 0.04;
 
+                // 3. Пульсация и растяжение реактивного выхлопа на основе скорости
+                if (data.enginePlume) {
+                    const currentSpeed = data.velocity ? data.velocity.length() : 0;
+                    const scaleStretch = 1.0 + currentSpeed * 2.5;
+                    const flicker = Math.sin(time * 25) * 0.15;
+                    data.enginePlume.scale.set(1, scaleStretch + flicker, 1);
+                }
+
+                // 4. Динамический наклон (крен) корпуса при движении по вектору скорости
                 if (data.velocity) {
-                    drone.rotation.z = THREE.MathUtils.lerp(drone.rotation.z, -data.velocity.x * 0.4, 0.1);
-                    drone.rotation.x = THREE.MathUtils.lerp(drone.rotation.x, data.velocity.z * 0.4, 0.1);
+                    drone.rotation.z = THREE.MathUtils.lerp(drone.rotation.z, -data.velocity.x * 0.45, 0.1);
+                    drone.rotation.x = THREE.MathUtils.lerp(drone.rotation.x, data.velocity.z * 0.45, 0.1);
+                }
+
+                // 5. Вращение кольца выделения
+                if (data.selectionRing && data.selectionRing.visible) {
+                    data.selectionRing.rotation.z = time * 1.5;
                 }
             });
         }
@@ -202,13 +263,13 @@
             const canvas = document.createElement('canvas');
             canvas.width = 256; canvas.height = 256;
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#222630'; ctx.fillRect(0, 0, 256, 256);
-            ctx.strokeStyle = '#3b4252'; ctx.lineWidth = 4;
+            ctx.fillStyle = '#0a0d16'; ctx.fillRect(0, 0, 256, 256);
+            ctx.strokeStyle = '#1e2438'; ctx.lineWidth = 4;
             ctx.strokeRect(0, 0, 256, 256);
             ctx.strokeRect(128, 0, 128, 256); ctx.strokeRect(0, 128, 256, 128);
             for (let i = 0; i < 2500; i++) {
                 const x = Math.random() * 256; const y = Math.random() * 256;
-                ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.08})`;
+                ctx.fillStyle = `rgba(0, 255, 204, ${Math.random() * 0.04})`;
                 ctx.fillRect(x, y, 1, 1);
             }
             const texture = new THREE.CanvasTexture(canvas);
@@ -221,22 +282,11 @@
             const canvas = document.createElement('canvas');
             canvas.width = 128; canvas.height = 128;
             const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#2e3440'; ctx.fillRect(0, 0, 128, 128);
-            ctx.strokeStyle = '#4c566a'; ctx.lineWidth = 6;
+            ctx.fillStyle = '#111524'; ctx.fillRect(0, 0, 128, 128);
+            ctx.strokeStyle = '#222d4a'; ctx.lineWidth = 6;
             ctx.strokeRect(2, 2, 124, 124);
-            ctx.strokeStyle = '#00ff77'; ctx.lineWidth = 3; 
+            ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; 
             ctx.beginPath(); ctx.moveTo(0, 64); ctx.lineTo(128, 64); ctx.stroke();
-            return new THREE.CanvasTexture(canvas);
-        }
-
-        function createUnitTexture(colorHex, glowHex) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 128; canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#2e3440'; ctx.fillRect(0, 0, 128, 128);
-            ctx.strokeStyle = colorHex; ctx.lineWidth = 10; ctx.strokeRect(8, 8, 112, 112);
-            ctx.fillStyle = glowHex; ctx.shadowBlur = 15; ctx.shadowColor = glowHex;
-            ctx.beginPath(); ctx.arc(64, 64, 24, 0, Math.PI * 2); ctx.fill();
             return new THREE.CanvasTexture(canvas);
         }
 
@@ -367,7 +417,10 @@
         // --- 5. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ THREE.JS ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0f111a); 
+        scene.background = new THREE.Color(0x060814); 
+
+        // Сверхтехнологичный неоновый туман
+        scene.fog = new THREE.FogExp2(0x060814, 0.024);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
         camera.position.set(0, 42, 32);
@@ -376,35 +429,45 @@
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Мягкие тени
         container.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.15); // Приглушили общую подсветку для неонового контраста
         scene.add(ambientLight);
 
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.3);
+        const hemiLight = new THREE.HemisphereLight(0x00ffcc, 0x111524, 0.25);
         scene.add(hemiLight);
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2); 
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.95); 
         dirLight.position.set(30, 60, 30);
         dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.bias = -0.0005;
         scene.add(dirLight);
 
         // --- 6. ОТРИСОВКА ИГРОВОГО МИРА С ТЕКСТУРАМИ ---
         const groundTex = createGroundTexture();
         const groundGeo = new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
-        const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.5, metalness: 0.3 });
+        const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.6, metalness: 0.2 });
         const ground = new THREE.Mesh(groundGeo, groundMat);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
 
-        const gridHelper = new THREE.GridHelper(GRID_SIZE * CELL_SIZE, GRID_SIZE, 0x0088ff, 0x1f2430);
+        const gridHelper = new THREE.GridHelper(GRID_SIZE * CELL_SIZE, GRID_SIZE, 0x00ffcc, 0x111524);
         gridHelper.position.y = 0.01; 
         scene.add(gridHelper);
 
         const wallTex = createWallTexture();
         const wallGeo = new THREE.BoxGeometry(CELL_SIZE * 0.98, 1.5, CELL_SIZE * 0.98);
-        const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.4, metalness: 0.4 });
+        const wallMat = new THREE.MeshStandardMaterial({ 
+            map: wallTex, 
+            roughness: 0.2, 
+            metalness: 0.8,
+            emissive: 0x00ffcc,
+            emissiveIntensity: 0.15 // Неоновое свечение граней стен
+        });
         for (let row = 0; row < GRID_SIZE; row++) {
             for (let col = 0; col < GRID_SIZE; col++) {
                 if (grid[row][col] === 1) {
@@ -419,14 +482,6 @@
         }
 
         // --- 7. ЮНИТЫ И ВРАГИ (ТЕКСТУРЫ И СПАВН) ---
-        const normalUnitTex = createUnitTexture('#0077ff', '#00e1ff');
-        const selectedUnitTex = createUnitTexture('#00ff77', '#33ff99');
-        const enemyTex = createUnitTexture('#ff3333', '#ff0000'); 
-
-        const normalUnitMat = new THREE.MeshStandardMaterial({ map: normalUnitTex, metalness: 0.6, roughness: 0.2 });
-        const selectedUnitMat = new THREE.MeshStandardMaterial({ map: selectedUnitTex, metalness: 0.6, roughness: 0.2 });
-        const enemyMat = new THREE.MeshStandardMaterial({ map: enemyTex, metalness: 0.6, roughness: 0.2 });
-
         const units = [];
         const enemies = [];
 
@@ -445,7 +500,7 @@
             const fgGeo = new THREE.PlaneGeometry(0.8, 0.1);
             fgGeo.translate(0.4, 0, 0); 
             
-            const fgColor = isAlly ? 0x00ff77 : 0xff3333;
+            const fgColor = isAlly ? 0x00ffcc : 0xff3333;
             const fgMat = new THREE.MeshBasicMaterial({ color: fgColor, side: THREE.DoubleSide });
             const fgMesh = new THREE.Mesh(fgGeo, fgMat);
             fgMesh.position.x = -0.4; 
@@ -460,9 +515,9 @@
         }
 
         function createUnit(col, row) {
-            const mesh = createDroneUnit(normalUnitTex);
+            const mesh = createDroneUnit('#0077ff', 0x00ffcc, true);
             const pos = gridToWorld(col, row);
-            mesh.position.set(pos.x, 0.7, pos.z);
+            mesh.position.set(pos.x, 0.75, pos.z);
             scene.add(mesh);
 
             const hpBar = attachHealthBar(mesh, true);
@@ -487,8 +542,8 @@
         }
 
         function createEnemy(x, z) {
-            const mesh = createDroneUnit(enemyTex);
-            mesh.position.set(x, 0.7, z);
+            const mesh = createDroneUnit('#ff3333', 0xff3333, false);
+            mesh.position.set(x, 0.75, z);
             scene.add(mesh);
 
             const hpBar = attachHealthBar(mesh, false);
@@ -506,11 +561,15 @@
                 lastAttackTime: 0,
                 targetAlly: null,
                 healthBar: hpBar,
-                velocity: new THREE.Vector3()
+                velocity: new THREE.Vector3(),
+                
+                // Дополнительные параметры для AI-патрулирования врагов
+                roamTarget: null,
+                roamCooldown: Math.random() * 2 // время до начала патрулирования
             });
         }
 
-        // Спавн
+        // Стартовый спавн
         createUnit(2, 2); createUnit(2, 3); createUnit(3, 2); createUnit(3, 3); createUnit(4, 2);
         createEnemy(12, 12); createEnemy(14, 12); createEnemy(13, 14);
 
@@ -567,13 +626,13 @@
                 
                 if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
                     unit.selected = true; 
-                    if (unit.mesh.userData.bodyMesh) {
-                        unit.mesh.userData.bodyMesh.material = selectedUnitMat;
+                    if (unit.mesh.userData.selectionRing) {
+                        unit.mesh.userData.selectionRing.visible = true;
                     }
                 } else if (!e.shiftKey) {
                     unit.selected = false; 
-                    if (unit.mesh.userData.bodyMesh) {
-                        unit.mesh.userData.bodyMesh.material = normalUnitMat;
+                    if (unit.mesh.userData.selectionRing) {
+                        unit.mesh.userData.selectionRing.visible = false;
                     }
                 }
             });
@@ -589,7 +648,7 @@
                     if (!e.shiftKey) { 
                         units.forEach(u => { 
                             u.selected = false; 
-                            if (u.mesh.userData.bodyMesh) u.mesh.userData.bodyMesh.material = normalUnitMat; 
+                            if (u.mesh.userData.selectionRing) u.mesh.userData.selectionRing.visible = false; 
                         }); 
                     }
                     if (intersects.length > 0) {
@@ -600,8 +659,8 @@
                         const clickedUnit = units.find(u => u.mesh === rootGroup);
                         if (clickedUnit) { 
                             clickedUnit.selected = true; 
-                            if (clickedUnit.mesh.userData.bodyMesh) {
-                                clickedUnit.mesh.userData.bodyMesh.material = selectedUnitMat;
+                            if (clickedUnit.mesh.userData.selectionRing) {
+                                clickedUnit.mesh.userData.selectionRing.visible = true;
                             }
                         }
                     }
@@ -640,7 +699,7 @@
                     const rotatedX = offset.x * Math.cos(-angle) - offset.y * Math.sin(-angle);
                     const rotatedZ = offset.x * Math.sin(-angle) + offset.y * Math.cos(-angle);
 
-                    unit.personalTarget = new THREE.Vector3(targetPoint.x + rotatedX, 0.7, targetPoint.z + rotatedZ);
+                    unit.personalTarget = new THREE.Vector3(targetPoint.x + rotatedX, 0.75, targetPoint.z + rotatedZ);
                     unit.state = States.MOVE; 
                     unit.targetEnemy = null;   
                 });
@@ -662,7 +721,7 @@
 
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        // --- 9. КАМЕРА ---
+        // --- 9. УПРАВЛЕНИЕ КАМЕРОЙ ---
         function updateCamera(delta) {
             const camSpeed = 25 * delta;
             if (keys['KeyW'] || keys['ArrowUp']) { camera.position.z -= camSpeed; }
@@ -671,12 +730,12 @@
             if (keys['KeyD'] || keys['ArrowRight']) { camera.position.x += camSpeed; }
         }
 
-        // --- 10. ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ ---
+        // --- 10. ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ (AI И ФИЗИКА) ---
         const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
-            const delta = Math.min(clock.getDelta(), 0.1); // Лимит лагов при смене вкладок
+            const delta = Math.min(clock.getDelta(), 0.1); 
             const currentTime = clock.elapsedTime; 
 
             updateCamera(delta);
@@ -725,7 +784,7 @@
                             if (gridPos.col >= 0 && gridPos.col < GRID_SIZE && gridPos.row >= 0 && gridPos.row < GRID_SIZE) {
                                 if (grid[gridPos.row][gridPos.col] === 1) {
                                     const freeWorldPos = gridToWorld(gridPos.col, gridPos.row);
-                                    const escapeDir = new THREE.Vector3().subVectors(pos, new THREE.Vector3(freeWorldPos.x, 0.7, freeWorldPos.z)).normalize();
+                                    const escapeDir = new THREE.Vector3().subVectors(pos, new THREE.Vector3(freeWorldPos.x, 0.75, freeWorldPos.z)).normalize();
                                     pos.addScaledVector(escapeDir, 0.5);
                                     unit.velocity.copy(escapeDir).multiplyScalar(unit.speed);
                                     break;
@@ -800,7 +859,7 @@
                             if (currentTime - unit.lastAttackTime >= unit.attackCooldown) {
                                 unit.lastAttackTime = currentTime;
                                 unit.targetEnemy.hp -= 15; 
-                                fireLaser(pos, attEnemyPos, 0x00ff77); 
+                                fireLaser(pos, attEnemyPos, 0x00ffcc); 
                             }
                         }
                         break;
@@ -811,7 +870,7 @@
                 }
             });
 
-            // --- FSM ВРАЖЕСКИХ ДРОНОВ ---
+            // --- УЛУЧШЕННЫЙ FSM ВРАЖЕСКИХ ДРОНОВ (БОЙ + PATROLLING AI) ---
             enemies.forEach((enemy) => {
                 if (enemy.hp <= 0) return;
                 const pos = enemy.mesh.position;
@@ -819,6 +878,7 @@
                 enemy.healthBar.group.quaternion.copy(camera.quaternion);
                 enemy.healthBar.fg.scale.x = Math.max(0, enemy.hp / enemy.maxHp);
 
+                // 1. Поиск ближайшей союзной цели
                 let nearestAlly = null;
                 let minDist = enemy.visionRange;
                 units.forEach(ally => {
@@ -827,7 +887,10 @@
                     if (d < minDist) { minDist = d; nearestAlly = ally; }
                 });
 
+                // 2. Дерево принятия решений вражеского AI
                 if (nearestAlly) {
+                    // ЕСЛИ ВРАГ ОБНАРУЖИЛ ЦЕЛЬ -> Прерываем патруль и атакуем
+                    enemy.roamTarget = null;
                     const allyPos = nearestAlly.mesh.position;
                     const dist = pos.distanceTo(allyPos);
 
@@ -848,7 +911,37 @@
                         enemy.mesh.rotation.y = Math.atan2(-walkDir.z, walkDir.x);
                     }
                 } else {
-                    enemy.velocity.set(0, 0, 0);
+                    // ЕСЛИ ЦЕЛИ НЕТ -> AI-Режим Патрулирования (Active Roaming)
+                    if (enemy.state === States.IDLE) {
+                        enemy.velocity.set(0, 0, 0);
+                        enemy.roamCooldown -= delta;
+
+                        if (enemy.roamCooldown <= 0) {
+                            // Ищем случайную свободную ячейку
+                            let found = false;
+                            let col, row;
+                            while (!found) {
+                                col = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+                                row = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+                                if (grid[row][col] === 0) found = true;
+                            }
+                            const worldPos = gridToWorld(col, row);
+                            enemy.roamTarget = new THREE.Vector3(worldPos.x, 0.75, worldPos.z);
+                            enemy.state = States.MOVE;
+                        }
+                    } else if (enemy.state === States.MOVE && enemy.roamTarget) {
+                        const distToRoam = pos.distanceTo(enemy.roamTarget);
+                        if (distToRoam < 0.25) {
+                            enemy.state = States.IDLE;
+                            enemy.roamCooldown = Math.random() * 4 + 2; // задержка на сканирование 2-6 сек
+                            enemy.velocity.set(0, 0, 0);
+                        } else {
+                            const roamDir = new THREE.Vector3().subVectors(enemy.roamTarget, pos).normalize();
+                            pos.addScaledVector(roamDir, enemy.speed * delta);
+                            enemy.velocity.copy(roamDir).multiplyScalar(enemy.speed);
+                            enemy.mesh.rotation.y = Math.atan2(-roamDir.z, roamDir.x);
+                        }
+                    }
                 }
 
                 if (enemy.mesh && enemy.mesh.userData) {
@@ -856,11 +949,11 @@
                 }
             });
 
-            // Анимации вращения и покачивания
+            // Анимации всех дронов
             const allAliveDrones = [...units, ...enemies].map(u => u.mesh).filter(Boolean);
             updateDronesAnimation(allAliveDrones, currentTime);
 
-            // Очистка мертвых тел
+            // Очистка погибших
             for (let i = units.length - 1; i >= 0; i--) {
                 if (units[i].hp <= 0) { scene.remove(units[i].mesh); units.splice(i, 1); }
             }
@@ -868,7 +961,7 @@
                 if (enemies[i].hp <= 0) { scene.remove(enemies[i].mesh); enemies.splice(i, 1); }
             }
 
-            // --- СТОЛКНОВЕНИЯ ДРОНОВ ---
+            // --- КОЛЛИЗИИ ДРОНОВ ---
             const allUnits = [...units, ...enemies];
             for (let i = 0; i < allUnits.length; i++) {
                 for (let j = i + 1; j < allUnits.length; j++) {
@@ -880,7 +973,6 @@
                         const overlap = minDist - dist; 
                         const resolveDir = diff.clone().normalize();
                         
-                        // Защита от NaN-взрыва физики при спавне в одной точке
                         if (dist === 0) {
                             resolveDir.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
                         }
@@ -925,7 +1017,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Запуск рендера
+        // Запуск
         animate();
     </script>
 </body>
