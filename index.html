@@ -61,7 +61,67 @@
     </div>
     <div id="canvas-container"></div>
 
-    <script>
+    <script
+        import { updateDronesVibe } from './DroneModel.js'; // Если функция экспортирована, либо добавь ее прямо в игровой цикл
+
+function tick(time) {
+    // Получаем дельту времени
+    const elapsedTime = clock.getElapsedTime();
+
+    // Перебираем всех активных юнитов на карте
+    units.forEach(unit => {
+        if (!unit.mesh || !unit.mesh.userData) return;
+
+        // Передаем текущую скорость юнита (из расчетов движения по Flow Field) в userData его 3D-модели
+        unit.mesh.userData.velocity.copy(unit.velocity);
+    });
+
+    // Собираем все 3D-меши дронов для анимации
+    const droneMeshes = units.map(u => u.mesh);
+    
+    // Запускаем физику вращения винтов, левитации и наклонов
+    updateDrones(droneMeshes, elapsedTime);
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(tick);
+}
+
+// Вспомогательная функция анимации
+function updateDrones(activeDrones, time) {
+    activeDrones.forEach(drone => {
+        const data = drone.userData;
+        if (!data) return;
+
+        // 1. Вращение лопастей
+        if (data.rotors) {
+            data.rotors.forEach((rotor, index) => {
+                const direction = index % 2 === 0 ? 1 : -1;
+                rotor.rotation.y += 0.5 * direction; // Бешеная скорость вращения
+            });
+        }
+
+        // 2. Космическое покачивание (левитация в воздухе)
+        const offset = data.hoverOffset || 0;
+        // Базовая высота полета над землей (Y) + синусоида
+        const hoverHeight = 0.5 + Math.sin(time * 3.5 + offset) * 0.04;
+        drone.position.y = hoverHeight;
+
+        // 3. Динамический наклон при полете
+        if (data.velocity) {
+            // Наклоняем модель по осям Z и X пропорционально вектору движения
+            // Используем плавную интерполяцию (lerp) для мягкости наклонов
+            drone.rotation.z = THREE.MathUtils.lerp(drone.rotation.z, -data.velocity.x * 0.4, 0.1);
+            drone.rotation.x = THREE.MathUtils.lerp(drone.rotation.x, data.velocity.z * 0.4, 0.1);
+            
+            // Также плавно разворачиваем дрон «носом» по направлению движения
+            if (data.velocity.lengthSq() > 0.001) {
+                const angle = Math.atan2(data.velocity.x, data.velocity.z);
+                // Плавно интерполируем угол рыскания (Yaw / rotation.y)
+                drone.rotation.y = THREE.MathUtils.lerp(drone.rotation.y, angle, 0.15);
+            }
+        }
+    });
+}
         // --- 1. ГЕНЕРАТОРЫ ПРОЦЕДУРНЫХ ТЕКСТУР ---
         function createGroundTexture() {
             const canvas = document.createElement('canvas');
