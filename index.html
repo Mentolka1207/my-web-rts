@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Minimal Web RTS: Neo-Drone Swarm & Patrolling AI</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; background-color: #0b0d19; }
@@ -43,6 +44,46 @@
             border-color: #00ffcc;
             box-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
         }
+        /* Отключаем системные жесты браузера (скролл/пинч-зум страницы) — зумом и панорамированием управляет сама игра */
+        #canvas-container { touch-action: none; }
+
+        /* Панель ресурсов */
+        #resource-panel {
+            position: absolute;
+            top: 10px; right: 10px;
+            color: white; background: rgba(11, 13, 25, 0.9);
+            padding: 12px 15px; border-radius: 8px;
+            z-index: 10;
+            border: 1px solid #00ffcc33;
+            box-shadow: 0 4px 25px rgba(0,0,0,0.7);
+            font-size: 14px;
+            min-width: 160px;
+        }
+        #resource-panel .energy-value { color: #00ffcc; font-weight: bold; }
+        #produce-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+        #produce-btn:disabled:hover { background: #0077ff; color: white; }
+
+        /* Миникарта */
+        #minimap-wrap {
+            position: absolute;
+            bottom: 10px; right: 10px;
+            z-index: 10;
+            border: 1px solid #00ffcc55;
+            border-radius: 6px;
+            box-shadow: 0 4px 25px rgba(0,0,0,0.7);
+            background: rgba(11, 13, 25, 0.9);
+            padding: 4px;
+            line-height: 0;
+        }
+        #minimap { display: block; cursor: pointer; }
+
+        /* Мобильная адаптация */
+        @media (max-width: 720px), (pointer: coarse) {
+            #instructions { font-size: 12px; padding: 10px; max-width: 60vw; line-height: 1.4; }
+            #resource-panel { font-size: 12px; padding: 8px 10px; min-width: 130px; }
+            button { padding: 10px 14px; font-size: 13px; }
+            #minimap-wrap { transform: scale(0.8); transform-origin: bottom right; }
+        }
     </style>
     <!-- Подключаем стабильный релиз Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -55,10 +96,19 @@
         • Зажми <strong>ЛКМ и тяни</strong> — выделить рамкой группу<br>
         • Клик <strong>ПКМ</strong> — отправить рой в точку (Flow Field)<br>
         • Клавиша <strong>E</strong> — спавн вражеского патрульного дрона<br>
-        • Клавиша <strong>W, A, S, D</strong> — движение камеры<br><br>
+        • <strong>W, A, S, D</strong> — движение камеры, <strong>колесо мыши</strong> — зум<br>
+        • <strong>Тач:</strong> тап — выделить/приказ, тяни одним пальцем — рамка, двумя пальцами — панорама/зум<br><br>
         <strong>Тактическое построение:</strong><br>
         <button onclick="setFormation('line')">Шеренга</button>
         <button onclick="setFormation('wedge')">Клин</button>
+        <button id="mobile-spawn-btn" onclick="spawnEnemyNearCenter()">Спавн врага</button>
+    </div>
+    <div id="resource-panel">
+        <strong>⚡ Энергия:</strong> <span class="energy-value" id="energy-value">100</span><br>
+        <button id="produce-btn" onclick="produceUnit()">Построить дрона (40⚡)</button>
+    </div>
+    <div id="minimap-wrap">
+        <canvas id="minimap" width="170" height="170"></canvas>
     </div>
     <div id="canvas-container"></div>
 
@@ -298,6 +348,13 @@
         const GRID_SIZE = 22; 
         const CELL_SIZE = 2;
         const grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
+
+        // Карта видимости для тумана войны: 0 — не исследовано, 1 — исследовано (не видно сейчас), 2 — видно сейчас
+        const visibility = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
+
+        // Точка базы союзников — сюда производятся новые дроны
+        const BASE_COL = 3;
+        const BASE_ROW = 3;
         
         for (let i = 0; i < GRID_SIZE; i++) {
             grid[0][i] = 1; grid[GRID_SIZE - 1][i] = 1; 
@@ -428,8 +485,22 @@
         scene.fog = new THREE.Fog(0x0b0d19, 60, 115);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
-        camera.position.set(0, 42, 32);
-        camera.lookAt(0, 0, 0);
+
+        // --- КАМЕРА: панорама + зум ---
+        // Камера всегда смотрит вдоль одного и того же фиксированного направления (camDir).
+        // camPivot — точка на "земле", которую двигают WASD/тач-панорама.
+        // camZoomDist — расстояние от pivot до камеры вдоль camDir; регулируется колесом мыши/щипком.
+        const camDir = new THREE.Vector3(0, 42, 32).normalize();
+        let camPivot = new THREE.Vector3(0, 0, 0);
+        let camZoomDist = Math.hypot(42, 32); // изначальное расстояние — даёт тот же вид, что и раньше
+        const MIN_ZOOM_DIST = camZoomDist * 0.45;
+        const MAX_ZOOM_DIST = camZoomDist * 1.9;
+
+        function applyCameraTransform() {
+            camera.position.copy(camPivot).addScaledVector(camDir, camZoomDist);
+            camera.lookAt(camPivot.x, 0, camPivot.z);
+        }
+        applyCameraTransform();
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -486,6 +557,62 @@
                     scene.add(wall);
                 }
             }
+        }
+
+        // --- ТУМАН ВОЙНЫ ---
+        // Полупрозрачная плоскость поверх карты: рисуется как канвас-текстура размером с сетку
+        // (1 пиксель = 1 клетка), Three.js сам сглаживает её при увеличении на большую плоскость.
+        const fogCanvas = document.createElement('canvas');
+        fogCanvas.width = GRID_SIZE; fogCanvas.height = GRID_SIZE;
+        const fogCtx = fogCanvas.getContext('2d');
+        const fogTexture = new THREE.CanvasTexture(fogCanvas);
+        fogTexture.magFilter = THREE.LinearFilter;
+        fogTexture.minFilter = THREE.LinearFilter;
+        const fogGeo = new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
+        const fogMat = new THREE.MeshBasicMaterial({ map: fogTexture, transparent: true, depthWrite: false });
+        const fogMesh = new THREE.Mesh(fogGeo, fogMat);
+        fogMesh.rotation.x = -Math.PI / 2;
+        fogMesh.position.y = 2.4; // выше стен (1.5) и дронов (~0.75), но ниже камеры
+        scene.add(fogMesh);
+
+        function updateFogOfWar() {
+            // "Видимое сейчас" гаснет до "исследовано", если в этом кадре его никто не видит
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (visibility[r][c] === 2) visibility[r][c] = 1;
+                }
+            }
+            // Каждый живой союзный дрон открывает клетки в радиусе своего visionRange
+            units.forEach(unit => {
+                if (unit.hp <= 0) return;
+                const centerGrid = worldToGrid(unit.mesh.position.x, unit.mesh.position.z);
+                const radiusCells = Math.ceil(unit.visionRange / CELL_SIZE);
+                for (let dr = -radiusCells; dr <= radiusCells; dr++) {
+                    for (let dc = -radiusCells; dc <= radiusCells; dc++) {
+                        const r = centerGrid.row + dr, c = centerGrid.col + dc;
+                        if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE) continue;
+                        if (Math.hypot(dr, dc) * CELL_SIZE <= unit.visionRange) visibility[r][c] = 2;
+                    }
+                }
+            });
+
+            // Перерисовываем текстуру тумана: чёрный = не исследовано, серый = помним, прозрачно = видно
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const state = visibility[r][c];
+                    const alpha = state === 0 ? 0.97 : (state === 1 ? 0.55 : 0);
+                    fogCtx.fillStyle = `rgba(2, 4, 12, ${alpha})`;
+                    fogCtx.fillRect(c, r, 1, 1);
+                }
+            }
+            fogTexture.needsUpdate = true;
+
+            // Вражеские дроны рендерятся, только пока находятся в зоне текущей видимости
+            enemies.forEach(enemy => {
+                const eg = worldToGrid(enemy.mesh.position.x, enemy.mesh.position.z);
+                const inBounds = eg.row >= 0 && eg.row < GRID_SIZE && eg.col >= 0 && eg.col < GRID_SIZE;
+                enemy.mesh.visible = inBounds && visibility[eg.row][eg.col] === 2;
+            });
         }
 
         // --- 7. ЮНИТЫ И ВРАГИ (СПАВН) ---
@@ -576,6 +703,56 @@
         createUnit(2, 2); createUnit(2, 3); createUnit(3, 2); createUnit(3, 3); createUnit(4, 2);
         createEnemy(12, 12); createEnemy(14, 12); createEnemy(13, 14);
 
+        // --- РЕСУРСЫ И ПРОИЗВОДСТВО ЮНИТОВ ---
+        let energy = 100;
+        const ENERGY_INCOME_PER_SEC = 3;
+        const UNIT_COST = 40;
+        let energyAccumulator = 0;
+        const energyValueEl = document.getElementById('energy-value');
+        const produceBtnEl = document.getElementById('produce-btn');
+
+        function updateResourceUI() {
+            energyValueEl.textContent = Math.floor(energy);
+            produceBtnEl.disabled = energy < UNIT_COST;
+        }
+
+        // Расходящийся поиск по кольцам вокруг (col,row): ближайшая свободная от стен и юнитов клетка
+        function findFreeCellNear(col, row) {
+            for (let radius = 0; radius < GRID_SIZE; radius++) {
+                for (let dr = -radius; dr <= radius; dr++) {
+                    for (let dc = -radius; dc <= radius; dc++) {
+                        if (Math.max(Math.abs(dr), Math.abs(dc)) !== radius) continue;
+                        const r = row + dr, c = col + dc;
+                        if (r <= 0 || r >= GRID_SIZE - 1 || c <= 0 || c >= GRID_SIZE - 1) continue;
+                        if (grid[r][c] === 1) continue;
+                        const worldPos = gridToWorld(c, r);
+                        const occupied = [...units, ...enemies].some(u => u.hp > 0 &&
+                            Math.hypot(u.mesh.position.x - worldPos.x, u.mesh.position.z - worldPos.z) < 0.9);
+                        if (!occupied) return { col: c, row: r };
+                    }
+                }
+            }
+            return { col, row };
+        }
+
+        function produceUnit() {
+            if (energy < UNIT_COST) return;
+            energy -= UNIT_COST;
+            const spot = findFreeCellNear(BASE_COL, BASE_ROW);
+            createUnit(spot.col, spot.row);
+            updateResourceUI();
+        }
+
+        // Мобильная замена клавише E (спавн врага): создаёт врага рядом с текущим центром камеры
+        function spawnEnemyNearCenter() {
+            const centerGrid = worldToGrid(camPivot.x, camPivot.z);
+            const spot = findFreeCellNear(centerGrid.col, centerGrid.row);
+            const worldPos = gridToWorld(spot.col, spot.row);
+            createEnemy(worldPos.x, worldPos.z);
+        }
+
+        updateResourceUI();
+
         // --- ЭФФЕКТЫ ЛАЗЕРОВ ---
         function fireLaser(fromPos, toPos, colorHex) {
             const points = [
@@ -594,6 +771,75 @@
             }, 80);
         }
 
+        // --- МИНИКАРТА ---
+        const MAP_WORLD_SIZE = GRID_SIZE * CELL_SIZE;
+        const minimapCanvas = document.getElementById('minimap');
+        const minimapCtx = minimapCanvas.getContext('2d');
+        const MINIMAP_PX = minimapCanvas.width; // канвас квадратный (170x170)
+
+        function worldToMinimap(x, z) {
+            return {
+                mx: ((x + MAP_WORLD_SIZE / 2) / MAP_WORLD_SIZE) * MINIMAP_PX,
+                my: ((z + MAP_WORLD_SIZE / 2) / MAP_WORLD_SIZE) * MINIMAP_PX
+            };
+        }
+
+        function updateMinimap() {
+            minimapCtx.fillStyle = '#05070d';
+            minimapCtx.fillRect(0, 0, MINIMAP_PX, MINIMAP_PX);
+
+            // Стены — только там, где карта уже исследована
+            minimapCtx.fillStyle = '#2b395c';
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (grid[r][c] === 1 && visibility[r][c] > 0) {
+                        const wp = gridToWorld(c, r);
+                        const { mx, my } = worldToMinimap(wp.x, wp.z);
+                        minimapCtx.fillRect(mx - 1.5, my - 1.5, 3, 3);
+                    }
+                }
+            }
+
+            // Союзники — всегда видны на миникарте
+            minimapCtx.fillStyle = '#00ffcc';
+            units.forEach(u => {
+                if (u.hp <= 0) return;
+                const { mx, my } = worldToMinimap(u.mesh.position.x, u.mesh.position.z);
+                minimapCtx.beginPath(); minimapCtx.arc(mx, my, 2.4, 0, Math.PI * 2); minimapCtx.fill();
+            });
+
+            // Враги — только если они сейчас в зоне видимости (тот же туман войны, что и на сцене)
+            minimapCtx.fillStyle = '#ff3333';
+            enemies.forEach(e => {
+                if (!e.mesh.visible) return;
+                const { mx, my } = worldToMinimap(e.mesh.position.x, e.mesh.position.z);
+                minimapCtx.beginPath(); minimapCtx.arc(mx, my, 2.4, 0, Math.PI * 2); minimapCtx.fill();
+            });
+
+            // Прямоугольник текущей области обзора камеры (приблизительно)
+            const viewHalf = (camZoomDist / Math.hypot(42, 32)) * 16;
+            const center = worldToMinimap(camPivot.x, camPivot.z);
+            const halfPx = (viewHalf / MAP_WORLD_SIZE) * MINIMAP_PX;
+            minimapCtx.strokeStyle = 'rgba(255,255,255,0.6)';
+            minimapCtx.lineWidth = 1;
+            minimapCtx.strokeRect(center.mx - halfPx, center.my - halfPx, halfPx * 2, halfPx * 2);
+        }
+
+        // Клик/тап по миникарте — переносит камеру (панораму) в указанную точку
+        function jumpCameraFromMinimapEvent(clientX, clientY) {
+            const rect = minimapCanvas.getBoundingClientRect();
+            const px = (clientX - rect.left) / rect.width * MINIMAP_PX;
+            const py = (clientY - rect.top) / rect.height * MINIMAP_PX;
+            camPivot.x = (px / MINIMAP_PX) * MAP_WORLD_SIZE - MAP_WORLD_SIZE / 2;
+            camPivot.z = (py / MINIMAP_PX) * MAP_WORLD_SIZE - MAP_WORLD_SIZE / 2;
+            applyCameraTransform();
+        }
+        minimapCanvas.addEventListener('mousedown', (e) => { e.stopPropagation(); jumpCameraFromMinimapEvent(e.clientX, e.clientY); });
+        minimapCanvas.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+            if (e.touches.length === 1) jumpCameraFromMinimapEvent(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: true });
+
         // --- 8. УПРАВЛЕНИЕ И КОМАНДЫ ---
         const mouse = new THREE.Vector2(); 
         const startPoint = new THREE.Vector2();
@@ -601,18 +847,17 @@
         const DRAG_THRESHOLD = 5; 
         const selectionBoxEl = document.getElementById('selection-box');
         const raycaster = new THREE.Raycaster();
+        const UI_SELECTOR = '#instructions, #resource-panel, #minimap-wrap';
 
-        window.addEventListener('mousemove', (e) => {
-            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        function updateMouseNDC(clientX, clientY) {
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+        }
 
-            if (!isSelecting) return;
-            const dragDistance = Math.hypot(e.clientX - startPoint.x, e.clientY - startPoint.y);
-            if (!isDragging && dragDistance > DRAG_THRESHOLD) { isDragging = true; selectionBoxEl.style.display = 'block'; }
-
-            if (!isDragging) return;
-            const minX = Math.min(startPoint.x, e.clientX); const maxX = Math.max(startPoint.x, e.clientX);
-            const minY = Math.min(startPoint.y, e.clientY); const maxY = Math.max(startPoint.y, e.clientY);
+        // Обновляет рамку выделения на экране и помечает юнитов внутри неё выделенными
+        function updateDragSelection(currentX, currentY, additive) {
+            const minX = Math.min(startPoint.x, currentX); const maxX = Math.max(startPoint.x, currentX);
+            const minY = Math.min(startPoint.y, currentY); const maxY = Math.max(startPoint.y, currentY);
 
             selectionBoxEl.style.left = minX + 'px'; selectionBoxEl.style.top = minY + 'px';
             selectionBoxEl.style.width = (maxX - minX) + 'px'; selectionBoxEl.style.height = (maxY - minY) + 'px';
@@ -621,52 +866,96 @@
                 const vector = unit.mesh.position.clone().project(camera);
                 const x = (vector.x * .5 + .5) * window.innerWidth;
                 const y = (-(vector.y * .5) + .5) * window.innerHeight;
-                
+
                 if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-                    unit.selected = true; 
-                    if (unit.mesh.userData.selectionRing) {
-                        unit.mesh.userData.selectionRing.visible = true;
-                    }
-                } else if (!e.shiftKey) {
-                    unit.selected = false; 
-                    if (unit.mesh.userData.selectionRing) {
-                        unit.mesh.userData.selectionRing.visible = false;
-                    }
+                    unit.selected = true;
+                    if (unit.mesh.userData.selectionRing) unit.mesh.userData.selectionRing.visible = true;
+                } else if (!additive) {
+                    unit.selected = false;
+                    if (unit.mesh.userData.selectionRing) unit.mesh.userData.selectionRing.visible = false;
                 }
             });
+        }
+
+        // Клик/тап по одиночному дрону: additive=true (Shift на десктопе) добавляет к выделению, иначе заменяет его
+        function trySelectUnitAtPoint(clientX, clientY, additive) {
+            updateMouseNDC(clientX, clientY);
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(units.map(u => u.mesh), true);
+            if (!additive) {
+                units.forEach(u => {
+                    u.selected = false;
+                    if (u.mesh.userData.selectionRing) u.mesh.userData.selectionRing.visible = false;
+                });
+            }
+            if (intersects.length > 0) {
+                let rootGroup = intersects[0].object;
+                while (rootGroup.parent && rootGroup.parent.type !== "Scene") rootGroup = rootGroup.parent;
+                const clickedUnit = units.find(u => u.mesh === rootGroup);
+                if (clickedUnit) {
+                    clickedUnit.selected = true;
+                    if (clickedUnit.mesh.userData.selectionRing) clickedUnit.mesh.userData.selectionRing.visible = true;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Приказ на движение (Flow Field + построение) для всех выделенных юнитов в указанную точку экрана
+        function issueMoveOrderAtPoint(clientX, clientY) {
+            updateMouseNDC(clientX, clientY);
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(ground);
+            if (intersects.length === 0) return;
+
+            const targetPoint = intersects[0].point;
+            const targetGrid = worldToGrid(targetPoint.x, targetPoint.z);
+            if (targetGrid.col < 0 || targetGrid.col >= GRID_SIZE || targetGrid.row < 0 || targetGrid.row >= GRID_SIZE) return;
+            if (grid[targetGrid.row][targetGrid.col] === 1) return;
+
+            const selectedUnits = units.filter(u => u.selected);
+            if (selectedUnits.length === 0) return;
+
+            const groupCenter = new THREE.Vector3();
+            selectedUnits.forEach(u => groupCenter.add(u.mesh.position));
+            groupCenter.divideScalar(selectedUnits.length);
+
+            const angle = Math.atan2(targetPoint.z - groupCenter.z, targetPoint.x - groupCenter.x);
+            const offsets = getFormationOffsets(selectedUnits.length, currentFormation);
+
+            flowFieldGen.updateTarget(targetGrid.col, targetGrid.row);
+
+            selectedUnits.forEach((unit, index) => {
+                const offset = offsets[index];
+                const rotatedX = offset.x * Math.cos(-angle) - offset.y * Math.sin(-angle);
+                const rotatedZ = offset.x * Math.sin(-angle) + offset.y * Math.cos(-angle);
+
+                unit.personalTarget = new THREE.Vector3(targetPoint.x + rotatedX, 0.75, targetPoint.z + rotatedZ);
+                unit.state = States.MOVE;
+                unit.targetEnemy = null;
+            });
+        }
+
+        // --- МЫШЬ (ДЕСКТОП) ---
+        window.addEventListener('mousemove', (e) => {
+            updateMouseNDC(e.clientX, e.clientY);
+            if (!isSelecting) return;
+            const dragDistance = Math.hypot(e.clientX - startPoint.x, e.clientY - startPoint.y);
+            if (!isDragging && dragDistance > DRAG_THRESHOLD) { isDragging = true; selectionBoxEl.style.display = 'block'; }
+            if (!isDragging) return;
+            updateDragSelection(e.clientX, e.clientY, e.shiftKey);
         });
 
         window.addEventListener('mousedown', (e) => {
-            if (e.target.closest('#instructions')) return;
+            if (e.target.closest(UI_SELECTOR)) return;
             if (e.button === 0) { isSelecting = true; isDragging = false; startPoint.set(e.clientX, e.clientY); }
         });
 
         window.addEventListener('mouseup', (e) => {
             if (e.button === 0) {
                 isSelecting = false; selectionBoxEl.style.display = 'none';
-                if (!isDragging && !e.target.closest('#instructions')) {
-                    raycaster.setFromCamera(mouse, camera);
-
-                    const intersects = raycaster.intersectObjects(units.map(u => u.mesh), true);
-                    if (!e.shiftKey) { 
-                        units.forEach(u => { 
-                            u.selected = false; 
-                            if (u.mesh.userData.selectionRing) u.mesh.userData.selectionRing.visible = false; 
-                        }); 
-                    }
-                    if (intersects.length > 0) {
-                        let rootGroup = intersects[0].object;
-                        while (rootGroup.parent && rootGroup.parent.type !== "Scene") {
-                            rootGroup = rootGroup.parent;
-                        }
-                        const clickedUnit = units.find(u => u.mesh === rootGroup);
-                        if (clickedUnit) { 
-                            clickedUnit.selected = true; 
-                            if (clickedUnit.mesh.userData.selectionRing) {
-                                clickedUnit.mesh.userData.selectionRing.visible = true;
-                            }
-                        }
-                    }
+                if (!isDragging && !e.target.closest(UI_SELECTOR)) {
+                    trySelectUnitAtPoint(e.clientX, e.clientY, e.shiftKey);
                 }
                 isDragging = false;
             }
@@ -674,39 +963,8 @@
 
         window.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            if (e.target.closest('#instructions')) return;
-
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(ground);
-            if (intersects.length > 0) {
-                const targetPoint = intersects[0].point;
-                const targetGrid = worldToGrid(targetPoint.x, targetPoint.z);
-
-                if (targetGrid.col < 0 || targetGrid.col >= GRID_SIZE || targetGrid.row < 0 || targetGrid.row >= GRID_SIZE) return;
-                if (grid[targetGrid.row][targetGrid.col] === 1) return;
-
-                const selectedUnits = units.filter(u => u.selected);
-                if (selectedUnits.length === 0) return;
-
-                const groupCenter = new THREE.Vector3();
-                selectedUnits.forEach(u => groupCenter.add(u.mesh.position));
-                groupCenter.divideScalar(selectedUnits.length);
-
-                const angle = Math.atan2(targetPoint.z - groupCenter.z, targetPoint.x - groupCenter.x);
-                const offsets = getFormationOffsets(selectedUnits.length, currentFormation);
-
-                flowFieldGen.updateTarget(targetGrid.col, targetGrid.row);
-
-                selectedUnits.forEach((unit, index) => {
-                    const offset = offsets[index];
-                    const rotatedX = offset.x * Math.cos(-angle) - offset.y * Math.sin(-angle);
-                    const rotatedZ = offset.x * Math.sin(-angle) + offset.y * Math.cos(-angle);
-
-                    unit.personalTarget = new THREE.Vector3(targetPoint.x + rotatedX, 0.75, targetPoint.z + rotatedZ);
-                    unit.state = States.MOVE; 
-                    unit.targetEnemy = null;   
-                });
-            }
+            if (e.target.closest(UI_SELECTOR)) return;
+            issueMoveOrderAtPoint(e.clientX, e.clientY);
         });
 
         const keys = {};
@@ -724,14 +982,142 @@
 
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
+        // Обрабатывает одиночный тап: тап по своему дрону выделяет его (заменяя старое выделение);
+        // тап по пустой земле при непустом выделении отдаёт приказ на движение, ничего не сбрасывая заранее
+        // (на тач-устройстве нет отдельной кнопки под приказ, как ПКМ на мыши, поэтому порядок проверки важен)
+        function handleTap(clientX, clientY) {
+            updateMouseNDC(clientX, clientY);
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(units.map(u => u.mesh), true);
+
+            if (intersects.length > 0) {
+                let rootGroup = intersects[0].object;
+                while (rootGroup.parent && rootGroup.parent.type !== "Scene") rootGroup = rootGroup.parent;
+                const tappedUnit = units.find(u => u.mesh === rootGroup);
+                if (tappedUnit) {
+                    units.forEach(u => {
+                        u.selected = false;
+                        if (u.mesh.userData.selectionRing) u.mesh.userData.selectionRing.visible = false;
+                    });
+                    tappedUnit.selected = true;
+                    if (tappedUnit.mesh.userData.selectionRing) tappedUnit.mesh.userData.selectionRing.visible = true;
+                    return;
+                }
+            }
+
+            if (units.some(u => u.selected)) {
+                issueMoveOrderAtPoint(clientX, clientY);
+            }
+        }
+
+        // --- ТАЧ-УПРАВЛЕНИЕ (МОБИЛЬНЫЕ УСТРОЙСТВА) ---
+        // Один палец: тап по своему дрону — выделить; тап по земле при активном выделении — приказ на движение;
+        //             тяни — рамка выделения (как ЛКМ на десктопе).
+        // Два пальца: сведение/разведение — зум; совместное перемещение — панорама камеры.
+        let touchMode = null; // 'select' | 'pan-zoom'
+        let touchStartTime = 0;
+        const TAP_MAX_DURATION_MS = 350;
+        let pinchStartDist = 0;
+        let pinchStartZoom = 0;
+        let twoFingerStartMid = { x: 0, y: 0 };
+        let twoFingerStartPivot = new THREE.Vector3();
+
+        function resetTouchState() {
+            touchMode = null;
+            isSelecting = false; isDragging = false;
+            selectionBoxEl.style.display = 'none';
+        }
+
+        window.addEventListener('touchstart', (e) => {
+            if (e.target.closest(UI_SELECTOR)) return;
+            e.preventDefault();
+
+            if (e.touches.length === 1) {
+                touchMode = 'select';
+                isSelecting = true; isDragging = false;
+                touchStartTime = performance.now();
+                startPoint.set(e.touches[0].clientX, e.touches[0].clientY);
+                updateMouseNDC(e.touches[0].clientX, e.touches[0].clientY);
+            } else if (e.touches.length === 2) {
+                touchMode = 'pan-zoom';
+                isSelecting = false; isDragging = false; selectionBoxEl.style.display = 'none';
+                const [t0, t1] = e.touches;
+                pinchStartDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+                pinchStartZoom = camZoomDist;
+                twoFingerStartMid = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+                twoFingerStartPivot.copy(camPivot);
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchmove', (e) => {
+            if (touchMode === null) return;
+            e.preventDefault();
+
+            if (touchMode === 'select' && e.touches.length === 1) {
+                const t = e.touches[0];
+                updateMouseNDC(t.clientX, t.clientY);
+                const dragDistance = Math.hypot(t.clientX - startPoint.x, t.clientY - startPoint.y);
+                if (!isDragging && dragDistance > DRAG_THRESHOLD) { isDragging = true; selectionBoxEl.style.display = 'block'; }
+                if (isDragging) updateDragSelection(t.clientX, t.clientY, false);
+            } else if (touchMode === 'pan-zoom' && e.touches.length === 2) {
+                const [t0, t1] = e.touches;
+                const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+                // Пальцы расходятся (dist растёт) -> камера приближается (camZoomDist уменьшается)
+                const zoomFactor = pinchStartDist / Math.max(dist, 1);
+                camZoomDist = THREE.MathUtils.clamp(pinchStartZoom * zoomFactor, MIN_ZOOM_DIST, MAX_ZOOM_DIST);
+
+                const mid = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+                const dx = mid.x - twoFingerStartMid.x;
+                const dy = mid.y - twoFingerStartMid.y;
+                const panScale = (camZoomDist / Math.hypot(42, 32)) * 0.06;
+                camPivot.x = twoFingerStartPivot.x - dx * panScale;
+                camPivot.z = twoFingerStartPivot.z - dy * panScale;
+                applyCameraTransform();
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', (e) => {
+            if (touchMode === 'select') {
+                const wasTap = !isDragging && (performance.now() - touchStartTime) < TAP_MAX_DURATION_MS;
+                isSelecting = false; selectionBoxEl.style.display = 'none';
+
+                if (wasTap && e.changedTouches.length > 0) {
+                    const t = e.changedTouches[0];
+                    handleTap(t.clientX, t.clientY);
+                }
+                isDragging = false;
+            }
+
+            if (e.touches.length === 0) {
+                touchMode = null;
+            } else if (e.touches.length === 1) {
+                touchMode = 'select';
+                isSelecting = true; isDragging = false;
+                touchStartTime = performance.now();
+                startPoint.set(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: true });
+
+        window.addEventListener('touchcancel', resetTouchState, { passive: true });
+
         // --- 9. КАМЕРА ---
         function updateCamera(delta) {
-            const camSpeed = 25 * delta;
-            if (keys['KeyW'] || keys['ArrowUp']) { camera.position.z -= camSpeed; }
-            if (keys['KeyS'] || keys['ArrowDown']) { camera.position.z += camSpeed; }
-            if (keys['KeyA'] || keys['ArrowLeft']) { camera.position.x -= camSpeed; }
-            if (keys['KeyD'] || keys['ArrowRight']) { camera.position.x += camSpeed; }
+            // Скорость панорамы растёт при отдалении камеры, чтобы перемещение по карте не казалось медленным при зуме
+            const camSpeed = 25 * delta * (camZoomDist / (Math.hypot(42, 32)));
+            if (keys['KeyW'] || keys['ArrowUp']) { camPivot.z -= camSpeed; }
+            if (keys['KeyS'] || keys['ArrowDown']) { camPivot.z += camSpeed; }
+            if (keys['KeyA'] || keys['ArrowLeft']) { camPivot.x -= camSpeed; }
+            if (keys['KeyD'] || keys['ArrowRight']) { camPivot.x += camSpeed; }
+            applyCameraTransform();
         }
+
+        // Зум колесом мыши (десктоп)
+        window.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            camZoomDist += e.deltaY * 0.04;
+            camZoomDist = THREE.MathUtils.clamp(camZoomDist, MIN_ZOOM_DIST, MAX_ZOOM_DIST);
+            applyCameraTransform();
+        }, { passive: false });
 
         // --- 10. ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ ---
         const clock = new THREE.Clock();
@@ -742,6 +1128,15 @@
             const currentTime = clock.elapsedTime; 
 
             updateCamera(delta);
+
+            // Пассивный доход энергии, тикает раз в секунду
+            energyAccumulator += delta;
+            if (energyAccumulator >= 1) {
+                energyAccumulator -= 1;
+                energy += ENERGY_INCOME_PER_SEC;
+                updateResourceUI();
+            }
+
 
             // --- FSM СОЮЗНЫХ ДРОНОВ ---
             units.forEach((unit) => {
@@ -1003,6 +1398,9 @@
                     }
                 }
             });
+
+            updateFogOfWar();
+            updateMinimap();
 
             renderer.render(scene, camera);
         }
