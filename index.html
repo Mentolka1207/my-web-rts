@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <title>Minimal Web RTS: Flow Fields & FSM Combat with Health Bars</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; }
-        #canvas-container { width: 100vw; height: 100vh; }
+        body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; background-color: #0f111a; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         /* Стили для рамки выделения */
         #selection-box {
             border: 2px dashed #00ff77;
@@ -14,6 +14,7 @@
             pointer-events: none;
             display: none;
             box-shadow: 0 0 10px rgba(0, 255, 119, 0.5);
+            z-index: 5;
         }
         #instructions {
             position: absolute;
@@ -43,7 +44,7 @@
             box-shadow: 0 0 10px rgba(0, 255, 119, 0.5);
         }
     </style>
-    <!-- Подключаем Three.js -->
+    <!-- Подключаем стабильный релиз Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -54,7 +55,7 @@
         • Зажми <strong>ЛКМ и тяни</strong> — выделить рамкой несколько<br>
         • Клик <strong>ПКМ</strong> — отправить выделенных юнитов в точку<br>
         • Клавиша <strong>E</strong> — спавн вражеского дрона под курсором<br>
-        • Клавиши <strong>W, A, S, D</strong> — движение камеры<br><br>
+        • Клавиша <strong>W, A, S, D</strong> — движение камеры<br><br>
         <strong>Построение:</strong><br>
         <button onclick="setFormation('line')">Шеренга</button>
         <button onclick="setFormation('wedge')">Клин</button>
@@ -62,7 +63,28 @@
     <div id="canvas-container"></div>
 
     <script>
-        // --- ГЕНЕРАТОР ПРОЦЕДУРНОЙ МОДЕЛИ ДРОНА ---
+        // --- 0. ВСТРОЕННЫЙ ДЕБАГГЕР ОШИБОК ---
+        window.addEventListener('error', function(e) {
+            const errEl = document.createElement('div');
+            errEl.style.position = 'absolute';
+            errEl.style.top = '50%';
+            errEl.style.left = '50%';
+            errEl.style.transform = 'translate(-50%, -50%)';
+            errEl.style.background = 'rgba(220, 38, 38, 0.95)';
+            errEl.style.color = 'white';
+            errEl.style.padding = '24px';
+            errEl.style.borderRadius = '12px';
+            errEl.style.zIndex = '9999';
+            errEl.style.fontFamily = 'monospace';
+            errEl.style.fontSize = '14px';
+            errEl.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
+            errEl.style.maxWidth = '80vw';
+            errEl.style.whiteSpace = 'pre-wrap';
+            errEl.innerHTML = `<strong>🚨 Системный сбой JS-кода:</strong><br><br>${e.message}<br><br><span style="color: #fecaca;">Файл: ${e.filename.split('/').pop()}<br>Строка: ${e.lineno}:${e.colno}</span>`;
+            document.body.appendChild(errEl);
+        });
+
+        // --- 1. ГЕНЕРАТОР ПРОЦЕДУРНОЙ МОДЕЛИ ДРОНА ---
         function createDroneUnit(textureMap) {
             const droneGroup = new THREE.Group();
 
@@ -72,32 +94,32 @@
                 roughness: 0.2
             });
             const frameMat = new THREE.MeshStandardMaterial({
-                color: 0x1f2937, // карбон
+                color: 0x1f2937, // Углеволокно
                 metalness: 0.9,
                 roughness: 0.1
             });
             const rotorMat = new THREE.MeshStandardMaterial({
-                color: 0xf59e0b, // оранжевые винты
+                color: 0xf59e0b, // Оранжевые винты
                 metalness: 0.3,
                 roughness: 0.5
             });
             const ledMat = new THREE.MeshBasicMaterial({
-                color: 0x00ffcc // светящийся сенсор
+                color: 0x00ffcc // Светящийся индикатор направления
             });
 
-            // 1. Корпус дрона
+            // Корпус дрона
             const bodyGeo = new THREE.BoxGeometry(0.5, 0.12, 0.5);
             const body = new THREE.Mesh(bodyGeo, bodyMat);
             body.position.y = 0.15;
             droneGroup.add(body);
 
-            // 2. Светящийся передний сенсор направления
+            // "Глаз"
             const eyeGeo = new THREE.BoxGeometry(0.18, 0.06, 0.06);
             const eye = new THREE.Mesh(eyeGeo, ledMat);
             eye.position.set(0, 0.15, 0.26);
             droneGroup.add(eye);
 
-            // 3. Рама рамы (лучи)
+            // Рама крест-накрест
             const armGeo = new THREE.BoxGeometry(0.06, 0.03, 0.8);
             
             const arm1 = new THREE.Mesh(armGeo, frameMat);
@@ -110,7 +132,7 @@
             arm2.rotation.y = -Math.PI / 4;
             droneGroup.add(arm2);
 
-            // 4. Двигатели и вращающиеся пропеллеры
+            // Пропеллеры
             const rotors = [];
             const distance = 0.28;
             const rotorPositions = [
@@ -121,13 +143,11 @@
             ];
 
             rotorPositions.forEach((pos, index) => {
-                // Моторчики
                 const motorGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.06, 8);
                 const motor = new THREE.Mesh(motorGeo, frameMat);
                 motor.position.set(pos.x, 0.18, pos.z);
                 droneGroup.add(motor);
 
-                // Сами лопасти
                 const bladeGeo = new THREE.BoxGeometry(0.3, 0.01, 0.02);
                 const blade = new THREE.Mesh(bladeGeo, rotorMat);
                 blade.position.set(pos.x, 0.21, pos.z);
@@ -137,12 +157,11 @@
                 rotors.push(blade);
             });
 
-            // Настройки для визуальных эффектов и наклона
             droneGroup.userData = {
                 rotors: rotors,
                 hoverOffset: Math.random() * 100,
                 velocity: new THREE.Vector3(0, 0, 0),
-                bodyMesh: body // Ссылка для изменения подсветки при выделении
+                bodyMesh: body 
             };
 
             droneGroup.traverse(child => {
@@ -155,13 +174,12 @@
             return droneGroup;
         }
 
-        // Анимация вращения лопастей, парения и крена при полете
+        // Анимация пропеллеров, левитации и наклонов
         function updateDronesAnimation(activeDrones, time) {
             activeDrones.forEach(drone => {
                 const data = drone.userData;
                 if (!data) return;
 
-                // 1. Попарное вращение пропеллеров в разные стороны
                 if (data.rotors) {
                     data.rotors.forEach((rotor, index) => {
                         const direction = index % 2 === 0 ? 1 : -1;
@@ -169,11 +187,9 @@
                     });
                 }
 
-                // 2. Мягкое парение в воздухе (эффект левитации)
                 const offset = data.hoverOffset || 0;
                 drone.position.y = 0.7 + Math.sin(time * 3.5 + offset) * 0.05;
 
-                // 3. Динамический наклон (крен) корпуса при движении по Flow Field
                 if (data.velocity) {
                     drone.rotation.z = THREE.MathUtils.lerp(drone.rotation.z, -data.velocity.x * 0.4, 0.1);
                     drone.rotation.x = THREE.MathUtils.lerp(drone.rotation.x, data.velocity.z * 0.4, 0.1);
@@ -181,7 +197,7 @@
             });
         }
 
-        // --- 1. ГЕНЕРАТОРЫ ПРОЦЕДУРНЫХ ТЕКСТУР ---
+        // --- 2. ГЕНЕРАТОРЫ ПРОЦЕДУРНЫХ ТЕКСТУР ---
         function createGroundTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 256; canvas.height = 256;
@@ -224,7 +240,7 @@
             return new THREE.CanvasTexture(canvas);
         }
 
-        // --- 2. НАСТРОЙКИ СЕТКИ И КАРТЫ ---
+        // --- 3. НАСТРОЙКИ СЕТКИ И КАРТЫ ---
         const GRID_SIZE = 22; 
         const CELL_SIZE = 2;
         const grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
@@ -279,7 +295,7 @@
             return offsets;
         }
 
-        // --- 3. КЛАСС FLOW FIELD ---
+        // --- 4. КЛАСС FLOW FIELD ---
         class FlowFieldGenerator {
             constructor(gridWidth, gridHeight, cellSize) {
                 this.width = gridWidth; this.height = gridHeight; this.cellSize = cellSize;
@@ -348,7 +364,7 @@
 
         const flowFieldGen = new FlowFieldGenerator(GRID_SIZE, GRID_SIZE, CELL_SIZE);
 
-        // --- 4. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ THREE.JS ---
+        // --- 5. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ THREE.JS ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x0f111a); 
@@ -373,7 +389,7 @@
         dirLight.castShadow = true;
         scene.add(dirLight);
 
-        // --- 5. ОТРИСОВКА ИГРОВОГО МИРА С ТЕКСТУРАМИ ---
+        // --- 6. ОТРИСОВКА ИГРОВОГО МИРА С ТЕКСТУРАМИ ---
         const groundTex = createGroundTexture();
         const groundGeo = new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
         const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.5, metalness: 0.3 });
@@ -395,12 +411,14 @@
                     const wall = new THREE.Mesh(wallGeo, wallMat);
                     const pos = gridToWorld(col, row);
                     wall.position.set(pos.x, 0.75, pos.z);
+                    wall.castShadow = true;
+                    wall.receiveShadow = true;
                     scene.add(wall);
                 }
             }
         }
 
-        // --- 6. ЮНИТЫ И ВРАГИ (ТЕКСТУРЫ И СПАВН) ---
+        // --- 7. ЮНИТЫ И ВРАГИ (ТЕКСТУРЫ И СПАВН) ---
         const normalUnitTex = createUnitTexture('#0077ff', '#00e1ff');
         const selectedUnitTex = createUnitTexture('#00ff77', '#33ff99');
         const enemyTex = createUnitTexture('#ff3333', '#ff0000'); 
@@ -414,18 +432,16 @@
 
         const States = { IDLE: 'IDLE', MOVE: 'MOVE', CHASE: 'CHASE', ATTACK: 'ATTACK' };
 
-        // Вспомогательная функция для создания полоски здоровья в 3D
+        // Полоски здоровья в 3D
         function attachHealthBar(parentMesh, isAlly) {
             const barGroup = new THREE.Group();
-            barGroup.position.set(0, 0.7, 0); // Позиционируем чуть выше дрона
+            barGroup.position.set(0, 0.7, 0); 
 
-            // 1. Красный/темный фон полоски
             const bgGeo = new THREE.PlaneGeometry(0.8, 0.1);
             const bgMat = new THREE.MeshBasicMaterial({ color: 0x4a0e0e, side: THREE.DoubleSide });
             const bgMesh = new THREE.Mesh(bgGeo, bgMat);
             barGroup.add(bgMesh);
 
-            // 2. Индикатор здоровья
             const fgGeo = new THREE.PlaneGeometry(0.8, 0.1);
             fgGeo.translate(0.4, 0, 0); 
             
@@ -444,7 +460,6 @@
         }
 
         function createUnit(col, row) {
-            // Спавним дрон с союзной текстурой на корпусе
             const mesh = createDroneUnit(normalUnitTex);
             const pos = gridToWorld(col, row);
             mesh.position.set(pos.x, 0.7, pos.z);
@@ -467,12 +482,11 @@
                 attackCooldown: 1.0, 
                 lastAttackTime: 0,
                 healthBar: hpBar,
-                velocity: new THREE.Vector3() // Для расчета наклона по Flow Field
+                velocity: new THREE.Vector3() 
             });
         }
 
         function createEnemy(x, z) {
-            // Спавним дрон с вражеской текстурой на корпусе
             const mesh = createDroneUnit(enemyTex);
             mesh.position.set(x, 0.7, z);
             scene.add(mesh);
@@ -496,14 +510,14 @@
             });
         }
 
-        // Спавним стартовые пачки дронов
+        // Спавн
         createUnit(2, 2); createUnit(2, 3); createUnit(3, 2); createUnit(3, 3); createUnit(4, 2);
         createEnemy(12, 12); createEnemy(14, 12); createEnemy(13, 14);
 
-        // --- ЭФФЕКТЫ ВЫСТРЕЛОВ (ЛАЗЕРЫ ИЗ ГЛАЗ) ---
+        // --- ЭФФЕКТЫ ЛАЗЕРОВ ---
         function fireLaser(fromPos, toPos, colorHex) {
             const points = [
-                new THREE.Vector3(fromPos.x, fromPos.y + 0.15, fromPos.z), // Выстрел ровно из сенсора
+                new THREE.Vector3(fromPos.x, fromPos.y + 0.15, fromPos.z), 
                 new THREE.Vector3(toPos.x, toPos.y + 0.15, toPos.z)
             ];
             const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
@@ -518,7 +532,7 @@
             }, 80);
         }
 
-        // --- 7. ЛОГИКА ВЫДЕЛЕНИЯ И КОМАНД ---
+        // --- 8. УПРАВЛЕНИЕ И КОМАНДЫ ---
         const mouse = new THREE.Vector2(); 
         const startPoint = new THREE.Vector2();
         let isSelecting = false; let isDragging = false;
@@ -571,7 +585,6 @@
                 if (!isDragging && !e.target.closest('#instructions')) {
                     raycaster.setFromCamera(mouse, camera);
 
-                    // Ищем попадание в коллайдеры
                     const intersects = raycaster.intersectObjects(units.map(u => u.mesh), true);
                     if (!e.shiftKey) { 
                         units.forEach(u => { 
@@ -580,7 +593,6 @@
                         }); 
                     }
                     if (intersects.length > 0) {
-                        // Рекурсивно находим родительскую группу дрона
                         let rootGroup = intersects[0].object;
                         while (rootGroup.parent && rootGroup.parent.type !== "Scene") {
                             rootGroup = rootGroup.parent;
@@ -650,7 +662,7 @@
 
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        // --- 8. УПРАВЛЕНИЕ КАМЕРОЙ ---
+        // --- 9. КАМЕРА ---
         function updateCamera(delta) {
             const camSpeed = 25 * delta;
             if (keys['KeyW'] || keys['ArrowUp']) { camera.position.z -= camSpeed; }
@@ -659,22 +671,21 @@
             if (keys['KeyD'] || keys['ArrowRight']) { camera.position.x += camSpeed; }
         }
 
-        // --- 9. ИГРОВОЙ ЦИКЛ И СИМУЛЯЦИЯ ---
+        // --- 10. ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ ---
         const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
-            const delta = clock.getDelta();
-            const currentTime = clock.getElapsedTime();
+            const delta = Math.min(clock.getDelta(), 0.1); // Лимит лагов при смене вкладок
+            const currentTime = clock.elapsedTime; 
 
             updateCamera(delta);
 
-            // --- ОБРАБОТКА ЛОГИКИ СОЮЗНЫХ ДРОНОВ (FSM + FLOW FIELDS) ---
+            // --- FSM СОЮЗНЫХ ДРОНОВ ---
             units.forEach((unit) => {
                 const pos = unit.mesh.position;
                 if (unit.hp <= 0) return;
 
-                // Разворот UI к камере и шкала
                 unit.healthBar.group.quaternion.copy(camera.quaternion);
                 unit.healthBar.fg.scale.x = Math.max(0, unit.hp / unit.maxHp);
 
@@ -688,7 +699,7 @@
 
                 switch (unit.state) {
                     case States.IDLE:
-                        unit.velocity.set(0, 0, 0); // Стоит - нет крена
+                        unit.velocity.set(0, 0, 0); 
                         if (nearestEnemy) {
                             unit.targetEnemy = nearestEnemy;
                             unit.state = States.CHASE;
@@ -737,7 +748,6 @@
                                 const step = Math.min(unit.speed * delta, distance);
                                 pos.addScaledVector(moveDir, step);
                                 
-                                // Передаем вектор скорости для крена
                                 unit.velocity.copy(moveDir).multiplyScalar(unit.speed);
 
                                 const targetRotation = Math.atan2(-moveDir.z, moveDir.x);
@@ -796,13 +806,12 @@
                         break;
                 }
                 
-                // Синхронизируем физический вектор для визуального шейп-наклона
                 if (unit.mesh && unit.mesh.userData) {
                     unit.mesh.userData.velocity.copy(unit.velocity);
                 }
             });
 
-            // --- ОБРАБОТКА ЛОГИКИ ВРАЖЕСКИХ ДРОНОВ ---
+            // --- FSM ВРАЖЕСКИХ ДРОНОВ ---
             enemies.forEach((enemy) => {
                 if (enemy.hp <= 0) return;
                 const pos = enemy.mesh.position;
@@ -847,11 +856,11 @@
                 }
             });
 
-            // --- ОБНОВЛЕНИЕ АНИМАЦИИ ВСЕХ ДРОНОВ ---
+            // Анимации вращения и покачивания
             const allAliveDrones = [...units, ...enemies].map(u => u.mesh).filter(Boolean);
             updateDronesAnimation(allAliveDrones, currentTime);
 
-            // --- УДАЛЕНИЕ ПОГИБШИХ ---
+            // Очистка мертвых тел
             for (let i = units.length - 1; i >= 0; i--) {
                 if (units[i].hp <= 0) { scene.remove(units[i].mesh); units.splice(i, 1); }
             }
@@ -859,7 +868,7 @@
                 if (enemies[i].hp <= 0) { scene.remove(enemies[i].mesh); enemies.splice(i, 1); }
             }
 
-            // --- СТОЛКНОВЕНИЯ ДРОНОВ ДРУГ С ДРУГОМ ---
+            // --- СТОЛКНОВЕНИЯ ДРОНОВ ---
             const allUnits = [...units, ...enemies];
             for (let i = 0; i < allUnits.length; i++) {
                 for (let j = i + 1; j < allUnits.length; j++) {
@@ -868,7 +877,14 @@
                     diff.y = 0;
                     const dist = diff.length(); const minDist = u1.radius + u2.radius;
                     if (dist < minDist) {
-                        const overlap = minDist - dist; const resolveDir = diff.normalize();
+                        const overlap = minDist - dist; 
+                        const resolveDir = diff.clone().normalize();
+                        
+                        // Защита от NaN-взрыва физики при спавне в одной точке
+                        if (dist === 0) {
+                            resolveDir.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+                        }
+                        
                         u1.mesh.position.addScaledVector(resolveDir, -overlap * 0.5);
                         u2.mesh.position.addScaledVector(resolveDir, overlap * 0.5);
                     }
@@ -888,7 +904,11 @@
                                 const diff = new THREE.Vector3(pos.x - wallPos.x, 0, pos.z - wallPos.z);
                                 const dist = diff.length(); const wallRadius = 1.1; 
                                 if (dist < wallRadius + unit.radius) {
-                                    pos.addScaledVector(diff.normalize(), (wallRadius + unit.radius - dist) * 0.8);
+                                    const resolveDir = diff.clone().normalize();
+                                    if (dist === 0) {
+                                        resolveDir.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+                                    }
+                                    pos.addScaledVector(resolveDir, (wallRadius + unit.radius - dist) * 0.8);
                                 }
                             }
                         }
@@ -905,6 +925,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+        // Запуск рендера
         animate();
     </script>
 </body>
