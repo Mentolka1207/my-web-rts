@@ -26,6 +26,13 @@
             z-index: 10;
             border: 1px solid #00ffcc33;
             box-shadow: 0 4px 25px rgba(0,0,0,0.7);
+            box-sizing: border-box;
+        }
+        #instructions-toggle {
+            display: inline-block;
+            padding: 4px 10px;
+            font-size: 12px;
+            margin: 0 0 8px 0;
         }
         button {
             background: #0077ff;
@@ -58,7 +65,10 @@
             box-shadow: 0 4px 25px rgba(0,0,0,0.7);
             font-size: 14px;
             min-width: 160px;
+            max-width: 210px;
+            box-sizing: border-box;
         }
+        #resource-panel button { white-space: normal; width: 100%; }
         #resource-panel .energy-value { color: #00ffcc; font-weight: bold; }
         #produce-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
         #produce-btn:disabled:hover { background: #0077ff; color: white; }
@@ -79,8 +89,8 @@
 
         /* Мобильная адаптация */
         @media (max-width: 720px), (pointer: coarse) {
-            #instructions { font-size: 12px; padding: 10px; max-width: 60vw; line-height: 1.4; }
-            #resource-panel { font-size: 12px; padding: 8px 10px; min-width: 130px; }
+            #instructions { font-size: 12px; padding: 10px; max-width: 54vw; line-height: 1.4; }
+            #resource-panel { font-size: 12px; padding: 8px 10px; min-width: 0; max-width: 38vw; }
             button { padding: 10px 14px; font-size: 13px; }
             #minimap-wrap { transform: scale(0.8); transform-origin: bottom right; }
         }
@@ -91,17 +101,20 @@
 <body>
     <div id="selection-box"></div>
     <div id="instructions">
-        <strong>Управление Swarm RTS:</strong><br>
-        • <strong>Клик ЛКМ</strong> — выделить одного дрона<br>
-        • Зажми <strong>ЛКМ и тяни</strong> — выделить рамкой группу<br>
-        • Клик <strong>ПКМ</strong> — отправить рой в точку (Flow Field)<br>
-        • Клавиша <strong>E</strong> — спавн вражеского патрульного дрона<br>
-        • <strong>W, A, S, D</strong> — движение камеры, <strong>колесо мыши</strong> — зум<br>
-        • <strong>Тач:</strong> тап — выделить/приказ, тяни одним пальцем — рамка, двумя пальцами — панорама/зум<br><br>
-        <strong>Тактическое построение:</strong><br>
-        <button onclick="setFormation('line')">Шеренга</button>
-        <button onclick="setFormation('wedge')">Клин</button>
-        <button id="mobile-spawn-btn" onclick="spawnEnemyNearCenter()">Спавн врага</button>
+        <button id="instructions-toggle" onclick="toggleInstructions()">Скрыть ▲</button>
+        <div id="instructions-content">
+            <strong>Управление Swarm RTS:</strong><br>
+            • <strong>Клик ЛКМ</strong> — выделить одного дрона<br>
+            • Зажми <strong>ЛКМ и тяни</strong> — выделить рамкой группу<br>
+            • Клик <strong>ПКМ</strong> — отправить рой в точку (Flow Field)<br>
+            • Клавиша <strong>E</strong> — спавн вражеского патрульного дрона<br>
+            • <strong>W, A, S, D</strong> — движение камеры, <strong>колесо мыши</strong> — зум<br>
+            • <strong>Тач:</strong> тап — выделить/приказ, тяни одним пальцем — рамка, двумя пальцами — панорама/зум<br><br>
+            <strong>Тактическое построение:</strong><br>
+            <button onclick="setFormation('line')">Шеренга</button>
+            <button onclick="setFormation('wedge')">Клин</button>
+            <button id="mobile-spawn-btn" onclick="spawnEnemyNearCenter()">Спавн врага</button>
+        </div>
     </div>
     <div id="resource-panel">
         <strong>⚡ Энергия:</strong> <span class="energy-value" id="energy-value">100</span><br>
@@ -135,7 +148,7 @@
         });
 
         // --- 1. ГЕНЕРАТОР ПРОЦЕДУРНОЙ МОДЕЛИ ДРОНА ---
-        function createDroneUnit(colorHex, glowColorHex, isAlly) {
+                function createDroneUnit(colorHex, glowColorHex, isAlly) {
             const droneGroup = new THREE.Group();
 
             const bodyMat = new THREE.MeshStandardMaterial({
@@ -268,7 +281,7 @@
         }
 
         // Анимация
-        function updateDronesAnimation(activeDrones, time) {
+                function updateDronesAnimation(activeDrones, time) {
             activeDrones.forEach(drone => {
                 const data = drone.userData;
                 if (!data) return;
@@ -349,9 +362,6 @@
         const CELL_SIZE = 2;
         const grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
 
-        // Карта видимости для тумана войны: 0 — не исследовано, 1 — исследовано (не видно сейчас), 2 — видно сейчас
-        const visibility = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
-
         // Точка базы союзников — сюда производятся новые дроны
         const BASE_COL = 3;
         const BASE_ROW = 3;
@@ -386,6 +396,15 @@
         const SPACING = 1.2; 
 
         function setFormation(type) { currentFormation = type; }
+
+        // Показать/скрыть панель управления (кнопка всегда остаётся видимой)
+        function toggleInstructions() {
+            const content = document.getElementById('instructions-content');
+            const btn = document.getElementById('instructions-toggle');
+            const isHidden = content.style.display === 'none';
+            content.style.display = isHidden ? 'block' : 'none';
+            btn.textContent = isHidden ? 'Скрыть ▲' : 'Управление ▼';
+        }
 
         function getFormationOffsets(numUnits, type) {
             const offsets = [];
@@ -487,7 +506,7 @@
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
 
         // --- КАМЕРА: панорама + зум ---
-        // Камера всегда смотрит вдоль одного и того же фиксированного направления (camDir).
+                // Камера всегда смотрит вдоль одного и того же фиксированного направления (camDir).
         // camPivot — точка на "земле", которую двигают WASD/тач-панорама.
         // camZoomDist — расстояние от pivot до камеры вдоль camDir; регулируется колесом мыши/щипком.
         const camDir = new THREE.Vector3(0, 42, 32).normalize();
@@ -557,62 +576,6 @@
                     scene.add(wall);
                 }
             }
-        }
-
-        // --- ТУМАН ВОЙНЫ ---
-        // Полупрозрачная плоскость поверх карты: рисуется как канвас-текстура размером с сетку
-        // (1 пиксель = 1 клетка), Three.js сам сглаживает её при увеличении на большую плоскость.
-        const fogCanvas = document.createElement('canvas');
-        fogCanvas.width = GRID_SIZE; fogCanvas.height = GRID_SIZE;
-        const fogCtx = fogCanvas.getContext('2d');
-        const fogTexture = new THREE.CanvasTexture(fogCanvas);
-        fogTexture.magFilter = THREE.LinearFilter;
-        fogTexture.minFilter = THREE.LinearFilter;
-        const fogGeo = new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
-        const fogMat = new THREE.MeshBasicMaterial({ map: fogTexture, transparent: true, depthWrite: false });
-        const fogMesh = new THREE.Mesh(fogGeo, fogMat);
-        fogMesh.rotation.x = -Math.PI / 2;
-        fogMesh.position.y = 2.4; // выше стен (1.5) и дронов (~0.75), но ниже камеры
-        scene.add(fogMesh);
-
-        function updateFogOfWar() {
-            // "Видимое сейчас" гаснет до "исследовано", если в этом кадре его никто не видит
-            for (let r = 0; r < GRID_SIZE; r++) {
-                for (let c = 0; c < GRID_SIZE; c++) {
-                    if (visibility[r][c] === 2) visibility[r][c] = 1;
-                }
-            }
-            // Каждый живой союзный дрон открывает клетки в радиусе своего visionRange
-            units.forEach(unit => {
-                if (unit.hp <= 0) return;
-                const centerGrid = worldToGrid(unit.mesh.position.x, unit.mesh.position.z);
-                const radiusCells = Math.ceil(unit.visionRange / CELL_SIZE);
-                for (let dr = -radiusCells; dr <= radiusCells; dr++) {
-                    for (let dc = -radiusCells; dc <= radiusCells; dc++) {
-                        const r = centerGrid.row + dr, c = centerGrid.col + dc;
-                        if (r < 0 || r >= GRID_SIZE || c < 0 || c >= GRID_SIZE) continue;
-                        if (Math.hypot(dr, dc) * CELL_SIZE <= unit.visionRange) visibility[r][c] = 2;
-                    }
-                }
-            });
-
-            // Перерисовываем текстуру тумана: чёрный = не исследовано, серый = помним, прозрачно = видно
-            for (let r = 0; r < GRID_SIZE; r++) {
-                for (let c = 0; c < GRID_SIZE; c++) {
-                    const state = visibility[r][c];
-                    const alpha = state === 0 ? 0.97 : (state === 1 ? 0.55 : 0);
-                    fogCtx.fillStyle = `rgba(2, 4, 12, ${alpha})`;
-                    fogCtx.fillRect(c, r, 1, 1);
-                }
-            }
-            fogTexture.needsUpdate = true;
-
-            // Вражеские дроны рендерятся, только пока находятся в зоне текущей видимости
-            enemies.forEach(enemy => {
-                const eg = worldToGrid(enemy.mesh.position.x, enemy.mesh.position.z);
-                const inBounds = eg.row >= 0 && eg.row < GRID_SIZE && eg.col >= 0 && eg.col < GRID_SIZE;
-                enemy.mesh.visible = inBounds && visibility[eg.row][eg.col] === 2;
-            });
         }
 
         // --- 7. ЮНИТЫ И ВРАГИ (СПАВН) ---
@@ -788,11 +751,11 @@
             minimapCtx.fillStyle = '#05070d';
             minimapCtx.fillRect(0, 0, MINIMAP_PX, MINIMAP_PX);
 
-            // Стены — только там, где карта уже исследована
-            minimapCtx.fillStyle = '#2b395c';
+            // Стены — все, всегда
+                    minimapCtx.fillStyle = '#2b395c';
             for (let r = 0; r < GRID_SIZE; r++) {
                 for (let c = 0; c < GRID_SIZE; c++) {
-                    if (grid[r][c] === 1 && visibility[r][c] > 0) {
+                    if (grid[r][c] === 1) {
                         const wp = gridToWorld(c, r);
                         const { mx, my } = worldToMinimap(wp.x, wp.z);
                         minimapCtx.fillRect(mx - 1.5, my - 1.5, 3, 3);
@@ -808,10 +771,9 @@
                 minimapCtx.beginPath(); minimapCtx.arc(mx, my, 2.4, 0, Math.PI * 2); minimapCtx.fill();
             });
 
-            // Враги — только если они сейчас в зоне видимости (тот же туман войны, что и на сцене)
+            // Враги — тоже всегда видны на миникарте
             minimapCtx.fillStyle = '#ff3333';
             enemies.forEach(e => {
-                if (!e.mesh.visible) return;
                 const { mx, my } = worldToMinimap(e.mesh.position.x, e.mesh.position.z);
                 minimapCtx.beginPath(); minimapCtx.arc(mx, my, 2.4, 0, Math.PI * 2); minimapCtx.fill();
             });
@@ -937,7 +899,7 @@
         }
 
         // --- МЫШЬ (ДЕСКТОП) ---
-        window.addEventListener('mousemove', (e) => {
+                window.addEventListener('mousemove', (e) => {
             updateMouseNDC(e.clientX, e.clientY);
             if (!isSelecting) return;
             const dragDistance = Math.hypot(e.clientX - startPoint.x, e.clientY - startPoint.y);
@@ -1137,7 +1099,6 @@
                 updateResourceUI();
             }
 
-
             // --- FSM СОЮЗНЫХ ДРОНОВ ---
             units.forEach((unit) => {
                 const pos = unit.mesh.position;
@@ -1269,7 +1230,7 @@
             });
 
             // --- FSM ВРАЖЕСКИХ ПАТРУЛЬНЫХ ДРОНОВ ---
-            enemies.forEach((enemy) => {
+                   enemies.forEach((enemy) => {
                 if (enemy.hp <= 0) return;
                 const pos = enemy.mesh.position;
 
@@ -1375,7 +1336,7 @@
             }
 
             // КОЛЛИЗИИ СО СТЕНАМИ
-            allUnits.forEach(unit => {
+                    allUnits.forEach(unit => {
                 const pos = unit.mesh.position;
                 const gridPos = worldToGrid(pos.x, pos.z);
                 for (let dx = -1; dx <= 1; dx++) {
@@ -1399,7 +1360,6 @@
                 }
             });
 
-            updateFogOfWar();
             updateMinimap();
 
             renderer.render(scene, camera);
