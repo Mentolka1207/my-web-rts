@@ -87,20 +87,108 @@
         }
         #minimap { display: block; cursor: pointer; }
 
+        /* Панель волн */
+        #wave-panel {
+            position: absolute;
+            top: 10px; left: 50%;
+            transform: translateX(-50%);
+            color: white; background: rgba(11, 13, 25, 0.9);
+            padding: 8px 16px; border-radius: 8px;
+            z-index: 10;
+            border: 1px solid #00ffcc33;
+            box-shadow: 0 4px 25px rgba(0,0,0,0.7);
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        /* Экран победы/поражения */
+        #game-over-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 100;
+            background: rgba(5, 6, 12, 0.88);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+        }
+        #game-over-title {
+            font-size: 42px;
+            font-weight: bold;
+            text-shadow: 0 0 20px currentColor;
+        }
+
+        /* Главное меню */
+        #main-menu-overlay {
+            display: flex;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 110;
+            background: rgba(5, 6, 12, 0.92);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            text-align: center;
+            padding: 20px;
+        }
+        #main-menu-title {
+            font-size: 38px;
+            font-weight: bold;
+            color: #00ffcc;
+            text-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+        }
+        #main-menu-subtitle {
+            font-size: 15px;
+            color: #9db4d8;
+            margin-top: -12px;
+        }
+        #main-menu-buttons {
+            display: flex;
+            gap: 16px;
+            margin-top: 10px;
+        }
+        #main-menu-buttons button { font-size: 16px; padding: 12px 26px; }
+        #main-menu-github {
+            color: #00ffcc;
+            text-decoration: none;
+            font-size: 13px;
+            border: 1px solid #00ffcc55;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: background 0.2s;
+            margin-top: 8px;
+        }
+        #main-menu-github:hover { background: rgba(0, 255, 204, 0.1); }
+
         /* Мобильная адаптация */
         @media (max-width: 720px), (pointer: coarse) {
             #instructions { font-size: 12px; padding: 10px; max-width: 54vw; line-height: 1.4; }
             #resource-panel { font-size: 12px; padding: 8px 10px; min-width: 0; max-width: 38vw; }
             button { padding: 10px 14px; font-size: 13px; }
             #minimap-wrap { transform: scale(0.8); transform-origin: bottom right; }
+            #wave-panel { font-size: 11px; padding: 6px 12px; }
+            #game-over-title { font-size: 30px; }
+            #main-menu-title { font-size: 26px; }
+            #main-menu-buttons { flex-direction: column; width: 100%; max-width: 260px; }
         }
     </style>
     <!-- Подключаем стабильный релиз Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+    <div id="main-menu-overlay">
+        <div id="main-menu-title">🛰️ Minimal Web RTS</div>
+        <div id="main-menu-subtitle">Neo-Drone Swarm &amp; Patrolling AI</div>
+        <div id="main-menu-buttons">
+            <button id="play-btn" onclick="startGame()">▶ Играть</button>
+            <button id="exit-btn" onclick="exitGame()">✕ Выйти</button>
+        </div>
+        <a id="main-menu-github" href="https://github.com/Mentolka1207/my-web-rts" target="_blank" rel="noopener noreferrer">📦 Репозиторий на GitHub</a>
+    </div>
     <div id="selection-box"></div>
-    <div id="instructions">
+    <div id="instructions" style="display:none;">
         <button id="instructions-toggle" onclick="toggleInstructions()">Скрыть ▲</button>
         <div id="instructions-content">
             <strong>Управление Swarm RTS:</strong><br>
@@ -116,14 +204,22 @@
             <button id="mobile-spawn-btn" onclick="spawnEnemyNearCenter()">Спавн врага</button>
         </div>
     </div>
-    <div id="resource-panel">
+    <div id="resource-panel" style="display:none;">
         <strong>⚡ Энергия:</strong> <span class="energy-value" id="energy-value">100</span><br>
-        <button id="produce-btn" onclick="produceUnit()">Построить дрона (40⚡)</button>
+        <button id="produce-btn" onclick="produceUnit()">Построить дрона</button>
     </div>
-    <div id="minimap-wrap">
+    <div id="wave-panel" style="display:none;">
+        🌊 Волна <span id="wave-number">0</span> — след. через <span id="wave-timer">60</span>с
+    </div>
+    <div id="minimap-wrap" style="display:none;">
         <canvas id="minimap" width="170" height="170"></canvas>
     </div>
+    <div id="game-over-overlay">
+        <div id="game-over-title">ПОБЕДА!</div>
+        <button onclick="location.reload()">Начать заново</button>
+    </div>
     <div id="canvas-container"></div>
+
 
     <script>
         // --- 0. ВСТРОЕННЫЙ ДЕБАГГЕР ОШИБОК ---
@@ -148,7 +244,7 @@
         });
 
         // --- 1. ГЕНЕРАТОР ПРОЦЕДУРНОЙ МОДЕЛИ ДРОНА ---
-                function createDroneUnit(colorHex, glowColorHex, isAlly) {
+        function createDroneUnit(colorHex, glowColorHex, isAlly) {
             const droneGroup = new THREE.Group();
 
             const bodyMat = new THREE.MeshStandardMaterial({
@@ -281,7 +377,7 @@
         }
 
         // Анимация
-                function updateDronesAnimation(activeDrones, time) {
+        function updateDronesAnimation(activeDrones, time) {
             activeDrones.forEach(drone => {
                 const data = drone.userData;
                 if (!data) return;
@@ -365,6 +461,13 @@
         // Точка базы союзников — сюда производятся новые дроны
         const BASE_COL = 3;
         const BASE_ROW = 3;
+
+        // Штабы: отдельные точки от точки производства, чтобы здание не совпало
+        // со стартовым юнитом createUnit(3,3). Враг — в противоположном углу карты.
+        const HQ_COL = 1;
+        const HQ_ROW = 1;
+        const ENEMY_HQ_COL = GRID_SIZE - 2; // 20
+        const ENEMY_HQ_ROW = GRID_SIZE - 2; // 20
         
         for (let i = 0; i < GRID_SIZE; i++) {
             grid[0][i] = 1; grid[GRID_SIZE - 1][i] = 1; 
@@ -378,6 +481,11 @@
                 grid[rz][rx] = 1; 
             }
         }
+
+        // Клетки штабов блокируются как непроходимая местность — юниты и Flow Field
+        // будут обходить их так же, как обычные стены (само здание рисуется отдельно, не обычным кубом-стеной)
+        grid[HQ_ROW][HQ_COL] = 1;
+        grid[ENEMY_HQ_ROW][ENEMY_HQ_COL] = 1;
 
         function worldToGrid(x, z) {
             const col = Math.floor((x + (GRID_SIZE * CELL_SIZE) / 2) / CELL_SIZE);
@@ -494,6 +602,11 @@
 
         const flowFieldGen = new FlowFieldGenerator(GRID_SIZE, GRID_SIZE, CELL_SIZE);
 
+        // Отдельное поле потоков для вражеских волн — ведёт их к штабу игрока.
+        // Не связано с полем игрока (flowFieldGen), чтобы приказы игрока и марш врагов не конфликтовали.
+        const enemyFlowFieldGen = new FlowFieldGenerator(GRID_SIZE, GRID_SIZE, CELL_SIZE);
+        enemyFlowFieldGen.updateTarget(HQ_COL, HQ_ROW);
+
         // --- 5. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ THREE.JS ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
@@ -506,7 +619,7 @@
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
 
         // --- КАМЕРА: панорама + зум ---
-                // Камера всегда смотрит вдоль одного и того же фиксированного направления (camDir).
+        // Камера всегда смотрит вдоль одного и того же фиксированного направления (camDir).
         // camPivot — точка на "земле", которую двигают WASD/тач-панорама.
         // camZoomDist — расстояние от pivot до камеры вдоль camDir; регулируется колесом мыши/щипком.
         const camDir = new THREE.Vector3(0, 42, 32).normalize();
@@ -567,7 +680,8 @@
         });
         for (let row = 0; row < GRID_SIZE; row++) {
             for (let col = 0; col < GRID_SIZE; col++) {
-                if (grid[row][col] === 1) {
+                const isHQCell = (row === HQ_ROW && col === HQ_COL) || (row === ENEMY_HQ_ROW && col === ENEMY_HQ_COL);
+                if (grid[row][col] === 1 && !isHQCell) {
                     const wall = new THREE.Mesh(wallGeo, wallMat);
                     const pos = gridToWorld(col, row);
                     wall.position.set(pos.x, 0.75, pos.z);
@@ -584,22 +698,22 @@
 
         const States = { IDLE: 'IDLE', MOVE: 'MOVE', CHASE: 'CHASE', ATTACK: 'ATTACK' };
 
-        function attachHealthBar(parentMesh, isAlly) {
+        function attachHealthBar(parentMesh, isAlly, yOffset = 0.7, width = 0.8) {
             const barGroup = new THREE.Group();
-            barGroup.position.set(0, 0.7, 0); 
+            barGroup.position.set(0, yOffset, 0); 
 
-            const bgGeo = new THREE.PlaneGeometry(0.8, 0.1);
+            const bgGeo = new THREE.PlaneGeometry(width, 0.1);
             const bgMat = new THREE.MeshBasicMaterial({ color: 0x4a0e0e, side: THREE.DoubleSide });
             const bgMesh = new THREE.Mesh(bgGeo, bgMat);
             barGroup.add(bgMesh);
 
-            const fgGeo = new THREE.PlaneGeometry(0.8, 0.1);
-            fgGeo.translate(0.4, 0, 0); 
+            const fgGeo = new THREE.PlaneGeometry(width, 0.1);
+            fgGeo.translate(width / 2, 0, 0); 
             
             const fgColor = isAlly ? 0x00ffcc : 0xff3333;
             const fgMat = new THREE.MeshBasicMaterial({ color: fgColor, side: THREE.DoubleSide });
             const fgMesh = new THREE.Mesh(fgGeo, fgMat);
-            fgMesh.position.x = -0.4; 
+            fgMesh.position.x = -width / 2; 
             barGroup.add(fgMesh);
 
             parentMesh.add(barGroup);
@@ -637,7 +751,7 @@
             });
         }
 
-        function createEnemy(x, z) {
+        function createEnemy(x, z, isWaveUnit = false) {
             const mesh = createDroneUnit('#ff3333', 0xff3333, false);
             mesh.position.set(x, 0.75, z);
             scene.add(mesh);
@@ -659,17 +773,71 @@
                 healthBar: hpBar,
                 velocity: new THREE.Vector3(),
                 roamTarget: null,
-                roamCooldown: Math.random() * 2 
+                roamCooldown: Math.random() * 2,
+                isWaveUnit: isWaveUnit
             });
+        }
+
+        // --- ШТАБЫ (HQ): уничтожение штаба противника = победа, потеря своего = поражение ---
+        function createHQ(col, row, isPlayer) {
+            const group = new THREE.Group();
+            const factionColor = isPlayer ? 0x0077ff : 0xff3333;
+            const glowColor = isPlayer ? 0x00ffcc : 0xff6644;
+
+            const baseMat = new THREE.MeshStandardMaterial({
+                color: 0x1a1d24, metalness: 0.7, roughness: 0.25,
+                emissive: factionColor, emissiveIntensity: 0.15
+            });
+            const accentMat = new THREE.MeshStandardMaterial({
+                color: factionColor, metalness: 0.6, roughness: 0.3,
+                emissive: glowColor, emissiveIntensity: 0.4
+            });
+            const beaconMat = new THREE.MeshBasicMaterial({ color: glowColor });
+
+            const base = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.6, 3.2), baseMat);
+            base.position.y = 0.8;
+            base.castShadow = true; base.receiveShadow = true;
+            group.add(base);
+
+            const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 2.4, 8), accentMat);
+            tower.position.y = 1.6 + 1.2;
+            tower.castShadow = true;
+            group.add(tower);
+
+            const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 12), beaconMat);
+            beacon.position.y = 1.6 + 2.4 + 0.4;
+            group.add(beacon);
+
+            const light = new THREE.PointLight(glowColor, 3.0, 9.0);
+            light.position.y = 3.2;
+            group.add(light);
+
+            const pos = gridToWorld(col, row);
+            group.position.set(pos.x, 0, pos.z);
+            scene.add(group);
+
+            const hpBar = attachHealthBar(group, isPlayer, 5.4, 2.4);
+
+            return {
+                mesh: group,
+                hp: 500,
+                maxHp: 500,
+                radius: 1.8,
+                healthBar: hpBar
+            };
         }
 
         createUnit(2, 2); createUnit(2, 3); createUnit(3, 2); createUnit(3, 3); createUnit(4, 2);
         createEnemy(12, 12); createEnemy(14, 12); createEnemy(13, 14);
 
+        const playerHQ = createHQ(HQ_COL, HQ_ROW, true);
+        const enemyHQ = createHQ(ENEMY_HQ_COL, ENEMY_HQ_ROW, false);
+
         // --- РЕСУРСЫ И ПРОИЗВОДСТВО ЮНИТОВ ---
         let energy = 100;
-        const ENERGY_INCOME_PER_SEC = 3;
-        const UNIT_COST = 40;
+        const ENERGY_INCOME_PER_SEC = 5;
+        const UNIT_COST = 70;
+        const ENEMY_KILL_REWARD = 10;
         let energyAccumulator = 0;
         const energyValueEl = document.getElementById('energy-value');
         const produceBtnEl = document.getElementById('produce-btn');
@@ -677,6 +845,7 @@
         function updateResourceUI() {
             energyValueEl.textContent = Math.floor(energy);
             produceBtnEl.disabled = energy < UNIT_COST;
+            produceBtnEl.textContent = `Построить дрона (${UNIT_COST}⚡)`;
         }
 
         // Расходящийся поиск по кольцам вокруг (col,row): ближайшая свободная от стен и юнитов клетка
@@ -716,7 +885,120 @@
 
         updateResourceUI();
 
+        // --- ВОЛНЫ ВРАГОВ (SURVIVAL MODE) ---
+        const WAVE_INTERVAL = 60; // секунд между волнами
+        let waveNumber = 0;
+        let waveTimer = WAVE_INTERVAL;
+        const waveNumberEl = document.getElementById('wave-number');
+        const waveTimerEl = document.getElementById('wave-timer');
+
+        function spawnWave() {
+            waveNumber++;
+            const count = 3 + waveNumber; // с каждой волной чуть больше врагов
+            for (let i = 0; i < count; i++) {
+                const spot = findFreeCellNear(ENEMY_HQ_COL, ENEMY_HQ_ROW);
+                const worldPos = gridToWorld(spot.col, spot.row);
+                createEnemy(worldPos.x, worldPos.z, true); // isWaveUnit = true — марш на штаб игрока
+            }
+        }
+
+        function updateWaveUI() {
+            waveNumberEl.textContent = waveNumber;
+            waveTimerEl.textContent = Math.max(0, Math.ceil(waveTimer));
+        }
+        updateWaveUI();
+
+        // --- ГЛАВНОЕ МЕНЮ ---
+        let gameStarted = false;
+        const HUD_PANEL_IDS = ['instructions', 'resource-panel', 'wave-panel', 'minimap-wrap'];
+
+        function startGame() {
+            document.getElementById('main-menu-overlay').style.display = 'none';
+            HUD_PANEL_IDS.forEach(id => { document.getElementById(id).style.display = ''; });
+            gameStarted = true;
+        }
+
+        function exitGame() {
+            // window.close() браузеры разрешают только для вкладок, открытых скриптом (window.open),
+            // а не для обычных вкладок, набранных/открытых пользователем — поэтому здесь честно
+            // предупреждаем, если попытка не сработала, вместо того чтобы делать вид, что кнопка всесильна.
+            window.close();
+            setTimeout(() => {
+                const btn = document.getElementById('exit-btn');
+                if (btn) btn.textContent = 'Закройте вкладку вручную — браузер блокирует автозакрытие';
+            }, 300);
+        }
+
+        // --- ПОБЕДА / ПОРАЖЕНИЕ ---
+        let gameOver = false;
+        const gameOverOverlayEl = document.getElementById('game-over-overlay');
+        const gameOverTitleEl = document.getElementById('game-over-title');
+
+        function triggerGameOver(playerWon) {
+            if (gameOver) return;
+            gameOver = true;
+
+            const losingHQ = playerWon ? enemyHQ : playerHQ;
+            spawnExplosion(losingHQ.mesh.position, 24);
+            spawnScorch(losingHQ.mesh.position);
+            scene.remove(losingHQ.mesh);
+
+            gameOverTitleEl.textContent = playerWon ? '🏆 ПОБЕДА!' : '💥 ПОРАЖЕНИЕ';
+            gameOverTitleEl.style.color = playerWon ? '#00ffcc' : '#ff3333';
+            gameOverOverlayEl.style.display = 'flex';
+        }
+
+        function checkGameOverConditions() {
+            if (gameOver) return;
+            if (enemyHQ.hp <= 0) { triggerGameOver(true); }
+            else if (playerHQ.hp <= 0) { triggerGameOver(false); }
+        }
+
         // --- ЭФФЕКТЫ ЛАЗЕРОВ ---
+
+        // Процедурная текстура вспышки (звёздочка), один раз при старте
+        const flashCanvas = document.createElement('canvas');
+        flashCanvas.width = 32; flashCanvas.height = 32;
+        const flashCtx = flashCanvas.getContext('2d');
+        const flashGrad = flashCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
+        flashGrad.addColorStop(0, 'rgba(255,255,255,1)');
+        flashGrad.addColorStop(0.4, 'rgba(255,220,120,0.9)');
+        flashGrad.addColorStop(1, 'rgba(255,150,0,0)');
+        flashCtx.fillStyle = flashGrad;
+        flashCtx.fillRect(0, 0, 32, 32);
+        const flashTexture = new THREE.CanvasTexture(flashCanvas);
+        flashTexture.generateMipmaps = false;
+        flashTexture.minFilter = THREE.LinearFilter;
+
+        // Вспышка в точке попадания лазера — маленькая яркая звёздочка, растёт и гаснет за ~150мс.
+        // Sprite вместо PointLight: волны могут стрелять десятками лазеров одновременно,
+        // и в этом случае россыпь настоящих динамических источников света была бы слишком дорогой.
+        function spawnHitFlash(position, colorHex) {
+            const mat = new THREE.SpriteMaterial({
+                map: flashTexture, color: colorHex, transparent: true,
+                depthWrite: false, blending: THREE.AdditiveBlending
+            });
+            const sprite = new THREE.Sprite(mat);
+            sprite.position.set(position.x, position.y + 0.15, position.z);
+            sprite.scale.set(0.9, 0.9, 0.9);
+            scene.add(sprite);
+
+            const start = performance.now();
+            const DURATION = 150;
+            (function tick() {
+                const t = (performance.now() - start) / DURATION;
+                if (t >= 1) {
+                    scene.remove(sprite);
+                    mat.dispose();
+                    return;
+                }
+                const s = 0.9 * (1 + t * 0.6);
+                sprite.scale.set(s, s, s);
+                mat.opacity = 1 - t;
+                requestAnimationFrame(tick);
+            })();
+        }
+
         function fireLaser(fromPos, toPos, colorHex) {
             const points = [
                 new THREE.Vector3(fromPos.x, fromPos.y + 0.15, fromPos.z), 
@@ -727,11 +1009,95 @@
             const laser = new THREE.Line(lineGeo, lineMat);
             scene.add(laser);
 
+            spawnHitFlash(toPos, colorHex);
+
             setTimeout(() => {
                 scene.remove(laser);
                 lineGeo.dispose();
                 lineMat.dispose();
             }, 80);
+        }
+
+        // --- ВЗРЫВЫ (ЧАСТИЦЫ) ---
+        // При гибели дрона/штаба разлетается кучка мелких горящих кубиков вместо мгновенного исчезновения.
+        const explosionParticles = [];
+        const EXPLOSION_PARTICLE_LIFETIME = 0.5; // сек
+        const EXPLOSION_GRAVITY = 9.0;
+
+        function spawnExplosion(position, count = 10) {
+            for (let i = 0; i < count; i++) {
+                const size = 0.08 + Math.random() * 0.09;
+                const geo = new THREE.BoxGeometry(size, size, size);
+                const hue = 0.05 + Math.random() * 0.05; // оранжево-жёлтый диапазон
+                const color = new THREE.Color().setHSL(hue, 1.0, 0.55 + Math.random() * 0.2);
+                const mat = new THREE.MeshBasicMaterial({ color });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(position.x, position.y, position.z);
+
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2.0 + Math.random() * 3.5;
+                const velocity = new THREE.Vector3(
+                    Math.cos(angle) * speed,
+                    3.0 + Math.random() * 3.0,
+                    Math.sin(angle) * speed
+                );
+
+                scene.add(mesh);
+                explosionParticles.push({ mesh, velocity, age: 0 });
+            }
+        }
+
+        function updateExplosions(delta) {
+            for (let i = explosionParticles.length - 1; i >= 0; i--) {
+                const p = explosionParticles[i];
+                p.age += delta;
+                p.velocity.y -= EXPLOSION_GRAVITY * delta;
+                p.mesh.position.addScaledVector(p.velocity, delta);
+
+                const shrink = (delta / EXPLOSION_PARTICLE_LIFETIME);
+                p.mesh.scale.subScalar(shrink);
+
+                if (p.age >= EXPLOSION_PARTICLE_LIFETIME || p.mesh.scale.x <= 0.02) {
+                    scene.remove(p.mesh);
+                    p.mesh.geometry.dispose();
+                    p.mesh.material.dispose();
+                    explosionParticles.splice(i, 1);
+                }
+            }
+        }
+
+        // --- ОПАЛЁННЫЕ СЛЕДЫ НА ЗЕМЛЕ (SCORCHES) ---
+        // Плоский квад (PlaneGeometry) с процедурной радиальной текстурой — читается как круглое тёмное пятно.
+        const scorchCanvas = document.createElement('canvas');
+        scorchCanvas.width = 64; scorchCanvas.height = 64;
+        const scorchCtx = scorchCanvas.getContext('2d');
+        const scorchGrad = scorchCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        scorchGrad.addColorStop(0, 'rgba(10,8,6,0.75)');
+        scorchGrad.addColorStop(0.7, 'rgba(10,8,6,0.4)');
+        scorchGrad.addColorStop(1, 'rgba(10,8,6,0)');
+        scorchCtx.fillStyle = scorchGrad;
+        scorchCtx.fillRect(0, 0, 64, 64);
+        const scorchTexture = new THREE.CanvasTexture(scorchCanvas);
+        scorchTexture.generateMipmaps = false;
+        scorchTexture.minFilter = THREE.LinearFilter;
+
+        const scorchGeo = new THREE.PlaneGeometry(1.6, 1.6);
+        const scorchMat = new THREE.MeshBasicMaterial({ map: scorchTexture, transparent: true, depthWrite: false });
+        const scorches = [];
+        const MAX_SCORCHES = 60; // ограничение, чтобы длинная игра не копила меши бесконечно
+
+        function spawnScorch(position) {
+            const decal = new THREE.Mesh(scorchGeo, scorchMat);
+            decal.position.set(position.x, 0.03, position.z);
+            decal.rotation.x = -Math.PI / 2; // положить плашмя, как землю
+            decal.rotateZ(Math.random() * Math.PI * 2); // случайный поворот для разнообразия (безопасно: rotateZ работает в уже наклонённой локальной системе)
+            scene.add(decal);
+            scorches.push(decal);
+
+            if (scorches.length > MAX_SCORCHES) {
+                const old = scorches.shift();
+                scene.remove(old); // геометрия/материал общие для всех декалей — не освобождаем их
+            }
         }
 
         // --- МИНИКАРТА ---
@@ -751,17 +1117,28 @@
             minimapCtx.fillStyle = '#05070d';
             minimapCtx.fillRect(0, 0, MINIMAP_PX, MINIMAP_PX);
 
-            // Стены — все, всегда
-                    minimapCtx.fillStyle = '#2b395c';
+            // Стены — все, кроме клеток штабов (у них свой маркер ниже)
+            minimapCtx.fillStyle = '#2b395c';
             for (let r = 0; r < GRID_SIZE; r++) {
                 for (let c = 0; c < GRID_SIZE; c++) {
-                    if (grid[r][c] === 1) {
+                    const isHQCell = (r === HQ_ROW && c === HQ_COL) || (r === ENEMY_HQ_ROW && c === ENEMY_HQ_COL);
+                    if (grid[r][c] === 1 && !isHQCell) {
                         const wp = gridToWorld(c, r);
                         const { mx, my } = worldToMinimap(wp.x, wp.z);
                         minimapCtx.fillRect(mx - 1.5, my - 1.5, 3, 3);
                     }
                 }
             }
+
+            // Штабы — крупные квадраты в цвете фракции, видны, даже если уже уничтожены (тогда серым)
+            const hqMarkerSize = 7;
+            const playerHQPos = worldToMinimap(playerHQ.mesh.position.x, playerHQ.mesh.position.z);
+            minimapCtx.fillStyle = playerHQ.hp > 0 ? '#00ffcc' : '#555555';
+            minimapCtx.fillRect(playerHQPos.mx - hqMarkerSize / 2, playerHQPos.my - hqMarkerSize / 2, hqMarkerSize, hqMarkerSize);
+
+            const enemyHQPos = worldToMinimap(enemyHQ.mesh.position.x, enemyHQ.mesh.position.z);
+            minimapCtx.fillStyle = enemyHQ.hp > 0 ? '#ff3333' : '#555555';
+            minimapCtx.fillRect(enemyHQPos.mx - hqMarkerSize / 2, enemyHQPos.my - hqMarkerSize / 2, hqMarkerSize, hqMarkerSize);
 
             // Союзники — всегда видны на миникарте
             minimapCtx.fillStyle = '#00ffcc';
@@ -899,7 +1276,7 @@
         }
 
         // --- МЫШЬ (ДЕСКТОП) ---
-                window.addEventListener('mousemove', (e) => {
+        window.addEventListener('mousemove', (e) => {
             updateMouseNDC(e.clientX, e.clientY);
             if (!isSelecting) return;
             const dragDistance = Math.hypot(e.clientX - startPoint.x, e.clientY - startPoint.y);
@@ -1091,13 +1468,32 @@
 
             updateCamera(delta);
 
-            // Пассивный доход энергии, тикает раз в секунду
-            energyAccumulator += delta;
-            if (energyAccumulator >= 1) {
-                energyAccumulator -= 1;
-                energy += ENERGY_INCOME_PER_SEC;
-                updateResourceUI();
-            }
+            if (gameStarted && !gameOver) {
+                // Пассивный доход энергии, тикает раз в секунду
+                energyAccumulator += delta;
+                if (energyAccumulator >= 1) {
+                    energyAccumulator -= 1;
+                    energy += ENERGY_INCOME_PER_SEC;
+                    updateResourceUI();
+                }
+
+                // Таймер волн — каждые WAVE_INTERVAL секунд новая волна с вражеского штаба
+                waveTimer -= delta;
+                if (waveTimer <= 0) {
+                    waveTimer += WAVE_INTERVAL;
+                    spawnWave();
+                }
+                updateWaveUI();
+
+                // Полоски здоровья штабов — разворот к камере и заполнение по HP
+                if (playerHQ.hp > 0) {
+                    playerHQ.healthBar.group.quaternion.copy(camera.quaternion);
+                    playerHQ.healthBar.fg.scale.x = Math.max(0, playerHQ.hp / playerHQ.maxHp);
+                }
+                if (enemyHQ.hp > 0) {
+                    enemyHQ.healthBar.group.quaternion.copy(camera.quaternion);
+                    enemyHQ.healthBar.fg.scale.x = Math.max(0, enemyHQ.hp / enemyHQ.maxHp);
+                }
 
             // --- FSM СОЮЗНЫХ ДРОНОВ ---
             units.forEach((unit) => {
@@ -1114,6 +1510,11 @@
                     const d = pos.distanceTo(enemy.mesh.position);
                     if (d < minDist) { minDist = d; nearestEnemy = enemy; }
                 });
+                // Вражеский штаб — тоже действительная цель, если рядом нет дрона-противника ближе
+                if (enemyHQ.hp > 0) {
+                    const dHQ = pos.distanceTo(enemyHQ.mesh.position);
+                    if (dHQ < minDist) { minDist = dHQ; nearestEnemy = enemyHQ; }
+                }
 
                 switch (unit.state) {
                     case States.IDLE:
@@ -1230,7 +1631,7 @@
             });
 
             // --- FSM ВРАЖЕСКИХ ПАТРУЛЬНЫХ ДРОНОВ ---
-                   enemies.forEach((enemy) => {
+            enemies.forEach((enemy) => {
                 if (enemy.hp <= 0) return;
                 const pos = enemy.mesh.position;
 
@@ -1265,6 +1666,39 @@
                         pos.addScaledVector(walkDir, enemy.speed * delta);
                         enemy.velocity.copy(walkDir).multiplyScalar(enemy.speed);
                         enemy.mesh.rotation.y = Math.atan2(-walkDir.z, walkDir.x);
+                    }
+                } else if (enemy.isWaveUnit) {
+                    // Штурмовой юнит волны: нет цели рядом — марш на штаб игрока по своему Flow Field
+                    enemy.roamTarget = null;
+                    const hqPos = playerHQ.mesh.position;
+                    const distToHQ = pos.distanceTo(hqPos);
+                    const engageRange = enemy.attackRange + playerHQ.radius;
+
+                    if (distToHQ <= engageRange) {
+                        enemy.velocity.set(0, 0, 0);
+                        const lookDir = new THREE.Vector3().subVectors(hqPos, pos).normalize();
+                        enemy.mesh.rotation.y = Math.atan2(-lookDir.z, lookDir.x);
+
+                        if (currentTime - enemy.lastAttackTime >= enemy.attackCooldown) {
+                            enemy.lastAttackTime = currentTime;
+                            playerHQ.hp -= 12;
+                            fireLaser(pos, hqPos, 0xff3333);
+                        }
+                    } else {
+                        const gridPos = worldToGrid(pos.x, pos.z);
+                        const moveDir = new THREE.Vector3().subVectors(hqPos, pos);
+                        moveDir.y = 0; moveDir.normalize();
+
+                        if (gridPos.col >= 0 && gridPos.col < GRID_SIZE && gridPos.row >= 0 && gridPos.row < GRID_SIZE) {
+                            const flowVector = enemyFlowFieldGen.flowField[gridPos.row][gridPos.col];
+                            if (flowVector.lengthSq() > 0) {
+                                moveDir.set(flowVector.x, 0, flowVector.y);
+                            }
+                        }
+
+                        pos.addScaledVector(moveDir, enemy.speed * delta);
+                        enemy.velocity.copy(moveDir).multiplyScalar(enemy.speed);
+                        enemy.mesh.rotation.y = Math.atan2(-moveDir.z, moveDir.x);
                     }
                 } else {
                     if (enemy.state === States.IDLE) {
@@ -1307,11 +1741,25 @@
             updateDronesAnimation(allAliveDrones, currentTime);
 
             for (let i = units.length - 1; i >= 0; i--) {
-                if (units[i].hp <= 0) { scene.remove(units[i].mesh); units.splice(i, 1); }
+                if (units[i].hp <= 0) {
+                    spawnExplosion(units[i].mesh.position);
+                    spawnScorch(units[i].mesh.position);
+                    scene.remove(units[i].mesh);
+                    units.splice(i, 1);
+                }
             }
             for (let i = enemies.length - 1; i >= 0; i--) {
-                if (enemies[i].hp <= 0) { scene.remove(enemies[i].mesh); enemies.splice(i, 1); }
+                if (enemies[i].hp <= 0) {
+                    spawnExplosion(enemies[i].mesh.position);
+                    spawnScorch(enemies[i].mesh.position);
+                    scene.remove(enemies[i].mesh);
+                    enemies.splice(i, 1);
+                    energy += ENEMY_KILL_REWARD;
+                    updateResourceUI();
+                }
             }
+
+            checkGameOverConditions();
 
             // СТОЛКНОВЕНИЯ ДРОНОВ
             const allUnits = [...units, ...enemies];
@@ -1336,7 +1784,7 @@
             }
 
             // КОЛЛИЗИИ СО СТЕНАМИ
-                    allUnits.forEach(unit => {
+            allUnits.forEach(unit => {
                 const pos = unit.mesh.position;
                 const gridPos = worldToGrid(pos.x, pos.z);
                 for (let dx = -1; dx <= 1; dx++) {
@@ -1344,9 +1792,10 @@
                         const nc = gridPos.col + dx; const nr = gridPos.row + dy;
                         if (nc >= 0 && nc < GRID_SIZE && nr >= 0 && nr < GRID_SIZE) {
                             if (grid[nr][nc] === 1) {
+                                const isHQCell = (nr === HQ_ROW && nc === HQ_COL) || (nr === ENEMY_HQ_ROW && nc === ENEMY_HQ_COL);
                                 const wallPos = gridToWorld(nc, nr);
                                 const diff = new THREE.Vector3(pos.x - wallPos.x, 0, pos.z - wallPos.z);
-                                const dist = diff.length(); const wallRadius = 1.1; 
+                                const dist = diff.length(); const wallRadius = isHQCell ? 1.8 : 1.1; 
                                 if (dist < wallRadius + unit.radius) {
                                     const resolveDir = diff.clone().normalize();
                                     if (dist === 0) {
@@ -1359,7 +1808,9 @@
                     }
                 }
             });
+            } // конец блока if (!gameOver)
 
+            updateExplosions(delta);
             updateMinimap();
 
             renderer.render(scene, camera);
