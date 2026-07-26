@@ -70,13 +70,13 @@
             box-shadow: 0 4px 25px rgba(0,0,0,0.7);
             font-size: 14px;
             min-width: 160px;
-            max-width: 210px;
+            max-width: 230px;
             box-sizing: border-box;
         }
         #resource-panel button { white-space: normal; width: 100%; }
         #resource-panel .energy-value { color: #00ffcc; font-weight: bold; }
-        #produce-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
-        #produce-btn:disabled:hover { background: #0077ff; color: white; }
+        #produce-btn:disabled, #scout-btn:disabled, #tank-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+        #produce-btn:disabled:hover, #scout-btn:disabled:hover, #tank-btn:disabled:hover { background: #0077ff; color: white; }
 
         /* Миникарта */
         #minimap-wrap {
@@ -170,7 +170,7 @@
         /* Мобильная адаптация */
         @media (max-width: 720px), (pointer: coarse) {
             #instructions { font-size: 12px; padding: 10px; max-width: 54vw; line-height: 1.4; }
-            #resource-panel { font-size: 12px; padding: 8px 10px; min-width: 0; max-width: 38vw; }
+            #resource-panel { font-size: 12px; padding: 8px 10px; min-width: 0; max-width: 44vw; }
             button { padding: 10px 14px; font-size: 13px; }
             #minimap-wrap { transform: scale(0.8); transform-origin: bottom right; }
             #wave-panel { font-size: 11px; padding: 6px 12px; }
@@ -211,7 +211,9 @@
     </div>
     <div id="resource-panel" style="display:none;">
         <strong>⚡ Энергия:</strong> <span class="energy-value" id="energy-value">100</span><br>
-        <button id="produce-btn" onclick="produceUnit()">Построить дрона</button>
+        <button id="produce-btn" onclick="produceUnit('standard')">Дрон</button>
+        <button id="scout-btn" onclick="produceUnit('scout')">Разведчик</button>
+        <button id="tank-btn" onclick="produceUnit('tank')">Танк</button>
     </div>
     <div id="wave-panel" style="display:none;">
         🌊 Волна <span id="wave-number">0</span> — след. через <span id="wave-timer">60</span>с
@@ -729,8 +731,23 @@
             };
         }
 
-        function createUnit(col, row) {
+        // Три типа производимых дронов. "standard" — оригинальный дрон без изменений.
+        // "scout" — вдвое меньше и вдвое быстрее, дешевле, но бьёт слабо.
+        // "tank" — медленный тяжёлый дрон с большим уроном и запасом прочности (не запрошено явно,
+        // но логично для архетипа "танк" при цене втрое выше обычного дрона).
+        // Объявлено ДО createUnit(), т.к. стартовые юниты создаются сразу при запуске скрипта
+        // и уже на этом этапе обращаются к DRONE_TYPES — раньше эта константа была объявлена
+        // ниже по файлу, что вызывало ReferenceError (обращение к const до его инициализации).
+        const DRONE_TYPES = {
+            standard: { label: 'Дрон',      cost: 70,  hp: 100, speed: 6.0,  radius: 0.45,  scale: 1.0, damage: 15, attackRange: 4.0, attackCooldown: 1.0, visionRange: 8.0 },
+            scout:    { label: 'Разведчик', cost: 40,  hp: 55,  speed: 12.0, radius: 0.225, scale: 0.5, damage: 6,  attackRange: 4.0, attackCooldown: 1.0, visionRange: 9.0 },
+            tank:     { label: 'Танк',      cost: 150, hp: 220, speed: 3.0,  radius: 0.63,  scale: 1.4, damage: 45, attackRange: 4.0, attackCooldown: 1.6, visionRange: 7.0 }
+        };
+
+        function createUnit(col, row, type = 'standard') {
+            const stats = DRONE_TYPES[type];
             const mesh = createDroneUnit('#0077ff', 0x00ffcc, true);
+            mesh.scale.setScalar(stats.scale);
             const pos = gridToWorld(col, row);
             mesh.position.set(pos.x, 0.75, pos.z);
             scene.add(mesh);
@@ -739,17 +756,19 @@
 
             units.push({
                 mesh: mesh,
+                type: type,
                 selected: false,
                 state: States.IDLE,
                 personalTarget: null,
                 targetEnemy: null,
-                hp: 100,
-                maxHp: 100,
-                speed: 6.0,
-                radius: 0.45,
-                visionRange: 8.0,  
-                attackRange: 4.0,  
-                attackCooldown: 1.0, 
+                hp: stats.hp,
+                maxHp: stats.hp,
+                speed: stats.speed,
+                radius: stats.radius,
+                visionRange: stats.visionRange,  
+                attackRange: stats.attackRange,  
+                attackCooldown: stats.attackCooldown, 
+                damage: stats.damage,
                 lastAttackTime: 0,
                 healthBar: hpBar,
                 velocity: new THREE.Vector3() 
@@ -841,16 +860,21 @@
         // --- РЕСУРСЫ И ПРОИЗВОДСТВО ЮНИТОВ ---
         let energy = 100;
         const ENERGY_INCOME_PER_SEC = 5;
-        const UNIT_COST = 70;
         const ENEMY_KILL_REWARD = 10;
         let energyAccumulator = 0;
         const energyValueEl = document.getElementById('energy-value');
         const produceBtnEl = document.getElementById('produce-btn');
+        const scoutBtnEl = document.getElementById('scout-btn');
+        const tankBtnEl = document.getElementById('tank-btn');
 
         function updateResourceUI() {
             energyValueEl.textContent = Math.floor(energy);
-            produceBtnEl.disabled = energy < UNIT_COST;
-            produceBtnEl.textContent = `Построить дрона (${UNIT_COST}⚡)`;
+            produceBtnEl.disabled = energy < DRONE_TYPES.standard.cost;
+            produceBtnEl.textContent = `${DRONE_TYPES.standard.label} (${DRONE_TYPES.standard.cost}⚡)`;
+            scoutBtnEl.disabled = energy < DRONE_TYPES.scout.cost;
+            scoutBtnEl.textContent = `${DRONE_TYPES.scout.label} (${DRONE_TYPES.scout.cost}⚡)`;
+            tankBtnEl.disabled = energy < DRONE_TYPES.tank.cost;
+            tankBtnEl.textContent = `${DRONE_TYPES.tank.label} (${DRONE_TYPES.tank.cost}⚡)`;
         }
 
         // Расходящийся поиск по кольцам вокруг (col,row): ближайшая свободная от стен и юнитов клетка
@@ -872,11 +896,12 @@
             return { col, row };
         }
 
-        function produceUnit() {
-            if (energy < UNIT_COST) return;
-            energy -= UNIT_COST;
+        function produceUnit(type = 'standard') {
+            const cost = DRONE_TYPES[type].cost;
+            if (energy < cost) return;
+            energy -= cost;
             const spot = findFreeCellNear(BASE_COL, BASE_ROW);
-            createUnit(spot.col, spot.row);
+            createUnit(spot.col, spot.row, type);
             updateResourceUI();
         }
 
@@ -1623,7 +1648,7 @@
 
                             if (currentTime - unit.lastAttackTime >= unit.attackCooldown) {
                                 unit.lastAttackTime = currentTime;
-                                unit.targetEnemy.hp -= 15; 
+                                unit.targetEnemy.hp -= unit.damage; 
                                 fireLaser(pos, attEnemyPos, 0x00ffcc); 
                             }
                         }
