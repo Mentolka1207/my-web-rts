@@ -6,7 +6,7 @@
     <title>Minimal Web RTS: Neo-Drone Swarm & Patrolling AI</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; background-color: #0b0d19; }
-        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
         /* Стили для рамки выделения */
         #selection-box {
             border: 2px dashed #00ffcc;
@@ -44,7 +44,12 @@
             margin-top: 5px;
             font-weight: bold;
             transition: all 0.2s ease;
+            touch-action: manipulation;
+            pointer-events: auto;
+            position: relative;
+            z-index: 1;
         }
+        a { touch-action: manipulation; pointer-events: auto; }
         button:hover {
             background: #00ffcc;
             color: black;
@@ -1186,7 +1191,7 @@
         const DRAG_THRESHOLD = 5; 
         const selectionBoxEl = document.getElementById('selection-box');
         const raycaster = new THREE.Raycaster();
-        const UI_SELECTOR = '#instructions, #resource-panel, #minimap-wrap';
+        const UI_SELECTOR = '#instructions, #resource-panel, #minimap-wrap, #wave-panel, #main-menu-overlay, #game-over-overlay';
 
         function updateMouseNDC(clientX, clientY) {
             mouse.x = (clientX / window.innerWidth) * 2 - 1;
@@ -1286,7 +1291,7 @@
         });
 
         window.addEventListener('mousedown', (e) => {
-            if (e.target.closest(UI_SELECTOR)) return;
+            if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
             if (e.button === 0) { isSelecting = true; isDragging = false; startPoint.set(e.clientX, e.clientY); }
         });
 
@@ -1302,7 +1307,7 @@
 
         window.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            if (e.target.closest(UI_SELECTOR)) return;
+            if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
             issueMoveOrderAtPoint(e.clientX, e.clientY);
         });
 
@@ -1368,7 +1373,7 @@
         }
 
         window.addEventListener('touchstart', (e) => {
-            if (e.target.closest(UI_SELECTOR)) return;
+            if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
             e.preventDefault();
 
             if (e.touches.length === 1) {
