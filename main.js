@@ -1,0 +1,1868 @@
+// --- 0. ВСТРОЕННЫЙ ДЕБАГГЕР ОШИБОК ---
+        window.addEventListener('error', function(e) {
+            const errEl = document.createElement('div');
+            errEl.style.position = 'absolute';
+            errEl.style.top = '50%';
+            errEl.style.left = '50%';
+            errEl.style.transform = 'translate(-50%, -50%)';
+            errEl.style.background = 'rgba(220, 38, 38, 0.95)';
+            errEl.style.color = 'white';
+            errEl.style.padding = '24px';
+            errEl.style.borderRadius = '12px';
+            errEl.style.zIndex = '9999';
+            errEl.style.fontFamily = 'monospace';
+            errEl.style.fontSize = '14px';
+            errEl.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
+            errEl.style.maxWidth = '80vw';
+            errEl.style.whiteSpace = 'pre-wrap';
+            errEl.innerHTML = `<strong>🚨 Системный сбой JS-кода:</strong><br><br>${e.message}<br><br><span style="color: #fecaca;">Файл: ${e.filename.split('/').pop()}<br>Строка: ${e.lineno}:${e.colno}</span>`;
+            document.body.appendChild(errEl);
+        });
+
+        // --- 1. ГЕНЕРАТОР ПРОЦЕДУРНОЙ МОДЕЛИ ДРОНА ---
+        function createDroneUnit(colorHex, glowColorHex, isAlly) {
+            const droneGroup = new THREE.Group();
+
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: colorHex,
+                metalness: 0.8,
+                roughness: 0.15,
+                emissive: glowColorHex,
+                emissiveIntensity: 0.2
+            });
+            const frameMat = new THREE.MeshStandardMaterial({
+                color: 0x1a1d24, 
+                metalness: 0.8,
+                roughness: 0.2
+            });
+            const rotorMat = new THREE.MeshStandardMaterial({
+                color: isAlly ? 0x00ffcc : 0xff3333, 
+                metalness: 0.2,
+                roughness: 0.5
+            });
+            const ledMat = new THREE.MeshBasicMaterial({
+                color: glowColorHex 
+            });
+
+            // Неоновый точечный прожектор под дроном
+            const light = new THREE.PointLight(glowColorHex, 2.5, 5.0);
+            light.position.set(0, -0.2, 0);
+            droneGroup.add(light);
+
+            // Корпус дрона
+            const bodyGeo = new THREE.BoxGeometry(0.5, 0.12, 0.5);
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.15;
+            droneGroup.add(body);
+
+            // Сенсор направления
+            const eyeGeo = new THREE.BoxGeometry(0.18, 0.06, 0.06);
+            const eye = new THREE.Mesh(eyeGeo, ledMat);
+            eye.position.set(0, 0.15, 0.26);
+            droneGroup.add(eye);
+
+            // Сопло
+            const thrusterGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.12, 8);
+            const thruster = new THREE.Mesh(thrusterGeo, frameMat);
+            thruster.position.set(0, 0.12, -0.25);
+            thruster.rotation.x = Math.PI / 2;
+            droneGroup.add(thruster);
+
+            // Конус выхлопа
+            const plumeGeo = new THREE.ConeGeometry(0.06, 0.3, 4);
+            plumeGeo.translate(0, -0.15, 0); 
+            const plumeMat = new THREE.MeshBasicMaterial({
+                color: glowColorHex,
+                transparent: true,
+                opacity: 0.85,
+                side: THREE.DoubleSide
+            });
+            const plume = new THREE.Mesh(plumeGeo, plumeMat);
+            plume.position.set(0, 0.12, -0.31);
+            plume.rotation.x = -Math.PI / 2;
+            droneGroup.add(plume);
+
+            // Рама
+            const armGeo = new THREE.BoxGeometry(0.06, 0.03, 0.8);
+            const arm1 = new THREE.Mesh(armGeo, frameMat);
+            arm1.position.y = 0.15;
+            arm1.rotation.y = Math.PI / 4;
+            droneGroup.add(arm1);
+
+            const arm2 = new THREE.Mesh(armGeo, frameMat);
+            arm2.position.y = 0.15;
+            arm2.rotation.y = -Math.PI / 4;
+            droneGroup.add(arm2);
+
+            // Лопасти
+            const rotors = [];
+            const distance = 0.28;
+            const rotorPositions = [
+                { x: distance, z: distance },
+                { x: -distance, z: distance },
+                { x: distance, z: -distance },
+                { x: -distance, z: -distance }
+            ];
+
+            rotorPositions.forEach((pos) => {
+                const motorGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.06, 8);
+                const motor = new THREE.Mesh(motorGeo, frameMat);
+                motor.position.set(pos.x, 0.18, pos.z);
+                droneGroup.add(motor);
+
+                const bladeGeo = new THREE.BoxGeometry(0.3, 0.01, 0.02);
+                const blade = new THREE.Mesh(bladeGeo, rotorMat);
+                blade.position.set(pos.x, 0.21, pos.z);
+                blade.rotation.y = Math.random() * Math.PI;
+
+                droneGroup.add(blade);
+                rotors.push(blade);
+            });
+
+            // Кольцо выделения
+            const ringGeo = new THREE.RingGeometry(0.5, 0.56, 16);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0x00ffcc,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.8
+            });
+            const selectionRing = new THREE.Mesh(ringGeo, ringMat);
+            selectionRing.rotation.x = -Math.PI / 2;
+            selectionRing.position.y = -0.65; 
+            selectionRing.visible = false;
+            droneGroup.add(selectionRing);
+
+            droneGroup.userData = {
+                rotors: rotors,
+                hoverOffset: Math.random() * 100,
+                velocity: new THREE.Vector3(0, 0, 0),
+                bodyMesh: body,
+                enginePlume: plume,
+                selectionRing: selectionRing
+            };
+
+            droneGroup.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+
+            return droneGroup;
+        }
+
+        // Анимация
+        function updateDronesAnimation(activeDrones, time) {
+            activeDrones.forEach(drone => {
+                const data = drone.userData;
+                if (!data) return;
+
+                if (data.rotors) {
+                    data.rotors.forEach((rotor, index) => {
+                        const direction = index % 2 === 0 ? 1 : -1;
+                        rotor.rotation.y += 0.52 * direction;
+                    });
+                }
+
+                const offset = data.hoverOffset || 0;
+                drone.position.y = 0.75 + Math.sin(time * 3.5 + offset) * 0.04;
+
+                if (data.enginePlume) {
+                    const currentSpeed = data.velocity ? data.velocity.length() : 0;
+                    const scaleStretch = 1.0 + currentSpeed * 2.5;
+                    const flicker = Math.sin(time * 25) * 0.15;
+                    data.enginePlume.scale.set(1, scaleStretch + flicker, 1);
+                }
+
+                if (data.velocity) {
+                    drone.rotation.z = THREE.MathUtils.lerp(drone.rotation.z, -data.velocity.x * 0.45, 0.1);
+                    drone.rotation.x = THREE.MathUtils.lerp(drone.rotation.x, data.velocity.z * 0.45, 0.1);
+                }
+
+                if (data.selectionRing && data.selectionRing.visible) {
+                    data.selectionRing.rotation.z = time * 1.5;
+                }
+            });
+        }
+
+        // --- 2. ГЕНЕРАТОРЫ ПРОЦЕДУРНОЙ ТЕКСТУР ---
+        function createGroundTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#121622'; ctx.fillRect(0, 0, 256, 256); // Сделали подложку ярче
+            ctx.strokeStyle = '#252f4a'; ctx.lineWidth = 4; // Ярче контур клеток
+            ctx.strokeRect(0, 0, 256, 256);
+            ctx.strokeRect(128, 0, 128, 256); ctx.strokeRect(0, 128, 256, 128);
+            for (let i = 0; i < 2500; i++) {
+                const x = Math.random() * 256; const y = Math.random() * 256;
+                ctx.fillStyle = `rgba(0, 255, 204, ${Math.random() * 0.06})`;
+                ctx.fillRect(x, y, 1, 1);
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(10, 10);
+            return texture;
+        }
+
+        function createWallTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#161c30'; ctx.fillRect(0, 0, 128, 128);
+            ctx.strokeStyle = '#2b395c'; ctx.lineWidth = 6;
+            ctx.strokeRect(2, 2, 124, 124);
+            ctx.strokeStyle = '#00ffcc'; ctx.lineWidth = 3; 
+            ctx.beginPath(); ctx.moveTo(0, 64); ctx.lineTo(128, 64); ctx.stroke();
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createUnitTexture(colorHex, glowHex) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#1a2238'; ctx.fillRect(0, 0, 128, 128);
+            ctx.strokeStyle = colorHex; ctx.lineWidth = 10; ctx.strokeRect(8, 8, 112, 112);
+            ctx.fillStyle = glowHex; ctx.shadowBlur = 15; ctx.shadowColor = glowHex;
+            ctx.beginPath(); ctx.arc(64, 64, 24, 0, Math.PI * 2); ctx.fill();
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // --- 3. НАСТРОЙКИ СЕТКИ И КАРТЫ ---
+        const GRID_SIZE = 22; 
+        const CELL_SIZE = 2;
+        const grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
+
+        // Точка базы союзников — сюда производятся новые дроны
+        const BASE_COL = 3;
+        const BASE_ROW = 3;
+
+        // Штабы: отдельные точки от точки производства, чтобы здание не совпало
+        // со стартовым юнитом createUnit(3,3). Враг — в противоположном углу карты.
+        const HQ_COL = 1;
+        const HQ_ROW = 1;
+        const ENEMY_HQ_COL = GRID_SIZE - 2; // 20
+        const ENEMY_HQ_ROW = GRID_SIZE - 2; // 20
+        
+        for (let i = 0; i < GRID_SIZE; i++) {
+            grid[0][i] = 1; grid[GRID_SIZE - 1][i] = 1; 
+            grid[i][0] = 1; grid[i][GRID_SIZE - 1] = 1; 
+        }
+
+        for(let i=0; i<25; i++) {
+            const rx = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+            const rz = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+            if ((rx > 4 || rz > 4) && (rx < GRID_SIZE - 5 || rz < GRID_SIZE - 5) && grid[rz][rx] === 0) {
+                grid[rz][rx] = 1; 
+            }
+        }
+
+        // Стратегические точки сбора ресурсов (энергетические кристаллы)
+        const RESOURCE_NODE_COORDS = [
+            { col: 16, row: 5, name: 'Альфа' },
+            { col: 11, row: 11, name: 'Центр' },
+            { col: 5, row: 16, name: 'Бета' }
+        ];
+
+        // Очищаем клетки вокруг ресурсных точек от стен для свободного прохода юнитов
+        RESOURCE_NODE_COORDS.forEach(pt => {
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    const r = pt.row + dr, c = pt.col + dc;
+                    if (r > 0 && r < GRID_SIZE - 1 && c > 0 && c < GRID_SIZE - 1) {
+                        grid[r][c] = 0;
+                    }
+                }
+            }
+        });
+
+        // Клетки штабов блокируются как непроходимая местность — юниты и Flow Field
+        // будут обходить их так же, как обычные стены (само здание рисуется отдельно, не обычным кубом-стеной)
+        grid[HQ_ROW][HQ_COL] = 1;
+        grid[ENEMY_HQ_ROW][ENEMY_HQ_COL] = 1;
+
+        function worldToGrid(x, z) {
+            const col = Math.floor((x + (GRID_SIZE * CELL_SIZE) / 2) / CELL_SIZE);
+            const row = Math.floor((z + (GRID_SIZE * CELL_SIZE) / 2) / CELL_SIZE);
+            return { col, row };
+        }
+
+        function gridToWorld(col, row) {
+            const x = col * CELL_SIZE - (GRID_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
+            const z = row * CELL_SIZE - (GRID_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
+            return { x, z };
+        }
+
+        // --- НАСТРОЙКИ ПОСТРОЕНИЙ ---
+        let currentFormation = 'line'; 
+        const SPACING = 1.2; 
+
+        function setFormation(type) { currentFormation = type; }
+
+        // Показать/скрыть панель управления (кнопка всегда остаётся видимой)
+        function toggleInstructions() {
+            const content = document.getElementById('instructions-content');
+            const btn = document.getElementById('instructions-toggle');
+            const isHidden = content.style.display === 'none';
+            content.style.display = isHidden ? 'block' : 'none';
+            btn.textContent = isHidden ? 'Скрыть ▲' : 'Управление ▼';
+        }
+
+        function getFormationOffsets(numUnits, type) {
+            const offsets = [];
+            if (type === 'line') {
+                for (let i = 0; i < numUnits; i++) {
+                    const side = i % 2 === 0 ? 1 : -1;
+                    const step = Math.ceil(i / 2);
+                    offsets.push(new THREE.Vector2(side * step * SPACING, 0));
+                }
+            } else if (type === 'wedge') {
+                offsets.push(new THREE.Vector2(0, 0)); 
+                for (let i = 1; i < numUnits; i++) {
+                    const side = i % 2 === 0 ? 1 : -1;
+                    const step = Math.ceil(i / 2);
+                    offsets.push(new THREE.Vector2(side * step * SPACING, -step * SPACING));
+                }
+            }
+            return offsets;
+        }
+
+        // --- 4. КЛАСС FLOW FIELD ---
+        class FlowFieldGenerator {
+            constructor(gridWidth, gridHeight, cellSize) {
+                this.width = gridWidth; this.height = gridHeight; this.cellSize = cellSize;
+                this.costField = Array(this.height).fill(null).map((_, r) => 
+                    Array(this.width).fill(null).map((_, c) => grid[r][c] === 1 ? 255 : 1)
+                );
+                this.integrationField = Array(this.height).fill(null).map(() => Array(this.width).fill(65535));
+                this.flowField = Array(this.height).fill(null).map(() => 
+                    Array(this.width).fill(null).map(() => new THREE.Vector2(0, 0))
+                );
+            }
+
+            generateIntegrationField(targetCol, targetRow) {
+                for (let r = 0; r < this.height; r++) {
+                    for (let c = 0; c < this.width; c++) { this.integrationField[r][c] = 65535; }
+                }
+                const queue = [];
+                this.integrationField[targetRow][targetCol] = 0;
+                queue.push({ col: targetCol, row: targetRow });
+
+                while (queue.length > 0) {
+                    const current = queue.shift();
+                    const currentCost = this.integrationField[current.row][current.col];
+                    const neighbors = [
+                        { col: current.col + 1, row: current.row }, { col: current.col - 1, row: current.row },
+                        { col: current.col, row: current.row + 1 }, { col: current.col, row: current.row - 1 }
+                    ];
+                    for (const neighbor of neighbors) {
+                        if (neighbor.col < 0 || neighbor.col >= this.width || neighbor.row < 0 || neighbor.row >= this.height) continue;
+                        const stepCost = this.costField[neighbor.row][neighbor.col];
+                        if (stepCost === 255) continue; 
+                        const totalCost = currentCost + stepCost;
+                        if (totalCost < this.integrationField[neighbor.row][neighbor.col]) {
+                            this.integrationField[neighbor.row][neighbor.col] = totalCost;
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+            }
+
+            generateFlowField() {
+                for (let r = 0; r < this.height; r++) {
+                    for (let c = 0; c < this.width; c++) {
+                        if (this.costField[r][c] === 255) { this.flowField[r][c].set(0, 0); continue; }
+                        let minCost = this.integrationField[r][c];
+                        let bestDir = new THREE.Vector2(0, 0);
+                        for (let dx = -1; dx <= 1; dx++) {
+                            for (let dy = -1; dy <= 1; dy++) {
+                                if (dx === 0 && dy === 0) continue;
+                                const nc = c + dx; const nr = r + dy;
+                                if (nc < 0 || nc >= this.width || nr < 0 || nr >= this.height) continue;
+                                const neighborCost = this.integrationField[nr][nc];
+                                if (neighborCost < minCost) { minCost = neighborCost; bestDir.set(dx, dy); }
+                            }
+                        }
+                        this.flowField[r][c].copy(bestDir).normalize();
+                    }
+                }
+            }
+
+            updateTarget(targetCol, targetRow) {
+                this.generateIntegrationField(targetCol, targetRow);
+                this.generateFlowField();
+            }
+        }
+
+        const flowFieldGen = new FlowFieldGenerator(GRID_SIZE, GRID_SIZE, CELL_SIZE);
+
+        // Отдельное поле потоков для вражеских волн — ведёт их к штабу игрока.
+        // Не связано с полем игрока (flowFieldGen), чтобы приказы игрока и марш врагов не конфликтовали.
+        const enemyFlowFieldGen = new FlowFieldGenerator(GRID_SIZE, GRID_SIZE, CELL_SIZE);
+        enemyFlowFieldGen.updateTarget(HQ_COL, HQ_ROW);
+
+        // --- 5. ИНИЦИАЛИЗАЦИЯ СЦЕНЫ THREE.JS ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0b0d19); 
+
+        // ИСПРАВЛЕНО: Линейный туман вместо густого экспоненциального! 
+        // Карта в центре теперь яркая, а края мягко уходят в горизонт.
+        scene.fog = new THREE.Fog(0x0b0d19, 60, 115);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+
+        // --- КАМЕРА: панорама + зум ---
+        // Камера всегда смотрит вдоль одного и того же фиксированного направления (camDir).
+        // camPivot — точка на "земле", которую двигают WASD/тач-панорама.
+        // camZoomDist — расстояние от pivot до камеры вдоль camDir; регулируется колесом мыши/щипком.
+        const camDir = new THREE.Vector3(0, 42, 32).normalize();
+        let camPivot = new THREE.Vector3(0, 0, 0);
+        let camZoomDist = Math.hypot(42, 32); // изначальное расстояние — даёт тот же вид, что и раньше
+        const MIN_ZOOM_DIST = camZoomDist * 0.45;
+        const MAX_ZOOM_DIST = camZoomDist * 1.9;
+
+        function applyCameraTransform() {
+            camera.position.copy(camPivot).addScaledVector(camDir, camZoomDist);
+            camera.lookAt(camPivot.x, 0, camPivot.z);
+        }
+        applyCameraTransform();
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+        container.appendChild(renderer.domElement);
+
+        // ИСПРАВЛЕНО: Подняли общую яркость фонового освещения до 0.48
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.48); 
+        scene.add(ambientLight);
+
+        const hemiLight = new THREE.HemisphereLight(0x88ffff, 0x161c30, 0.4);
+        scene.add(hemiLight);
+
+        // ИСПРАВЛЕНО: Подняли силу основного прожектора до 1.4
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.4); 
+        dirLight.position.set(30, 60, 30);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.bias = -0.0004;
+        scene.add(dirLight);
+
+        // --- 6. ОТРИСОВКА ИГРОВОГО МИРА С ТЕКСТУРАМИ ---
+        const groundTex = createGroundTexture();
+        const groundGeo = new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE);
+        const groundMat = new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.5, metalness: 0.2 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const gridHelper = new THREE.GridHelper(GRID_SIZE * CELL_SIZE, GRID_SIZE, 0x00ffcc, 0x222d4a);
+        gridHelper.position.y = 0.01; 
+        scene.add(gridHelper);
+
+        const wallTex = createWallTexture();
+        const wallGeo = new THREE.BoxGeometry(CELL_SIZE * 0.98, 1.5, CELL_SIZE * 0.98);
+        const wallMat = new THREE.MeshStandardMaterial({ 
+            map: wallTex, 
+            roughness: 0.2, 
+            metalness: 0.7,
+            emissive: 0x00ffcc,
+            emissiveIntensity: 0.12 
+        });
+        for (let row = 0; row < GRID_SIZE; row++) {
+            for (let col = 0; col < GRID_SIZE; col++) {
+                const isHQCell = (row === HQ_ROW && col === HQ_COL) || (row === ENEMY_HQ_ROW && col === ENEMY_HQ_COL);
+                if (grid[row][col] === 1 && !isHQCell) {
+                    const wall = new THREE.Mesh(wallGeo, wallMat);
+                    const pos = gridToWorld(col, row);
+                    wall.position.set(pos.x, 0.75, pos.z);
+                    wall.castShadow = true;
+                    wall.receiveShadow = true;
+                    scene.add(wall);
+                }
+            }
+        }
+
+        // --- 7. ЮНИТЫ И ВРАГИ (СПАВН) ---
+        const units = [];
+        const enemies = [];
+
+        const States = { IDLE: 'IDLE', MOVE: 'MOVE', CHASE: 'CHASE', ATTACK: 'ATTACK' };
+
+        function attachHealthBar(parentMesh, isAlly, yOffset = 0.7, width = 0.8) {
+            const barGroup = new THREE.Group();
+            barGroup.position.set(0, yOffset, 0); 
+
+            const bgGeo = new THREE.PlaneGeometry(width, 0.1);
+            const bgMat = new THREE.MeshBasicMaterial({ color: 0x4a0e0e, side: THREE.DoubleSide });
+            const bgMesh = new THREE.Mesh(bgGeo, bgMat);
+            barGroup.add(bgMesh);
+
+            const fgGeo = new THREE.PlaneGeometry(width, 0.1);
+            fgGeo.translate(width / 2, 0, 0); 
+            
+            const fgColor = isAlly ? 0x00ffcc : 0xff3333;
+            const fgMat = new THREE.MeshBasicMaterial({ color: fgColor, side: THREE.DoubleSide });
+            const fgMesh = new THREE.Mesh(fgGeo, fgMat);
+            fgMesh.position.x = -width / 2; 
+            barGroup.add(fgMesh);
+
+            parentMesh.add(barGroup);
+
+            return {
+                group: barGroup,
+                fg: fgMesh
+            };
+        }
+
+        // Три типа производимых дронов. "standard" — оригинальный дрон без изменений.
+        // "scout" — вдвое меньше и вдвое быстрее, дешевле, но бьёт слабо.
+        // "tank" — медленный тяжёлый дрон с большим уроном и запасом прочности (не запрошено явно,
+        // но логично для архетипа "танк" при цене втрое выше обычного дрона).
+        // Объявлено ДО createUnit(), т.к. стартовые юниты создаются сразу при запуске скрипта
+        // и уже на этом этапе обращаются к DRONE_TYPES — раньше эта константа была объявлена
+        // ниже по файлу, что вызывало ReferenceError (обращение к const до его инициализации).
+        const DRONE_TYPES = {
+            standard: { label: 'Дрон',      cost: 70,  hp: 100, speed: 6.0,  radius: 0.45,  scale: 1.0, damage: 15, attackRange: 4.0, attackCooldown: 1.0, visionRange: 8.0 },
+            scout:    { label: 'Разведчик', cost: 40,  hp: 55,  speed: 12.0, radius: 0.225, scale: 0.5, damage: 6,  attackRange: 4.0, attackCooldown: 1.0, visionRange: 9.0 },
+            tank:     { label: 'Танк',      cost: 150, hp: 220, speed: 3.0,  radius: 0.63,  scale: 1.4, damage: 45, attackRange: 4.0, attackCooldown: 1.6, visionRange: 7.0 }
+        };
+
+        function createUnit(col, row, type = 'standard') {
+            const stats = DRONE_TYPES[type];
+            const mesh = createDroneUnit('#0077ff', 0x00ffcc, true);
+            mesh.scale.setScalar(stats.scale);
+            const pos = gridToWorld(col, row);
+            mesh.position.set(pos.x, 0.75, pos.z);
+            scene.add(mesh);
+
+            const hpBar = attachHealthBar(mesh, true);
+
+            units.push({
+                mesh: mesh,
+                type: type,
+                selected: false,
+                state: States.IDLE,
+                personalTarget: null,
+                targetEnemy: null,
+                hp: stats.hp,
+                maxHp: stats.hp,
+                speed: stats.speed,
+                radius: stats.radius,
+                visionRange: stats.visionRange,  
+                attackRange: stats.attackRange,  
+                attackCooldown: stats.attackCooldown, 
+                damage: stats.damage,
+                lastAttackTime: 0,
+                healthBar: hpBar,
+                velocity: new THREE.Vector3() 
+            });
+        }
+
+        function createEnemy(x, z, isWaveUnit = false) {
+            const mesh = createDroneUnit('#ff3333', 0xff3333, false);
+            mesh.position.set(x, 0.75, z);
+            scene.add(mesh);
+
+            const hpBar = attachHealthBar(mesh, false);
+
+            enemies.push({
+                mesh: mesh,
+                state: States.IDLE,
+                hp: 80,
+                maxHp: 80,
+                speed: 4.0,
+                radius: 0.45,
+                visionRange: 7.0,
+                attackRange: 3.5,
+                attackCooldown: 1.2,
+                lastAttackTime: 0,
+                targetAlly: null,
+                healthBar: hpBar,
+                velocity: new THREE.Vector3(),
+                roamTarget: null,
+                roamCooldown: Math.random() * 2,
+                isWaveUnit: isWaveUnit
+            });
+        }
+
+        // --- ШТАБЫ (HQ): уничтожение штаба противника = победа, потеря своего = поражение ---
+        function createHQ(col, row, isPlayer) {
+            const group = new THREE.Group();
+            const factionColor = isPlayer ? 0x0077ff : 0xff3333;
+            const glowColor = isPlayer ? 0x00ffcc : 0xff6644;
+
+            const baseMat = new THREE.MeshStandardMaterial({
+                color: 0x1a1d24, metalness: 0.7, roughness: 0.25,
+                emissive: factionColor, emissiveIntensity: 0.15
+            });
+            const accentMat = new THREE.MeshStandardMaterial({
+                color: factionColor, metalness: 0.6, roughness: 0.3,
+                emissive: glowColor, emissiveIntensity: 0.4
+            });
+            const beaconMat = new THREE.MeshBasicMaterial({ color: glowColor });
+
+            const base = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.6, 3.2), baseMat);
+            base.position.y = 0.8;
+            base.castShadow = true; base.receiveShadow = true;
+            group.add(base);
+
+            const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 2.4, 8), accentMat);
+            tower.position.y = 1.6 + 1.2;
+            tower.castShadow = true;
+            group.add(tower);
+
+            const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 12), beaconMat);
+            beacon.position.y = 1.6 + 2.4 + 0.4;
+            group.add(beacon);
+
+            const light = new THREE.PointLight(glowColor, 3.0, 9.0);
+            light.position.y = 3.2;
+            group.add(light);
+
+            const pos = gridToWorld(col, row);
+            group.position.set(pos.x, 0, pos.z);
+            scene.add(group);
+
+            const hpBar = attachHealthBar(group, isPlayer, 5.4, 2.4);
+
+            return {
+                mesh: group,
+                hp: 500,
+                maxHp: 500,
+                radius: 1.8,
+                healthBar: hpBar
+            };
+        }
+
+        createUnit(2, 2); createUnit(2, 3); createUnit(3, 2); createUnit(3, 3); createUnit(4, 2);
+        createEnemy(12, 12); createEnemy(14, 12); createEnemy(13, 14);
+
+        const playerHQ = createHQ(HQ_COL, HQ_ROW, true);
+        const enemyHQ = createHQ(ENEMY_HQ_COL, ENEMY_HQ_ROW, false);
+
+        // --- ТОЧКИ СБОРА РЕСУРСОВ (ЭНЕРГЕТИЧЕСКИЕ КРИСТАЛЛЫ) ---
+        const NODE_ENERGY_BONUS = 3;
+        const CAPTURE_RADIUS = 2.8;
+
+        function createResourceNode(col, row, name) {
+            const group = new THREE.Group();
+            const worldPos = gridToWorld(col, row);
+            group.position.set(worldPos.x, 0, worldPos.z);
+
+            // 1. Металлическая опора (база)
+            const baseGeo = new THREE.CylinderGeometry(1.2, 1.4, 0.22, 8);
+            const baseMat = new THREE.MeshStandardMaterial({
+                color: 0x181c26,
+                roughness: 0.35,
+                metalness: 0.85
+            });
+            const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+            baseMesh.position.y = 0.11;
+            baseMesh.receiveShadow = true;
+            group.add(baseMesh);
+
+            // 2. Кольцо радиуса захвата на земле
+            const ringGeo = new THREE.RingGeometry(CAPTURE_RADIUS - 0.2, CAPTURE_RADIUS, 32);
+            ringGeo.rotateX(-Math.PI / 2);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0xffaa00,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.65
+            });
+            const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+            ringMesh.position.y = 0.03;
+            group.add(ringMesh);
+
+            // 3. Центральный парящий кристалл
+            const crystalGeo = new THREE.OctahedronGeometry(0.75, 0);
+            crystalGeo.scale(0.7, 1.35, 0.7);
+            const crystalMat = new THREE.MeshStandardMaterial({
+                color: 0x223344,
+                roughness: 0.15,
+                metalness: 0.5,
+                emissive: 0xffaa00,
+                emissiveIntensity: 0.8,
+                transparent: true,
+                opacity: 0.92
+            });
+            const crystalMesh = new THREE.Mesh(crystalGeo, crystalMat);
+            crystalMesh.position.y = 1.45;
+            crystalMesh.castShadow = true;
+            group.add(crystalMesh);
+
+            // 4. Внутреннее светящееся ядро кристалла
+            const coreGeo = new THREE.SphereGeometry(0.25, 8, 8);
+            const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+            coreMesh.position.y = 1.45;
+            group.add(coreMesh);
+
+            // 5. Освещение зоны
+            const light = new THREE.PointLight(0xffaa00, 2.5, 7.5);
+            light.position.y = 1.8;
+            group.add(light);
+
+            // 6. 3D Индикатор прогресса захвата над кристаллом (Billboarding)
+            const barGroup = new THREE.Group();
+            barGroup.position.set(0, 2.7, 0);
+
+            const barWidth = 1.4;
+            const barBgGeo = new THREE.PlaneGeometry(barWidth, 0.12);
+            const barBgMat = new THREE.MeshBasicMaterial({ color: 0x111622, side: THREE.DoubleSide });
+            const barBg = new THREE.Mesh(barBgGeo, barBgMat);
+            barGroup.add(barBg);
+
+            const barFgGeo = new THREE.PlaneGeometry(barWidth, 0.12);
+            barFgGeo.translate(barWidth / 2, 0, 0);
+            const barFgMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, side: THREE.DoubleSide });
+            const barFg = new THREE.Mesh(barFgGeo, barFgMat);
+            barFg.position.x = -barWidth / 2;
+            barFg.scale.x = 0;
+            barGroup.add(barFg);
+
+            group.add(barGroup);
+            scene.add(group);
+
+            return {
+                name: name,
+                col: col,
+                row: row,
+                pos: new THREE.Vector3(worldPos.x, 0, worldPos.z),
+                group: group,
+                crystalMesh: crystalMesh,
+                coreMesh: coreMesh,
+                ringMat: ringMat,
+                crystalMat: crystalMat,
+                light: light,
+                barGroup: barGroup,
+                barFg: barFg,
+                barFgMat: barFgMat,
+                owner: 'neutral',
+                captureProgress: 0
+            };
+        }
+
+        const resourceNodes = RESOURCE_NODE_COORDS.map(coord => createResourceNode(coord.col, coord.row, coord.name));
+
+        // --- РЕСУРСЫ И ПРОИЗВОДСТВО ЮНИТОВ ---
+        let energy = 100;
+        const ENERGY_INCOME_PER_SEC = 5;
+        const ENEMY_KILL_REWARD = 10;
+        let energyAccumulator = 0;
+        const energyValueEl = document.getElementById('energy-value');
+        const energyIncomeBadgeEl = document.getElementById('energy-income');
+        const nodesCountEl = document.getElementById('nodes-count');
+        const produceBtnEl = document.getElementById('produce-btn');
+        const scoutBtnEl = document.getElementById('scout-btn');
+        const tankBtnEl = document.getElementById('tank-btn');
+
+        function updateResourceUI() {
+            energyValueEl.textContent = Math.floor(energy);
+            
+            const playerControlledNodes = resourceNodes.filter(n => n.owner === 'player').length;
+            const currentIncome = ENERGY_INCOME_PER_SEC + playerControlledNodes * NODE_ENERGY_BONUS;
+            
+            if (energyIncomeBadgeEl) {
+                energyIncomeBadgeEl.textContent = `(+${currentIncome}⚡/сек)`;
+            }
+            if (nodesCountEl) {
+                nodesCountEl.textContent = `${playerControlledNodes}/${resourceNodes.length}`;
+                nodesCountEl.style.color = playerControlledNodes > 0 ? '#00ffcc' : '#ffaa00';
+            }
+
+            produceBtnEl.disabled = energy < DRONE_TYPES.standard.cost;
+            produceBtnEl.textContent = `${DRONE_TYPES.standard.label} (${DRONE_TYPES.standard.cost}⚡)`;
+            scoutBtnEl.disabled = energy < DRONE_TYPES.scout.cost;
+            scoutBtnEl.textContent = `${DRONE_TYPES.scout.label} (${DRONE_TYPES.scout.cost}⚡)`;
+            tankBtnEl.disabled = energy < DRONE_TYPES.tank.cost;
+            tankBtnEl.textContent = `${DRONE_TYPES.tank.label} (${DRONE_TYPES.tank.cost}⚡)`;
+        }
+
+        // Расходящийся поиск по кольцам вокруг (col,row): ближайшая свободная от стен и юнитов клетка
+        function findFreeCellNear(col, row) {
+            for (let radius = 0; radius < GRID_SIZE; radius++) {
+                for (let dr = -radius; dr <= radius; dr++) {
+                    for (let dc = -radius; dc <= radius; dc++) {
+                        if (Math.max(Math.abs(dr), Math.abs(dc)) !== radius) continue;
+                        const r = row + dr, c = col + dc;
+                        if (r <= 0 || r >= GRID_SIZE - 1 || c <= 0 || c >= GRID_SIZE - 1) continue;
+                        if (grid[r][c] === 1) continue;
+                        const worldPos = gridToWorld(c, r);
+                        const occupied = [...units, ...enemies].some(u => u.hp > 0 &&
+                            Math.hypot(u.mesh.position.x - worldPos.x, u.mesh.position.z - worldPos.z) < 0.9);
+                        if (!occupied) return { col: c, row: r };
+                    }
+                }
+            }
+            return { col, row };
+        }
+
+        function produceUnit(type = 'standard') {
+            const cost = DRONE_TYPES[type].cost;
+            if (energy < cost) return;
+            energy -= cost;
+            const spot = findFreeCellNear(BASE_COL, BASE_ROW);
+            createUnit(spot.col, spot.row, type);
+            updateResourceUI();
+        }
+
+        // Мобильная замена клавише E (спавн врага): создаёт врага рядом с текущим центром камеры
+        function spawnEnemyNearCenter() {
+            const centerGrid = worldToGrid(camPivot.x, camPivot.z);
+            const spot = findFreeCellNear(centerGrid.col, centerGrid.row);
+            const worldPos = gridToWorld(spot.col, spot.row);
+            createEnemy(worldPos.x, worldPos.z);
+        }
+
+        updateResourceUI();
+
+        // --- ВОЛНЫ ВРАГОВ (SURVIVAL MODE) ---
+        const WAVE_INTERVAL = 60; // секунд между волнами
+        let waveNumber = 0;
+        let waveTimer = WAVE_INTERVAL;
+        const waveNumberEl = document.getElementById('wave-number');
+        const waveTimerEl = document.getElementById('wave-timer');
+
+        function spawnWave() {
+            waveNumber++;
+            const count = 3 + waveNumber; // с каждой волной чуть больше врагов
+            for (let i = 0; i < count; i++) {
+                const spot = findFreeCellNear(ENEMY_HQ_COL, ENEMY_HQ_ROW);
+                const worldPos = gridToWorld(spot.col, spot.row);
+                createEnemy(worldPos.x, worldPos.z, true); // isWaveUnit = true — марш на штаб игрока
+            }
+        }
+
+        function updateWaveUI() {
+            waveNumberEl.textContent = waveNumber;
+            waveTimerEl.textContent = Math.max(0, Math.ceil(waveTimer));
+        }
+        updateWaveUI();
+
+        // --- ГЛАВНОЕ МЕНЮ ---
+        let gameStarted = false;
+        const HUD_PANEL_IDS = ['instructions', 'resource-panel', 'wave-panel', 'minimap-wrap'];
+
+        function startGame() {
+            document.getElementById('main-menu-overlay').style.display = 'none';
+            HUD_PANEL_IDS.forEach(id => { document.getElementById(id).style.display = ''; });
+            gameStarted = true;
+        }
+
+        function exitGame() {
+            // window.close() браузеры разрешают только для вкладок, открытых скриптом (window.open),
+            // а не для обычных вкладок, набранных/открытых пользователем — поэтому здесь честно
+            // предупреждаем, если попытка не сработала, вместо того чтобы делать вид, что кнопка всесильна.
+            window.close();
+            setTimeout(() => {
+                const btn = document.getElementById('exit-btn');
+                if (btn) btn.textContent = 'Закройте вкладку вручную — браузер блокирует автозакрытие';
+            }, 300);
+        }
+
+        // --- ПОБЕДА / ПОРАЖЕНИЕ ---
+        let gameOver = false;
+        const gameOverOverlayEl = document.getElementById('game-over-overlay');
+        const gameOverTitleEl = document.getElementById('game-over-title');
+
+        function triggerGameOver(playerWon) {
+            if (gameOver) return;
+            gameOver = true;
+
+            const losingHQ = playerWon ? enemyHQ : playerHQ;
+            spawnExplosion(losingHQ.mesh.position, 24);
+            spawnScorch(losingHQ.mesh.position);
+            scene.remove(losingHQ.mesh);
+
+            gameOverTitleEl.textContent = playerWon ? '🏆 ПОБЕДА!' : '💥 ПОРАЖЕНИЕ';
+            gameOverTitleEl.style.color = playerWon ? '#00ffcc' : '#ff3333';
+            gameOverOverlayEl.style.display = 'flex';
+        }
+
+        function checkGameOverConditions() {
+            if (gameOver) return;
+            if (enemyHQ.hp <= 0) { triggerGameOver(true); }
+            else if (playerHQ.hp <= 0) { triggerGameOver(false); }
+        }
+
+        // --- ЭФФЕКТЫ ЛАЗЕРОВ ---
+
+        // Процедурная текстура вспышки (звёздочка), один раз при старте
+        const flashCanvas = document.createElement('canvas');
+        flashCanvas.width = 32; flashCanvas.height = 32;
+        const flashCtx = flashCanvas.getContext('2d');
+        const flashGrad = flashCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
+        flashGrad.addColorStop(0, 'rgba(255,255,255,1)');
+        flashGrad.addColorStop(0.4, 'rgba(255,220,120,0.9)');
+        flashGrad.addColorStop(1, 'rgba(255,150,0,0)');
+        flashCtx.fillStyle = flashGrad;
+        flashCtx.fillRect(0, 0, 32, 32);
+        const flashTexture = new THREE.CanvasTexture(flashCanvas);
+        flashTexture.generateMipmaps = false;
+        flashTexture.minFilter = THREE.LinearFilter;
+
+        // Вспышка в точке попадания лазера — маленькая яркая звёздочка, растёт и гаснет за ~150мс.
+        // Sprite вместо PointLight: волны могут стрелять десятками лазеров одновременно,
+        // и в этом случае россыпь настоящих динамических источников света была бы слишком дорогой.
+        function spawnHitFlash(position, colorHex) {
+            const mat = new THREE.SpriteMaterial({
+                map: flashTexture, color: colorHex, transparent: true,
+                depthWrite: false, blending: THREE.AdditiveBlending
+            });
+            const sprite = new THREE.Sprite(mat);
+            sprite.position.set(position.x, position.y + 0.15, position.z);
+            sprite.scale.set(0.9, 0.9, 0.9);
+            scene.add(sprite);
+
+            const start = performance.now();
+            const DURATION = 150;
+            (function tick() {
+                const t = (performance.now() - start) / DURATION;
+                if (t >= 1) {
+                    scene.remove(sprite);
+                    mat.dispose();
+                    return;
+                }
+                const s = 0.9 * (1 + t * 0.6);
+                sprite.scale.set(s, s, s);
+                mat.opacity = 1 - t;
+                requestAnimationFrame(tick);
+            })();
+        }
+
+        function fireLaser(fromPos, toPos, colorHex) {
+            const points = [
+                new THREE.Vector3(fromPos.x, fromPos.y + 0.15, fromPos.z), 
+                new THREE.Vector3(toPos.x, toPos.y + 0.15, toPos.z)
+            ];
+            const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+            const lineMat = new THREE.LineBasicMaterial({ color: colorHex, linewidth: 3 });
+            const laser = new THREE.Line(lineGeo, lineMat);
+            scene.add(laser);
+
+            spawnHitFlash(toPos, colorHex);
+
+            setTimeout(() => {
+                scene.remove(laser);
+                lineGeo.dispose();
+                lineMat.dispose();
+            }, 80);
+        }
+
+        // --- ВЗРЫВЫ (ЧАСТИЦЫ) ---
+        // При гибели дрона/штаба разлетается кучка мелких горящих кубиков вместо мгновенного исчезновения.
+        const explosionParticles = [];
+        const EXPLOSION_PARTICLE_LIFETIME = 0.5; // сек
+        const EXPLOSION_GRAVITY = 9.0;
+
+        function spawnExplosion(position, count = 10) {
+            for (let i = 0; i < count; i++) {
+                const size = 0.08 + Math.random() * 0.09;
+                const geo = new THREE.BoxGeometry(size, size, size);
+                const hue = 0.05 + Math.random() * 0.05; // оранжево-жёлтый диапазон
+                const color = new THREE.Color().setHSL(hue, 1.0, 0.55 + Math.random() * 0.2);
+                const mat = new THREE.MeshBasicMaterial({ color });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(position.x, position.y, position.z);
+
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2.0 + Math.random() * 3.5;
+                const velocity = new THREE.Vector3(
+                    Math.cos(angle) * speed,
+                    3.0 + Math.random() * 3.0,
+                    Math.sin(angle) * speed
+                );
+
+                scene.add(mesh);
+                explosionParticles.push({ mesh, velocity, age: 0 });
+            }
+        }
+
+        function updateExplosions(delta) {
+            for (let i = explosionParticles.length - 1; i >= 0; i--) {
+                const p = explosionParticles[i];
+                p.age += delta;
+                p.velocity.y -= EXPLOSION_GRAVITY * delta;
+                p.mesh.position.addScaledVector(p.velocity, delta);
+
+                const shrink = (delta / EXPLOSION_PARTICLE_LIFETIME);
+                p.mesh.scale.subScalar(shrink);
+
+                if (p.age >= EXPLOSION_PARTICLE_LIFETIME || p.mesh.scale.x <= 0.02) {
+                    scene.remove(p.mesh);
+                    p.mesh.geometry.dispose();
+                    p.mesh.material.dispose();
+                    explosionParticles.splice(i, 1);
+                }
+            }
+        }
+
+        // --- ОПАЛЁННЫЕ СЛЕДЫ НА ЗЕМЛЕ (SCORCHES) ---
+        // Плоский квад (PlaneGeometry) с процедурной радиальной текстурой — читается как круглое тёмное пятно.
+        const scorchCanvas = document.createElement('canvas');
+        scorchCanvas.width = 64; scorchCanvas.height = 64;
+        const scorchCtx = scorchCanvas.getContext('2d');
+        const scorchGrad = scorchCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        scorchGrad.addColorStop(0, 'rgba(10,8,6,0.75)');
+        scorchGrad.addColorStop(0.7, 'rgba(10,8,6,0.4)');
+        scorchGrad.addColorStop(1, 'rgba(10,8,6,0)');
+        scorchCtx.fillStyle = scorchGrad;
+        scorchCtx.fillRect(0, 0, 64, 64);
+        const scorchTexture = new THREE.CanvasTexture(scorchCanvas);
+        scorchTexture.generateMipmaps = false;
+        scorchTexture.minFilter = THREE.LinearFilter;
+
+        const scorchGeo = new THREE.PlaneGeometry(1.6, 1.6);
+        const scorchMat = new THREE.MeshBasicMaterial({ map: scorchTexture, transparent: true, depthWrite: false });
+        const scorches = [];
+        const MAX_SCORCHES = 60; // ограничение, чтобы длинная игра не копила меши бесконечно
+
+        function spawnScorch(position) {
+            const decal = new THREE.Mesh(scorchGeo, scorchMat);
+            decal.position.set(position.x, 0.03, position.z);
+            decal.rotation.x = -Math.PI / 2; // положить плашмя, как землю
+            decal.rotateZ(Math.random() * Math.PI * 2); // случайный поворот для разнообразия (безопасно: rotateZ работает в уже наклонённой локальной системе)
+            scene.add(decal);
+            scorches.push(decal);
+
+            if (scorches.length > MAX_SCORCHES) {
+                const old = scorches.shift();
+                scene.remove(old); // геометрия/материал общие для всех декалей — не освобождаем их
+            }
+        }
+
+        // --- МИНИКАРТА ---
+        const MAP_WORLD_SIZE = GRID_SIZE * CELL_SIZE;
+        const minimapCanvas = document.getElementById('minimap');
+        const minimapCtx = minimapCanvas.getContext('2d');
+        const MINIMAP_PX = minimapCanvas.width; // канвас квадратный (170x170)
+
+        function worldToMinimap(x, z) {
+            return {
+                mx: ((x + MAP_WORLD_SIZE / 2) / MAP_WORLD_SIZE) * MINIMAP_PX,
+                my: ((z + MAP_WORLD_SIZE / 2) / MAP_WORLD_SIZE) * MINIMAP_PX
+            };
+        }
+
+        function updateMinimap() {
+            minimapCtx.fillStyle = '#05070d';
+            minimapCtx.fillRect(0, 0, MINIMAP_PX, MINIMAP_PX);
+
+            // Стены — все, кроме клеток штабов (у них свой маркер ниже)
+            minimapCtx.fillStyle = '#2b395c';
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const isHQCell = (r === HQ_ROW && c === HQ_COL) || (r === ENEMY_HQ_ROW && c === ENEMY_HQ_COL);
+                    if (grid[r][c] === 1 && !isHQCell) {
+                        const wp = gridToWorld(c, r);
+                        const { mx, my } = worldToMinimap(wp.x, wp.z);
+                        minimapCtx.fillRect(mx - 1.5, my - 1.5, 3, 3);
+                    }
+                }
+            }
+
+            // Штабы — крупные квадраты в цвете фракции, видны, даже если уже уничтожены (тогда серым)
+            const hqMarkerSize = 7;
+            const playerHQPos = worldToMinimap(playerHQ.mesh.position.x, playerHQ.mesh.position.z);
+            minimapCtx.fillStyle = playerHQ.hp > 0 ? '#00ffcc' : '#555555';
+            minimapCtx.fillRect(playerHQPos.mx - hqMarkerSize / 2, playerHQPos.my - hqMarkerSize / 2, hqMarkerSize, hqMarkerSize);
+
+            const enemyHQPos = worldToMinimap(enemyHQ.mesh.position.x, enemyHQ.mesh.position.z);
+            minimapCtx.fillStyle = enemyHQ.hp > 0 ? '#ff3333' : '#555555';
+            minimapCtx.fillRect(enemyHQPos.mx - hqMarkerSize / 2, enemyHQPos.my - hqMarkerSize / 2, hqMarkerSize, hqMarkerSize);
+
+            // Точки сбора ресурсов — ромбы в цвете владельца (нейтрал = жёлтый, союзник = циан, враг = красный)
+            resourceNodes.forEach(node => {
+                const { mx, my } = worldToMinimap(node.pos.x, node.pos.z);
+                let col = '#ffaa00';
+                if (node.owner === 'player') col = '#00ffcc';
+                else if (node.owner === 'enemy') col = '#ff3333';
+
+                minimapCtx.fillStyle = col;
+                minimapCtx.strokeStyle = '#ffffff';
+                minimapCtx.lineWidth = 1;
+                const sz = 4.5;
+                minimapCtx.beginPath();
+                minimapCtx.moveTo(mx, my - sz);
+                minimapCtx.lineTo(mx + sz, my);
+                minimapCtx.lineTo(mx, my + sz);
+                minimapCtx.lineTo(mx - sz, my);
+                minimapCtx.closePath();
+                minimapCtx.fill();
+                minimapCtx.stroke();
+            });
+
+            // Союзники — всегда видны на миникарте
+            minimapCtx.fillStyle = '#00ffcc';
+            units.forEach(u => {
+                if (u.hp <= 0) return;
+                const { mx, my } = worldToMinimap(u.mesh.position.x, u.mesh.position.z);
+                minimapCtx.beginPath(); minimapCtx.arc(mx, my, 2.4, 0, Math.PI * 2); minimapCtx.fill();
+            });
+
+            // Враги — тоже всегда видны на миникарте
+            minimapCtx.fillStyle = '#ff3333';
+            enemies.forEach(e => {
+                const { mx, my } = worldToMinimap(e.mesh.position.x, e.mesh.position.z);
+                minimapCtx.beginPath(); minimapCtx.arc(mx, my, 2.4, 0, Math.PI * 2); minimapCtx.fill();
+            });
+
+            // Прямоугольник текущей области обзора камеры (приблизительно)
+            const viewHalf = (camZoomDist / Math.hypot(42, 32)) * 16;
+            const center = worldToMinimap(camPivot.x, camPivot.z);
+            const halfPx = (viewHalf / MAP_WORLD_SIZE) * MINIMAP_PX;
+            minimapCtx.strokeStyle = 'rgba(255,255,255,0.6)';
+            minimapCtx.lineWidth = 1;
+            minimapCtx.strokeRect(center.mx - halfPx, center.my - halfPx, halfPx * 2, halfPx * 2);
+        }
+
+        // Клик/тап по миникарте — переносит камеру (панораму) в указанную точку
+        function jumpCameraFromMinimapEvent(clientX, clientY) {
+            const rect = minimapCanvas.getBoundingClientRect();
+            const px = (clientX - rect.left) / rect.width * MINIMAP_PX;
+            const py = (clientY - rect.top) / rect.height * MINIMAP_PX;
+            camPivot.x = (px / MINIMAP_PX) * MAP_WORLD_SIZE - MAP_WORLD_SIZE / 2;
+            camPivot.z = (py / MINIMAP_PX) * MAP_WORLD_SIZE - MAP_WORLD_SIZE / 2;
+            applyCameraTransform();
+        }
+        minimapCanvas.addEventListener('mousedown', (e) => { e.stopPropagation(); jumpCameraFromMinimapEvent(e.clientX, e.clientY); });
+        minimapCanvas.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+            if (e.touches.length === 1) jumpCameraFromMinimapEvent(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: true });
+
+        // --- 8. УПРАВЛЕНИЕ И КОМАНДЫ ---
+        const mouse = new THREE.Vector2(); 
+        const startPoint = new THREE.Vector2();
+        let isSelecting = false; let isDragging = false;
+        const DRAG_THRESHOLD = 5; 
+        const selectionBoxEl = document.getElementById('selection-box');
+        const raycaster = new THREE.Raycaster();
+        const UI_SELECTOR = '#instructions, #resource-panel, #minimap-wrap, #wave-panel, #main-menu-overlay, #game-over-overlay';
+
+        function updateMouseNDC(clientX, clientY) {
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+        }
+
+        // Обновляет рамку выделения на экране и помечает юнитов внутри неё выделенными
+        function updateDragSelection(currentX, currentY, additive) {
+            const minX = Math.min(startPoint.x, currentX); const maxX = Math.max(startPoint.x, currentX);
+            const minY = Math.min(startPoint.y, currentY); const maxY = Math.max(startPoint.y, currentY);
+
+            selectionBoxEl.style.left = minX + 'px'; selectionBoxEl.style.top = minY + 'px';
+            selectionBoxEl.style.width = (maxX - minX) + 'px'; selectionBoxEl.style.height = (maxY - minY) + 'px';
+
+            units.forEach(unit => {
+                const vector = unit.mesh.position.clone().project(camera);
+                const x = (vector.x * .5 + .5) * window.innerWidth;
+                const y = (-(vector.y * .5) + .5) * window.innerHeight;
+
+                if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+                    unit.selected = true;
+                    if (unit.mesh.userData.selectionRing) unit.mesh.userData.selectionRing.visible = true;
+                } else if (!additive) {
+                    unit.selected = false;
+                    if (unit.mesh.userData.selectionRing) unit.mesh.userData.selectionRing.visible = false;
+                }
+            });
+        }
+
+        // Клик/тап по одиночному дрону: additive=true (Shift на десктопе) добавляет к выделению, иначе заменяет его
+        function trySelectUnitAtPoint(clientX, clientY, additive) {
+            updateMouseNDC(clientX, clientY);
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(units.map(u => u.mesh), true);
+            if (!additive) {
+                units.forEach(u => {
+                    u.selected = false;
+                    if (u.mesh.userData.selectionRing) u.mesh.userData.selectionRing.visible = false;
+                });
+            }
+            if (intersects.length > 0) {
+                let rootGroup = intersects[0].object;
+                while (rootGroup.parent && rootGroup.parent.type !== "Scene") rootGroup = rootGroup.parent;
+                const clickedUnit = units.find(u => u.mesh === rootGroup);
+                if (clickedUnit) {
+                    clickedUnit.selected = true;
+                    if (clickedUnit.mesh.userData.selectionRing) clickedUnit.mesh.userData.selectionRing.visible = true;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Приказ на движение (Flow Field + построение) для всех выделенных юнитов в указанную точку экрана
+        function issueMoveOrderAtPoint(clientX, clientY) {
+            updateMouseNDC(clientX, clientY);
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(ground);
+            if (intersects.length === 0) return;
+
+            const targetPoint = intersects[0].point;
+            const targetGrid = worldToGrid(targetPoint.x, targetPoint.z);
+            if (targetGrid.col < 0 || targetGrid.col >= GRID_SIZE || targetGrid.row < 0 || targetGrid.row >= GRID_SIZE) return;
+            if (grid[targetGrid.row][targetGrid.col] === 1) return;
+
+            const selectedUnits = units.filter(u => u.selected);
+            if (selectedUnits.length === 0) return;
+
+            const groupCenter = new THREE.Vector3();
+            selectedUnits.forEach(u => groupCenter.add(u.mesh.position));
+            groupCenter.divideScalar(selectedUnits.length);
+
+            const angle = Math.atan2(targetPoint.z - groupCenter.z, targetPoint.x - groupCenter.x);
+            const offsets = getFormationOffsets(selectedUnits.length, currentFormation);
+
+            flowFieldGen.updateTarget(targetGrid.col, targetGrid.row);
+
+            selectedUnits.forEach((unit, index) => {
+                const offset = offsets[index];
+                const rotatedX = offset.x * Math.cos(-angle) - offset.y * Math.sin(-angle);
+                const rotatedZ = offset.x * Math.sin(-angle) + offset.y * Math.cos(-angle);
+
+                unit.personalTarget = new THREE.Vector3(targetPoint.x + rotatedX, 0.75, targetPoint.z + rotatedZ);
+                unit.state = States.MOVE;
+                unit.targetEnemy = null;
+            });
+        }
+
+        // --- МЫШЬ (ДЕСКТОП) ---
+        window.addEventListener('mousemove', (e) => {
+            updateMouseNDC(e.clientX, e.clientY);
+            if (!isSelecting) return;
+            const dragDistance = Math.hypot(e.clientX - startPoint.x, e.clientY - startPoint.y);
+            if (!isDragging && dragDistance > DRAG_THRESHOLD) { isDragging = true; selectionBoxEl.style.display = 'block'; }
+            if (!isDragging) return;
+            updateDragSelection(e.clientX, e.clientY, e.shiftKey);
+        });
+
+        window.addEventListener('mousedown', (e) => {
+            if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
+            if (e.button === 0) { isSelecting = true; isDragging = false; startPoint.set(e.clientX, e.clientY); }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                isSelecting = false; selectionBoxEl.style.display = 'none';
+                if (!isDragging && !e.target.closest(UI_SELECTOR)) {
+                    trySelectUnitAtPoint(e.clientX, e.clientY, e.shiftKey);
+                }
+                isDragging = false;
+            }
+        });
+
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
+            issueMoveOrderAtPoint(e.clientX, e.clientY);
+        });
+
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+
+            if (e.code === 'KeyE') {
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObject(ground);
+                if (intersects.length > 0) {
+                    createEnemy(intersects[0].point.x, intersects[0].point.z);
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // Обрабатывает одиночный тап: тап по своему дрону выделяет его (заменяя старое выделение);
+        // тап по пустой земле при непустом выделении отдаёт приказ на движение, ничего не сбрасывая заранее
+        // (на тач-устройстве нет отдельной кнопки под приказ, как ПКМ на мыши, поэтому порядок проверки важен)
+        function handleTap(clientX, clientY) {
+            updateMouseNDC(clientX, clientY);
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(units.map(u => u.mesh), true);
+
+            if (intersects.length > 0) {
+                let rootGroup = intersects[0].object;
+                while (rootGroup.parent && rootGroup.parent.type !== "Scene") rootGroup = rootGroup.parent;
+                const tappedUnit = units.find(u => u.mesh === rootGroup);
+                if (tappedUnit) {
+                    units.forEach(u => {
+                        u.selected = false;
+                        if (u.mesh.userData.selectionRing) u.mesh.userData.selectionRing.visible = false;
+                    });
+                    tappedUnit.selected = true;
+                    if (tappedUnit.mesh.userData.selectionRing) tappedUnit.mesh.userData.selectionRing.visible = true;
+                    return;
+                }
+            }
+
+            if (units.some(u => u.selected)) {
+                issueMoveOrderAtPoint(clientX, clientY);
+            }
+        }
+
+        // --- ТАЧ-УПРАВЛЕНИЕ (МОБИЛЬНЫЕ УСТРОЙСТВА) ---
+        // Один палец: тап по своему дрону — выделить; тап по земле при активном выделении — приказ на движение;
+        //             тяни — рамка выделения (как ЛКМ на десктопе).
+        // Два пальца: сведение/разведение — зум; совместное перемещение — панорама камеры.
+        let touchMode = null; // 'select' | 'pan-zoom'
+        let touchStartTime = 0;
+        const TAP_MAX_DURATION_MS = 350;
+        let pinchStartDist = 0;
+        let pinchStartZoom = 0;
+        let twoFingerStartMid = { x: 0, y: 0 };
+        let twoFingerStartPivot = new THREE.Vector3();
+
+        function resetTouchState() {
+            touchMode = null;
+            isSelecting = false; isDragging = false;
+            selectionBoxEl.style.display = 'none';
+        }
+
+        window.addEventListener('touchstart', (e) => {
+            if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
+            e.preventDefault();
+
+            if (e.touches.length === 1) {
+                touchMode = 'select';
+                isSelecting = true; isDragging = false;
+                touchStartTime = performance.now();
+                startPoint.set(e.touches[0].clientX, e.touches[0].clientY);
+                updateMouseNDC(e.touches[0].clientX, e.touches[0].clientY);
+            } else if (e.touches.length === 2) {
+                touchMode = 'pan-zoom';
+                isSelecting = false; isDragging = false; selectionBoxEl.style.display = 'none';
+                const [t0, t1] = e.touches;
+                pinchStartDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+                pinchStartZoom = camZoomDist;
+                twoFingerStartMid = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+                twoFingerStartPivot.copy(camPivot);
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchmove', (e) => {
+            if (touchMode === null) return;
+            e.preventDefault();
+
+            if (touchMode === 'select' && e.touches.length === 1) {
+                const t = e.touches[0];
+                updateMouseNDC(t.clientX, t.clientY);
+                const dragDistance = Math.hypot(t.clientX - startPoint.x, t.clientY - startPoint.y);
+                if (!isDragging && dragDistance > DRAG_THRESHOLD) { isDragging = true; selectionBoxEl.style.display = 'block'; }
+                if (isDragging) updateDragSelection(t.clientX, t.clientY, false);
+            } else if (touchMode === 'pan-zoom' && e.touches.length === 2) {
+                const [t0, t1] = e.touches;
+                const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+                // Пальцы расходятся (dist растёт) -> камера приближается (camZoomDist уменьшается)
+                const zoomFactor = pinchStartDist / Math.max(dist, 1);
+                camZoomDist = THREE.MathUtils.clamp(pinchStartZoom * zoomFactor, MIN_ZOOM_DIST, MAX_ZOOM_DIST);
+
+                const mid = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+                const dx = mid.x - twoFingerStartMid.x;
+                const dy = mid.y - twoFingerStartMid.y;
+                const panScale = (camZoomDist / Math.hypot(42, 32)) * 0.06;
+                camPivot.x = twoFingerStartPivot.x - dx * panScale;
+                camPivot.z = twoFingerStartPivot.z - dy * panScale;
+                applyCameraTransform();
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', (e) => {
+            if (touchMode === 'select') {
+                const wasTap = !isDragging && (performance.now() - touchStartTime) < TAP_MAX_DURATION_MS;
+                isSelecting = false; selectionBoxEl.style.display = 'none';
+
+                if (wasTap && e.changedTouches.length > 0) {
+                    const t = e.changedTouches[0];
+                    handleTap(t.clientX, t.clientY);
+                }
+                isDragging = false;
+            }
+
+            if (e.touches.length === 0) {
+                touchMode = null;
+            } else if (e.touches.length === 1) {
+                touchMode = 'select';
+                isSelecting = true; isDragging = false;
+                touchStartTime = performance.now();
+                startPoint.set(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: true });
+
+        window.addEventListener('touchcancel', resetTouchState, { passive: true });
+
+        // --- 9. КАМЕРА ---
+        function updateCamera(delta) {
+            // Скорость панорамы растёт при отдалении камеры, чтобы перемещение по карте не казалось медленным при зуме
+            const camSpeed = 25 * delta * (camZoomDist / (Math.hypot(42, 32)));
+            if (keys['KeyW'] || keys['ArrowUp']) { camPivot.z -= camSpeed; }
+            if (keys['KeyS'] || keys['ArrowDown']) { camPivot.z += camSpeed; }
+            if (keys['KeyA'] || keys['ArrowLeft']) { camPivot.x -= camSpeed; }
+            if (keys['KeyD'] || keys['ArrowRight']) { camPivot.x += camSpeed; }
+            applyCameraTransform();
+        }
+
+        // Зум колесом мыши (десктоп)
+        window.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            camZoomDist += e.deltaY * 0.04;
+            camZoomDist = THREE.MathUtils.clamp(camZoomDist, MIN_ZOOM_DIST, MAX_ZOOM_DIST);
+            applyCameraTransform();
+        }, { passive: false });
+
+        // --- 10. ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.1); 
+            const currentTime = clock.elapsedTime; 
+
+            updateCamera(delta);
+
+            if (gameStarted && !gameOver) {
+                // --- ОБНОВЛЕНИЕ ТОЧЕК СБОРА РЕСУРСОВ ---
+                let playerNodesCount = 0;
+
+                resourceNodes.forEach((node, idx) => {
+                    // Анимация парения и вращения кристалла
+                    node.crystalMesh.rotation.y += delta * 1.5;
+                    node.crystalMesh.position.y = 1.45 + Math.sin(currentTime * 2.2 + idx * 1.8) * 0.2;
+                    node.coreMesh.position.y = node.crystalMesh.position.y;
+                    node.barGroup.quaternion.copy(camera.quaternion);
+
+                    // Подсчёт союзных и вражеских юнитов в радиусе захвата
+                    let allyCount = 0;
+                    let enemyCount = 0;
+
+                    for (let i = 0; i < units.length; i++) {
+                        const u = units[i];
+                        if (u.hp > 0 && Math.hypot(u.mesh.position.x - node.pos.x, u.mesh.position.z - node.pos.z) <= CAPTURE_RADIUS) {
+                            allyCount++;
+                        }
+                    }
+
+                    for (let i = 0; i < enemies.length; i++) {
+                        const e = enemies[i];
+                        if (e.hp > 0 && Math.hypot(e.mesh.position.x - node.pos.x, e.mesh.position.z - node.pos.z) <= CAPTURE_RADIUS) {
+                            enemyCount++;
+                        }
+                    }
+
+                    const isContested = allyCount > 0 && enemyCount > 0;
+
+                    if (!isContested) {
+                        if (allyCount > 0) {
+                            // Захват игроком: базово 0.22/сек + 0.08 за каждого доп. союзника
+                            const speed = 0.22 + 0.08 * (allyCount - 1);
+                            node.captureProgress = Math.min(1.0, node.captureProgress + speed * delta);
+                        } else if (enemyCount > 0) {
+                            // Захват врагом: базово 0.20/сек + 0.07 за каждого доп. врага
+                            const speed = 0.20 + 0.07 * (enemyCount - 1);
+                            node.captureProgress = Math.max(-1.0, node.captureProgress - speed * delta);
+                        }
+                    }
+
+                    // Определение текущего владельца
+                    if (node.captureProgress >= 1.0) {
+                        node.owner = 'player';
+                    } else if (node.captureProgress <= -1.0) {
+                        node.owner = 'enemy';
+                    } else if (Math.abs(node.captureProgress) < 0.05) {
+                        node.owner = 'neutral';
+                    }
+
+                    if (node.owner === 'player') playerNodesCount++;
+
+                    // Визуализация статуса (цвет кристалла, света, кольца и шкалы)
+                    let activeColorHex = 0xffaa00; // нейтрал
+                    if (node.captureProgress > 0) {
+                        activeColorHex = 0x00ffcc; // прогресс/владение игрока
+                    } else if (node.captureProgress < 0) {
+                        activeColorHex = 0xff3333; // прогресс/владение врага
+                    }
+
+                    if (isContested) {
+                        const blink = Math.sin(currentTime * 12) > 0;
+                        activeColorHex = blink ? 0x00ffcc : 0xff3333;
+                    }
+
+                    node.crystalMat.emissive.setHex(activeColorHex);
+                    node.light.color.setHex(activeColorHex);
+                    node.ringMat.color.setHex(activeColorHex);
+                    node.barFgMat.color.setHex(activeColorHex);
+
+                    // Прогресс-бар над кристаллом
+                    node.barFg.scale.x = Math.max(0.02, Math.abs(node.captureProgress));
+                });
+
+                // Пассивный доход энергии: базовый + бонус за каждую захваченную точку
+                energyAccumulator += delta;
+                if (energyAccumulator >= 1) {
+                    energyAccumulator -= 1;
+                    const totalIncome = ENERGY_INCOME_PER_SEC + playerNodesCount * NODE_ENERGY_BONUS;
+                    energy += totalIncome;
+                    updateResourceUI();
+                }
+
+                // Таймер волн — каждые WAVE_INTERVAL секунд новая волна с вражеского штаба
+                waveTimer -= delta;
+                if (waveTimer <= 0) {
+                    waveTimer += WAVE_INTERVAL;
+                    spawnWave();
+                }
+                updateWaveUI();
+
+                // Полоски здоровья штабов — разворот к камере и заполнение по HP
+                if (playerHQ.hp > 0) {
+                    playerHQ.healthBar.group.quaternion.copy(camera.quaternion);
+                    playerHQ.healthBar.fg.scale.x = Math.max(0, playerHQ.hp / playerHQ.maxHp);
+                }
+                if (enemyHQ.hp > 0) {
+                    enemyHQ.healthBar.group.quaternion.copy(camera.quaternion);
+                    enemyHQ.healthBar.fg.scale.x = Math.max(0, enemyHQ.hp / enemyHQ.maxHp);
+                }
+
+            // --- FSM СОЮЗНЫХ ДРОНОВ ---
+            units.forEach((unit) => {
+                const pos = unit.mesh.position;
+                if (unit.hp <= 0) return;
+
+                unit.healthBar.group.quaternion.copy(camera.quaternion);
+                unit.healthBar.fg.scale.x = Math.max(0, unit.hp / unit.maxHp);
+
+                let nearestEnemy = null;
+                let minDist = unit.visionRange;
+                enemies.forEach(enemy => {
+                    if (enemy.hp <= 0) return;
+                    const d = pos.distanceTo(enemy.mesh.position);
+                    if (d < minDist) { minDist = d; nearestEnemy = enemy; }
+                });
+                // Вражеский штаб — тоже действительная цель, если рядом нет дрона-противника ближе
+                if (enemyHQ.hp > 0) {
+                    const dHQ = pos.distanceTo(enemyHQ.mesh.position);
+                    if (dHQ < minDist) { minDist = dHQ; nearestEnemy = enemyHQ; }
+                }
+
+                switch (unit.state) {
+                    case States.IDLE:
+                        unit.velocity.set(0, 0, 0); 
+                        if (nearestEnemy) {
+                            unit.targetEnemy = nearestEnemy;
+                            unit.state = States.CHASE;
+                        }
+                        break;
+
+                    case States.MOVE:
+                        if (nearestEnemy) {
+                            unit.targetEnemy = nearestEnemy;
+                            unit.state = States.CHASE;
+                            break;
+                        }
+
+                        if (unit.personalTarget) {
+                            const distanceToPersonalTarget = pos.distanceTo(unit.personalTarget);
+                            if (distanceToPersonalTarget < 0.15) {
+                                unit.state = States.IDLE;
+                                unit.velocity.set(0, 0, 0);
+                                break;
+                            }
+
+                            const gridPos = worldToGrid(pos.x, pos.z);
+                            if (gridPos.col >= 0 && gridPos.col < GRID_SIZE && gridPos.row >= 0 && gridPos.row < GRID_SIZE) {
+                                if (grid[gridPos.row][gridPos.col] === 1) {
+                                    const freeWorldPos = gridToWorld(gridPos.col, gridPos.row);
+                                    const escapeDir = new THREE.Vector3().subVectors(pos, new THREE.Vector3(freeWorldPos.x, 0.75, freeWorldPos.z)).normalize();
+                                    pos.addScaledVector(escapeDir, 0.5);
+                                    unit.velocity.copy(escapeDir).multiplyScalar(unit.speed);
+                                    break;
+                                }
+
+                                const flowVector = flowFieldGen.flowField[gridPos.row][gridPos.col];
+                                const dirToPersonalTarget = new THREE.Vector3().subVectors(unit.personalTarget, pos);
+                                dirToPersonalTarget.y = 0;
+                                const distance = dirToPersonalTarget.length();
+                                dirToPersonalTarget.normalize();
+
+                                let moveDir = new THREE.Vector3();
+                                if (distance < 4.0 || flowVector.lengthSq() === 0) {
+                                    moveDir.copy(dirToPersonalTarget);
+                                } else {
+                                    const flow3D = new THREE.Vector3(flowVector.x, 0, flowVector.y);
+                                    moveDir.lerpVectors(flow3D, dirToPersonalTarget, 0.25).normalize();
+                                }
+
+                                const step = Math.min(unit.speed * delta, distance);
+                                pos.addScaledVector(moveDir, step);
+                                
+                                unit.velocity.copy(moveDir).multiplyScalar(unit.speed);
+
+                                const targetRotation = Math.atan2(-moveDir.z, moveDir.x);
+                                unit.mesh.rotation.y = THREE.MathUtils.lerp(unit.mesh.rotation.y, targetRotation, 10 * delta);
+                            }
+                        }
+                        break;
+
+                    case States.CHASE:
+                        if (!unit.targetEnemy || unit.targetEnemy.hp <= 0) {
+                            unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
+                            unit.velocity.set(0, 0, 0);
+                            break;
+                        }
+
+                        const enemyPos = unit.targetEnemy.mesh.position;
+                        const distToEnemy = pos.distanceTo(enemyPos);
+
+                        if (distToEnemy <= unit.attackRange) {
+                            unit.state = States.ATTACK;
+                            unit.velocity.set(0, 0, 0);
+                        } else if (distToEnemy > unit.visionRange) {
+                            unit.targetEnemy = null;
+                            unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
+                            unit.velocity.set(0, 0, 0);
+                        } else {
+                            const runDir = new THREE.Vector3().subVectors(enemyPos, pos).normalize();
+                            pos.addScaledVector(runDir, unit.speed * delta);
+                            unit.velocity.copy(runDir).multiplyScalar(unit.speed);
+                            unit.mesh.rotation.y = Math.atan2(-runDir.z, runDir.x);
+                        }
+                        break;
+
+                    case States.ATTACK:
+                        unit.velocity.set(0, 0, 0);
+                        if (!unit.targetEnemy || unit.targetEnemy.hp <= 0) {
+                            unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
+                            break;
+                        }
+
+                        const attEnemyPos = unit.targetEnemy.mesh.position;
+                        const distToAttEnemy = pos.distanceTo(attEnemyPos);
+
+                        if (distToAttEnemy > unit.attackRange) {
+                            unit.state = States.CHASE;
+                        } else {
+                            const lookDir = new THREE.Vector3().subVectors(attEnemyPos, pos).normalize();
+                            unit.mesh.rotation.y = Math.atan2(-lookDir.z, lookDir.x);
+
+                            if (currentTime - unit.lastAttackTime >= unit.attackCooldown) {
+                                unit.lastAttackTime = currentTime;
+                                unit.targetEnemy.hp -= unit.damage; 
+                                fireLaser(pos, attEnemyPos, 0x00ffcc); 
+                            }
+                        }
+                        break;
+                }
+                
+                if (unit.mesh && unit.mesh.userData) {
+                    unit.mesh.userData.velocity.copy(unit.velocity);
+                }
+            });
+
+            // --- FSM ВРАЖЕСКИХ ПАТРУЛЬНЫХ ДРОНОВ ---
+            enemies.forEach((enemy) => {
+                if (enemy.hp <= 0) return;
+                const pos = enemy.mesh.position;
+
+                enemy.healthBar.group.quaternion.copy(camera.quaternion);
+                enemy.healthBar.fg.scale.x = Math.max(0, enemy.hp / enemy.maxHp);
+
+                let nearestAlly = null;
+                let minDist = enemy.visionRange;
+                units.forEach(ally => {
+                    if (ally.hp <= 0) return;
+                    const d = pos.distanceTo(ally.mesh.position);
+                    if (d < minDist) { minDist = d; nearestAlly = ally; }
+                });
+
+                if (nearestAlly) {
+                    enemy.roamTarget = null;
+                    const allyPos = nearestAlly.mesh.position;
+                    const dist = pos.distanceTo(allyPos);
+
+                    if (dist <= enemy.attackRange) {
+                        enemy.velocity.set(0, 0, 0);
+                        const lookDir = new THREE.Vector3().subVectors(allyPos, pos).normalize();
+                        enemy.mesh.rotation.y = Math.atan2(-lookDir.z, lookDir.x);
+
+                        if (currentTime - enemy.lastAttackTime >= enemy.attackCooldown) {
+                            enemy.lastAttackTime = currentTime;
+                            nearestAlly.hp -= 10;
+                            fireLaser(pos, allyPos, 0xff3333); 
+                        }
+                    } else {
+                        const walkDir = new THREE.Vector3().subVectors(allyPos, pos).normalize();
+                        pos.addScaledVector(walkDir, enemy.speed * delta);
+                        enemy.velocity.copy(walkDir).multiplyScalar(enemy.speed);
+                        enemy.mesh.rotation.y = Math.atan2(-walkDir.z, walkDir.x);
+                    }
+                } else if (enemy.isWaveUnit) {
+                    // Штурмовой юнит волны: нет цели рядом — марш на штаб игрока по своему Flow Field
+                    enemy.roamTarget = null;
+                    const hqPos = playerHQ.mesh.position;
+                    const distToHQ = pos.distanceTo(hqPos);
+                    const engageRange = enemy.attackRange + playerHQ.radius;
+
+                    if (distToHQ <= engageRange) {
+                        enemy.velocity.set(0, 0, 0);
+                        const lookDir = new THREE.Vector3().subVectors(hqPos, pos).normalize();
+                        enemy.mesh.rotation.y = Math.atan2(-lookDir.z, lookDir.x);
+
+                        if (currentTime - enemy.lastAttackTime >= enemy.attackCooldown) {
+                            enemy.lastAttackTime = currentTime;
+                            playerHQ.hp -= 12;
+                            fireLaser(pos, hqPos, 0xff3333);
+                        }
+                    } else {
+                        const gridPos = worldToGrid(pos.x, pos.z);
+                        const moveDir = new THREE.Vector3().subVectors(hqPos, pos);
+                        moveDir.y = 0; moveDir.normalize();
+
+                        if (gridPos.col >= 0 && gridPos.col < GRID_SIZE && gridPos.row >= 0 && gridPos.row < GRID_SIZE) {
+                            const flowVector = enemyFlowFieldGen.flowField[gridPos.row][gridPos.col];
+                            if (flowVector.lengthSq() > 0) {
+                                moveDir.set(flowVector.x, 0, flowVector.y);
+                            }
+                        }
+
+                        pos.addScaledVector(moveDir, enemy.speed * delta);
+                        enemy.velocity.copy(moveDir).multiplyScalar(enemy.speed);
+                        enemy.mesh.rotation.y = Math.atan2(-moveDir.z, moveDir.x);
+                    }
+                } else {
+                    if (enemy.state === States.IDLE) {
+                        enemy.velocity.set(0, 0, 0);
+                        enemy.roamCooldown -= delta;
+
+                        if (enemy.roamCooldown <= 0) {
+                            if (Math.random() < 0.35 && resourceNodes.length > 0) {
+                                const targetNode = resourceNodes[Math.floor(Math.random() * resourceNodes.length)];
+                                enemy.roamTarget = new THREE.Vector3(
+                                    targetNode.pos.x + (Math.random() - 0.5) * 2,
+                                    0.75,
+                                    targetNode.pos.z + (Math.random() - 0.5) * 2
+                                );
+                            } else {
+                                let found = false;
+                                let col, row;
+                                while (!found) {
+                                    col = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+                                    row = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+                                    if (grid[row][col] === 0) found = true;
+                                }
+                                const worldPos = gridToWorld(col, row);
+                                enemy.roamTarget = new THREE.Vector3(worldPos.x, 0.75, worldPos.z);
+                            }
+                            enemy.state = States.MOVE;
+                        }
+                    } else if (enemy.state === States.MOVE && enemy.roamTarget) {
+                        const distToRoam = pos.distanceTo(enemy.roamTarget);
+                        if (distToRoam < 0.25) {
+                            enemy.state = States.IDLE;
+                            enemy.roamCooldown = Math.random() * 4 + 2; 
+                            enemy.velocity.set(0, 0, 0);
+                        } else {
+                            const roamDir = new THREE.Vector3().subVectors(enemy.roamTarget, pos).normalize();
+                            pos.addScaledVector(roamDir, enemy.speed * delta);
+                            enemy.velocity.copy(roamDir).multiplyScalar(enemy.speed);
+                            enemy.mesh.rotation.y = Math.atan2(-roamDir.z, roamDir.x);
+                        }
+                    }
+                }
+
+                if (enemy.mesh && enemy.mesh.userData) {
+                    enemy.mesh.userData.velocity.copy(enemy.velocity);
+                }
+            });
+
+            const allAliveDrones = [...units, ...enemies].map(u => u.mesh).filter(Boolean);
+            updateDronesAnimation(allAliveDrones, currentTime);
+
+            for (let i = units.length - 1; i >= 0; i--) {
+                if (units[i].hp <= 0) {
+                    spawnExplosion(units[i].mesh.position);
+                    spawnScorch(units[i].mesh.position);
+                    scene.remove(units[i].mesh);
+                    units.splice(i, 1);
+                }
+            }
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                if (enemies[i].hp <= 0) {
+                    spawnExplosion(enemies[i].mesh.position);
+                    spawnScorch(enemies[i].mesh.position);
+                    scene.remove(enemies[i].mesh);
+                    enemies.splice(i, 1);
+                    energy += ENEMY_KILL_REWARD;
+                    updateResourceUI();
+                }
+            }
+
+            checkGameOverConditions();
+
+            // СТОЛКНОВЕНИЯ ДРОНОВ
+            const allUnits = [...units, ...enemies];
+            for (let i = 0; i < allUnits.length; i++) {
+                for (let j = i + 1; j < allUnits.length; j++) {
+                    const u1 = allUnits[i]; const u2 = allUnits[j];
+                    const diff = new THREE.Vector3().subVectors(u2.mesh.position, u1.mesh.position);
+                    diff.y = 0;
+                    const dist = diff.length(); const minDist = u1.radius + u2.radius;
+                    if (dist < minDist) {
+                        const overlap = minDist - dist; 
+                        const resolveDir = diff.clone().normalize();
+                        
+                        if (dist === 0) {
+                            resolveDir.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+                        }
+                        
+                        u1.mesh.position.addScaledVector(resolveDir, -overlap * 0.5);
+                        u2.mesh.position.addScaledVector(resolveDir, overlap * 0.5);
+                    }
+                }
+            }
+
+            // КОЛЛИЗИИ СО СТЕНАМИ
+            allUnits.forEach(unit => {
+                const pos = unit.mesh.position;
+                const gridPos = worldToGrid(pos.x, pos.z);
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const nc = gridPos.col + dx; const nr = gridPos.row + dy;
+                        if (nc >= 0 && nc < GRID_SIZE && nr >= 0 && nr < GRID_SIZE) {
+                            if (grid[nr][nc] === 1) {
+                                const isHQCell = (nr === HQ_ROW && nc === HQ_COL) || (nr === ENEMY_HQ_ROW && nc === ENEMY_HQ_COL);
+                                const wallPos = gridToWorld(nc, nr);
+                                const diff = new THREE.Vector3(pos.x - wallPos.x, 0, pos.z - wallPos.z);
+                                const dist = diff.length(); const wallRadius = isHQCell ? 1.8 : 1.1; 
+                                if (dist < wallRadius + unit.radius) {
+                                    const resolveDir = diff.clone().normalize();
+                                    if (dist === 0) {
+                                        resolveDir.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+                                    }
+                                    pos.addScaledVector(resolveDir, (wallRadius + unit.radius - dist) * 0.8);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            } // конец блока if (!gameOver)
+
+            updateExplosions(delta);
+            updateMinimap();
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
