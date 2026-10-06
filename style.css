@@ -1,0 +1,177 @@
+body { margin: 0; overflow: hidden; font-family: sans-serif; user-select: none; background-color: #0b0d19; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
+        /* Стили для рамки выделения */
+        #selection-box {
+            border: 2px dashed #00ffcc;
+            background-color: rgba(0, 255, 204, 0.15);
+            position: absolute;
+            pointer-events: none;
+            display: none;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.5);
+            z-index: 5;
+        }
+        #instructions {
+            position: absolute;
+            top: 10px; left: 10px;
+            color: white; background: rgba(11, 13, 25, 0.9);
+            padding: 15px; border-radius: 8px;
+            line-height: 1.5;
+            z-index: 10;
+            border: 1px solid #00ffcc33;
+            box-shadow: 0 4px 25px rgba(0,0,0,0.7);
+            box-sizing: border-box;
+        }
+        #instructions-toggle {
+            display: inline-block;
+            padding: 4px 10px;
+            font-size: 12px;
+            margin: 0 0 8px 0;
+        }
+        button {
+            background: #0077ff;
+            color: white;
+            border: 1px solid #00a2ff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 5px;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            touch-action: manipulation;
+            pointer-events: auto;
+            position: relative;
+            z-index: 1;
+        }
+        a { touch-action: manipulation; pointer-events: auto; }
+        button:hover {
+            background: #00ffcc;
+            color: black;
+            border-color: #00ffcc;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+        }
+        /* Отключаем системные жесты браузера (скролл/пинч-зум страницы) — зумом и панорамированием управляет сама игра */
+        #canvas-container { touch-action: none; }
+
+        /* Панель ресурсов */
+        #resource-panel {
+            position: absolute;
+            top: 10px; right: 10px;
+            color: white; background: rgba(11, 13, 25, 0.9);
+            padding: 12px 15px; border-radius: 8px;
+            z-index: 10;
+            border: 1px solid #00ffcc33;
+            box-shadow: 0 4px 25px rgba(0,0,0,0.7);
+            font-size: 14px;
+            min-width: 160px;
+            max-width: 230px;
+            box-sizing: border-box;
+        }
+        #resource-panel button { white-space: normal; width: 100%; }
+        #resource-panel .energy-value { color: #00ffcc; font-weight: bold; }
+        .resource-header { display: flex; align-items: baseline; justify-content: space-between; }
+        .income-badge { color: #00ffcc; font-size: 12px; font-weight: bold; margin-left: 6px; }
+        .nodes-status { font-size: 11px; color: #9db4d8; margin: 4px 0 8px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(0, 255, 204, 0.2); }
+        #nodes-count { font-weight: bold; color: #ffaa00; }
+        #produce-btn:disabled, #scout-btn:disabled, #tank-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+        #produce-btn:disabled:hover, #scout-btn:disabled:hover, #tank-btn:disabled:hover { background: #0077ff; color: white; }
+
+        /* Миникарта */
+        #minimap-wrap {
+            position: absolute;
+            bottom: 10px; right: 10px;
+            z-index: 10;
+            border: 1px solid #00ffcc55;
+            border-radius: 6px;
+            box-shadow: 0 4px 25px rgba(0,0,0,0.7);
+            background: rgba(11, 13, 25, 0.9);
+            padding: 4px;
+            line-height: 0;
+        }
+        #minimap { display: block; cursor: pointer; }
+
+        /* Панель волн */
+        #wave-panel {
+            position: absolute;
+            top: 10px; left: 50%;
+            transform: translateX(-50%);
+            color: white; background: rgba(11, 13, 25, 0.9);
+            padding: 8px 16px; border-radius: 8px;
+            z-index: 10;
+            border: 1px solid #00ffcc33;
+            box-shadow: 0 4px 25px rgba(0,0,0,0.7);
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        /* Экран победы/поражения */
+        #game-over-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 100;
+            background: rgba(5, 6, 12, 0.88);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+        }
+        #game-over-title {
+            font-size: 42px;
+            font-weight: bold;
+            text-shadow: 0 0 20px currentColor;
+        }
+
+        /* Главное меню */
+        #main-menu-overlay {
+            display: flex;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 110;
+            background: rgba(5, 6, 12, 0.92);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            text-align: center;
+            padding: 20px;
+        }
+        #main-menu-title {
+            font-size: 38px;
+            font-weight: bold;
+            color: #00ffcc;
+            text-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+        }
+        #main-menu-subtitle {
+            font-size: 15px;
+            color: #9db4d8;
+            margin-top: -12px;
+        }
+        #main-menu-buttons {
+            display: flex;
+            gap: 16px;
+            margin-top: 10px;
+        }
+        #main-menu-buttons button { font-size: 16px; padding: 12px 26px; }
+        #main-menu-github {
+            color: #00ffcc;
+            text-decoration: none;
+            font-size: 13px;
+            border: 1px solid #00ffcc55;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: background 0.2s;
+            margin-top: 8px;
+        }
+        #main-menu-github:hover { background: rgba(0, 255, 204, 0.1); }
+
+        /* Мобильная адаптация */
+        @media (max-width: 720px), (pointer: coarse) {
+            #instructions { font-size: 12px; padding: 10px; max-width: 54vw; line-height: 1.4; }
+            #resource-panel { font-size: 12px; padding: 8px 10px; min-width: 0; max-width: 44vw; }
+            button { padding: 10px 14px; font-size: 13px; }
+            #minimap-wrap { transform: scale(0.8); transform-origin: bottom right; }
+            #wave-panel { font-size: 11px; padding: 6px 12px; }
+            #game-over-title { font-size: 30px; }
+            #main-menu-title { font-size: 26px; }
+            #main-menu-buttons { flex-direction: column; width: 100%; max-width: 260px; }
+        }
