@@ -46,6 +46,7 @@ function produceUnit(type = 'standard') {
     energy -= cost;
     const spot = findFreeCellNear(BASE_COL, BASE_ROW);
     createUnit(spot.col, spot.row, type);
+    matchStats.unitsProduced++;
     updateResourceUI();
 }
 

@@ -14,6 +14,17 @@ const droneBladeGeo = new THREE.BoxGeometry(0.3, 0.01, 0.02);
 const droneSelectionRingGeo = new THREE.RingGeometry(0.5, 0.56, 16);
 droneSelectionRingGeo.rotateX(-Math.PI / 2);
 
+const droneShieldGeo = new THREE.SphereGeometry(0.65, 16, 12);
+const droneShieldMat = new THREE.MeshBasicMaterial({
+    color: 0x00d4ff, transparent: true, opacity: 0.45, wireframe: true, depthWrite: false
+});
+
+const siegeRingGeo = new THREE.RingGeometry(0.7, 0.85, 16);
+siegeRingGeo.rotateX(-Math.PI / 2);
+const siegeRingMat = new THREE.MeshBasicMaterial({
+    color: 0xffaa00, side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false
+});
+
 // Геометрии Босса-Левиафана
 const bossHullGeo = new THREE.BoxGeometry(1.6, 0.45, 2.2);
 const bossWingGeo = new THREE.BoxGeometry(0.5, 0.3, 1.4);
@@ -111,12 +122,24 @@ function createDroneUnit(isAlly) {
     selectionRing.visible = false;
     droneGroup.add(selectionRing);
 
+    const shieldMesh = new THREE.Mesh(droneShieldGeo, droneShieldMat.clone());
+    shieldMesh.position.y = 0.15;
+    shieldMesh.visible = false;
+    droneGroup.add(shieldMesh);
+
+    const siegeMesh = new THREE.Mesh(siegeRingGeo, siegeRingMat.clone());
+    siegeMesh.position.y = -0.68;
+    siegeMesh.visible = false;
+    droneGroup.add(siegeMesh);
+
     droneGroup.userData = {
         rotors: rotors,
         hoverOffset: Math.random() * 100,
         velocity: new THREE.Vector3(0, 0, 0),
         enginePlume: plume,
-        selectionRing: selectionRing
+        selectionRing: selectionRing,
+        shieldMesh: shieldMesh,
+        siegeMesh: siegeMesh
     };
 
     return droneGroup;

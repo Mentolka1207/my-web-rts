@@ -88,19 +88,28 @@ function updateDragSelection(currentX, currentY, additive) {
             if (unit.mesh.userData.selectionRing) unit.mesh.userData.selectionRing.visible = false;
         }
     }
+    if (typeof updateAbilityUI === 'function') updateAbilityUI();
+}
+
+function getEnemyUnderScreenPoint(clientX, clientY) {
+    updateMouseNDC(clientX, clientY);
+    raycaster.setFromCamera(mouse, camera);
+
+    if (typeof enemyHQ !== 'undefined' && enemyHQ.hp > 0) {
+        const hits = raycaster.intersectObject(enemyHQ.mesh, true);
+        if (hits.length > 0) return enemyHQ;
+    }
+
+    for (let i = 0; i < enemies.length; i++) {
+        const e = enemies[i];
+        if (e.hp <= 0) continue;
+        const hits = raycaster.intersectObject(e.mesh, true);
+        if (hits.length > 0) return e;
+    }
+    return null;
 }
 
 function issueMoveOrderAtPoint(clientX, clientY) {
-    updateMouseNDC(clientX, clientY);
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObject(ground);
-    if (intersects.length === 0) return;
-
-    const targetPoint = intersects[0].point;
-    const targetGrid = worldToGrid(targetPoint.x, targetPoint.z);
-    if (targetGrid.col < 0 || targetGrid.col >= GRID_SIZE || targetGrid.row < 0 || targetGrid.row >= GRID_SIZE) return;
-    if (grid[targetGrid.row][targetGrid.col] === 1) return;
-
     const selectedUnits = [];
     let sumX = 0, sumZ = 0;
     for (let i = 0; i < units.length; i++) {
@@ -111,6 +120,47 @@ function issueMoveOrderAtPoint(clientX, clientY) {
         }
     }
     if (selectedUnits.length === 0) return;
+
+    // 1. Проверка клика по врагу или штабу врага (Фокус-атака)
+    const targetEnemy = getEnemyUnderScreenPoint(clientX, clientY);
+    if (targetEnemy) {
+        const enemyPos = targetEnemy.mesh.position;
+        if (typeof spawnOrderMarker === 'function') {
+            spawnOrderMarker(enemyPos.x, enemyPos.z, true);
+        }
+        for (let i = 0; i < selectedUnits.length; i++) {
+            const u = selectedUnits[i];
+            u.targetEnemy = targetEnemy;
+            u.state = States.CHASE;
+            u.personalTarget = null;
+        }
+        return;
+    }
+
+    // 2. Клик по земле — приказ перемещения по Flow Field
+    updateMouseNDC(clientX, clientY);
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObject(ground);
+    if (intersects.length === 0) return;
+
+    let targetPoint = intersects[0].point;
+    let targetGrid = worldToGrid(targetPoint.x, targetPoint.z);
+
+    targetGrid.col = THREE.MathUtils.clamp(targetGrid.col, 1, GRID_SIZE - 2);
+    targetGrid.row = THREE.MathUtils.clamp(targetGrid.row, 1, GRID_SIZE - 2);
+
+    // Если кликнули в стену — направляем в ближайшую свободную клетку рядом
+    if (grid[targetGrid.row][targetGrid.col] === 1) {
+        const freeCell = findFreeCellNear(targetGrid.col, targetGrid.row);
+        targetGrid.col = freeCell.col;
+        targetGrid.row = freeCell.row;
+        const freeWorld = gridToWorld(freeCell.col, freeCell.row);
+        targetPoint = { x: freeWorld.x, y: 0, z: freeWorld.z };
+    }
+
+    if (typeof spawnOrderMarker === 'function') {
+        spawnOrderMarker(targetPoint.x, targetPoint.z, false);
+    }
 
     const count = selectedUnits.length;
     const groupCenterX = sumX / count;
@@ -218,6 +268,7 @@ window.addEventListener('mouseup', (e) => {
                 clickedUnit.selected = true;
                 if (clickedUnit.mesh.userData.selectionRing) clickedUnit.mesh.userData.selectionRing.visible = true;
             }
+            if (typeof updateAbilityUI === 'function') updateAbilityUI();
         }
         isDragging = false;
     }
@@ -259,6 +310,7 @@ function handleTap(clientX, clientY) {
         }
         tappedUnit.selected = true;
         if (tappedUnit.mesh.userData.selectionRing) tappedUnit.mesh.userData.selectionRing.visible = true;
+        if (typeof updateAbilityUI === 'function') updateAbilityUI();
         return;
     }
 
@@ -382,7 +434,22 @@ window.addEventListener('touchcancel', () => {
 const keys = {};
 window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
-    if (e.code === 'KeyE') {
+
+    // Горячие клавиши способностей: Q (Форсаж), E (Щит), R/F (Осада), 1/2/3
+    if (e.code === 'KeyQ') {
+        if (typeof triggerAbilityForSelected === 'function') triggerAbilityForSelected('overdrive');
+    } else if (e.code === 'KeyE') {
+        if (typeof triggerAbilityForSelected === 'function') triggerAbilityForSelected('shield');
+    } else if (e.code === 'KeyR' || e.code === 'KeyF') {
+        if (typeof triggerAbilityForSelected === 'function') triggerAbilityForSelected('siege');
+    } else if (e.code === 'Digit1') {
+        if (typeof triggerAbilityForSelected === 'function') triggerAbilityForSelected('shield');
+    } else if (e.code === 'Digit2') {
+        if (typeof triggerAbilityForSelected === 'function') triggerAbilityForSelected('overdrive');
+    } else if (e.code === 'Digit3') {
+        if (typeof triggerAbilityForSelected === 'function') triggerAbilityForSelected('siege');
+    } else if (e.code === 'KeyG') {
+        // Спавн тестового врага (дебаг)
         raycaster.setFromCamera(mouse, camera);
         const intersects = raycaster.intersectObject(ground);
         if (intersects.length > 0) {

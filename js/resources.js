@@ -125,9 +125,21 @@ function updateResourceNodes(delta, currentTime) {
             }
         }
 
+        const prevOwner = node.owner;
         if (node.captureProgress >= 1.0) node.owner = 'player';
         else if (node.captureProgress <= -1.0) node.owner = 'enemy';
         else if (Math.abs(node.captureProgress) < 0.05) node.owner = 'neutral';
+
+        if (prevOwner !== node.owner && typeof showTacticalAlert === 'function') {
+            if (node.owner === 'player') {
+                if (typeof matchStats !== 'undefined') matchStats.nodesCaptured++;
+                showTacticalAlert(`🟢 Точка «${node.name}» под нашим контролем! (+${NODE_ENERGY_BONUS}⚡/сек)`, false);
+            } else if (prevOwner === 'player') {
+                showTacticalAlert(`⚠️ Внимание: контроль над точкой «${node.name}» потерян!`, true);
+            } else if (node.owner === 'enemy') {
+                showTacticalAlert(`🔴 Враг захватил точку «${node.name}»!`, true);
+            }
+        }
 
         if (node.owner === 'player') playerNodesCount++;
 

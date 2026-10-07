@@ -4,8 +4,10 @@
 
 // --- 0. ВСТРОЕННЫЙ ДЕБАГГЕР ОШИБОК ---
 window.addEventListener('error', function(e) {
+    if (document.getElementById('sys-error-overlay')) return;
     const errEl = document.createElement('div');
-    errEl.style.position = 'absolute';
+    errEl.id = 'sys-error-overlay';
+    errEl.style.position = 'fixed';
     errEl.style.top = '50%';
     errEl.style.left = '50%';
     errEl.style.transform = 'translate(-50%, -50%)';
@@ -13,15 +15,44 @@ window.addEventListener('error', function(e) {
     errEl.style.color = 'white';
     errEl.style.padding = '24px';
     errEl.style.borderRadius = '12px';
-    errEl.style.zIndex = '9999';
+    errEl.style.zIndex = '99999';
     errEl.style.fontFamily = 'monospace';
     errEl.style.fontSize = '14px';
     errEl.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
     errEl.style.maxWidth = '80vw';
     errEl.style.whiteSpace = 'pre-wrap';
-    errEl.innerHTML = `<strong>🚨 Системный сбой JS-кода:</strong><br><br>${e.message}<br><br><span style="color: #fecaca;">Файл: ${e.filename ? e.filename.split('/').pop() : 'script'}<br>Строка: ${e.lineno}:${e.colno}</span>`;
+
+    const errMessage = (e.error && e.error.message) || e.message || 'Неизвестная ошибка';
+    const stack = (e.error && e.error.stack) ? `<br><br><pre style="font-size:11px;overflow:auto;max-height:200px;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;">${e.error.stack}</pre>` : '';
+    errEl.innerHTML = `<strong>🚨 Системный сбой JS-кода:</strong><br><br>${errMessage}${stack}<br><br><span style="color: #fecaca;">Файл: ${e.filename ? e.filename.split('/').pop() : 'script'}<br>Строка: ${e.lineno}:${e.colno}</span><br><br><button onclick="this.parentElement.remove()" style="padding:6px 16px;background:#fff;color:#c00;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Закрыть</button>`;
     document.body.appendChild(errEl);
 });
+
+// --- ПОЛИФИЛЛ ПЛАВНОГО ИНТЕРПОЛИРОВАНИЯ УГЛОВ (КРАТЧАЙШАЯ ДУГА) ---
+function lerpAngle(start, end, t) {
+    let diff = (end - start) % (Math.PI * 2);
+    if (diff > Math.PI) diff -= Math.PI * 2;
+    if (diff < -Math.PI) diff += Math.PI * 2;
+    const clampedT = t < 0 ? 0 : (t > 1 ? 1 : t);
+    return start + diff * clampedT;
+}
+
+if (typeof THREE !== 'undefined') {
+    if (!THREE.MathUtils) THREE.MathUtils = {};
+    if (!THREE.MathUtils.lerpAngle) {
+        THREE.MathUtils.lerpAngle = lerpAngle;
+    }
+}
+
+// --- СТАТИСТИКА МАТЧА (MATCH STATS) ---
+const matchStats = {
+    startTime: 0,
+    enemiesKilled: 0,
+    bossesKilled: 0,
+    unitsProduced: 0,
+    energyHarvested: 100,
+    nodesCaptured: 0
+};
 
 // --- ПЕРЕИСПОЛЬЗУЕМЫЕ ВРЕМЕННЫЕ ПЕРЕМЕННЫЕ (ZERO-ALLOCATION) ---
 const _v1 = new THREE.Vector3();
@@ -73,3 +104,8 @@ const ENEMY_TYPES = {
     tank:     { label: 'Танк',      hp: 240, speed: 2.6, radius: 0.65, scale: 1.4,  damage: 35, attackRange: 4.5, attackCooldown: 1.8, visionRange: 7.0, reward: 25 },
     boss:     { label: 'Левиафан',  hp: 600, shield: 400, maxShield: 400, speed: 1.8, radius: 1.4, scale: 2.4, damage: 38, attackRange: 6.5, attackCooldown: 1.4, visionRange: 10.5, reward: 100 }
 };
+
+// Ограничения волн и лимиты для предотвращения падения производительности
+const MAX_WAVE_SIZE = 25;
+const MAX_ACTIVE_ENEMIES = 50;
+

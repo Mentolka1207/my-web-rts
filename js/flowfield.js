@@ -18,6 +18,7 @@ class FlowFieldGenerator {
         );
 
         this.queue = new Int32Array(this.totalCells);
+        this.lastComputeTime = 0;
     }
 
     generateIntegrationField(targetCol, targetRow) {
@@ -92,8 +93,10 @@ class FlowFieldGenerator {
     }
 
     updateTarget(targetCol, targetRow) {
+        const t0 = performance.now();
         this.generateIntegrationField(targetCol, targetRow);
         this.generateFlowField();
+        this.lastComputeTime = performance.now() - t0;
     }
 }
 

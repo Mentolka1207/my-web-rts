@@ -12,6 +12,9 @@ bossHpBarFgGeo.translate(1.3, 0, 0);
 const bossShieldBarGeo = new THREE.PlaneGeometry(2.6, 0.08);
 bossShieldBarGeo.translate(1.3, 0, 0);
 
+const allyShieldBarGeo = new THREE.PlaneGeometry(0.8, 0.05);
+allyShieldBarGeo.translate(0.4, 0, 0);
+
 const hpBarBgMat = new THREE.MeshBasicMaterial({ color: 0x4a0e0e, side: THREE.DoubleSide });
 const allyHpBarFgMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, side: THREE.DoubleSide });
 const enemyHpBarFgMat = new THREE.MeshBasicMaterial({ color: 0xff3333, side: THREE.DoubleSide });
@@ -29,12 +32,20 @@ function attachHealthBar(parentMesh, isAlly, yOffset = 0.7, widthScale = 1.0) {
     fgMesh.position.x = -0.4;
     barGroup.add(fgMesh);
 
+    let shieldFg = null;
+    if (isAlly) {
+        shieldFg = new THREE.Mesh(allyShieldBarGeo, bossShieldBarMat);
+        shieldFg.position.set(-0.4, 0.08, 0.02);
+        shieldFg.visible = false;
+        barGroup.add(shieldFg);
+    }
+
     if (widthScale !== 1.0) {
         barGroup.scale.set(widthScale, widthScale, 1.0);
     }
 
     parentMesh.add(barGroup);
-    return { group: barGroup, fg: fgMesh, isBoss: false };
+    return { group: barGroup, fg: fgMesh, shieldFg: shieldFg, isBoss: false };
 }
 
 function attachBossHealthBar(parentMesh) {
@@ -56,10 +67,22 @@ function attachBossHealthBar(parentMesh) {
     return { group: barGroup, fg: hpMesh, shieldFg: shieldMesh, isBoss: true };
 }
 
+const _qBar = new THREE.Quaternion();
+
 function updateHealthBar(hpBar, currentHp, maxHp, currentShield = 0, maxShield = 0) {
-    hpBar.group.quaternion.copy(camera.quaternion);
+    if (hpBar.group.parent) {
+        _qBar.copy(hpBar.group.parent.quaternion).invert().multiply(camera.quaternion);
+        hpBar.group.quaternion.copy(_qBar);
+    } else {
+        hpBar.group.quaternion.copy(camera.quaternion);
+    }
     hpBar.fg.scale.x = Math.max(0, currentHp / maxHp);
-    if (hpBar.isBoss && hpBar.shieldFg) {
-        hpBar.shieldFg.scale.x = maxShield > 0 ? Math.max(0, currentShield / maxShield) : 0;
+    if (hpBar.shieldFg) {
+        if (currentShield > 0) {
+            hpBar.shieldFg.visible = true;
+            hpBar.shieldFg.scale.x = maxShield > 0 ? Math.max(0, currentShield / maxShield) : 0;
+        } else {
+            hpBar.shieldFg.visible = false;
+        }
     }
 }

@@ -5,11 +5,32 @@
 const WAVE_INTERVAL = 60;
 let waveNumber = 0;
 let waveTimer = WAVE_INTERVAL;
+let waveWarningGiven = false;
+let lastHQAlertTime = 0;
 const waveNumberEl = document.getElementById('wave-number');
 const waveTimerEl = document.getElementById('wave-timer');
 
+// Нанесение урона союзнику с учётом поглощения энергетическим щитом
+function applyDamageToAlly(target, amount) {
+    if (target.shield && target.shield > 0) {
+        if (target.shield >= amount) {
+            target.shield -= amount;
+        } else {
+            const remainder = amount - target.shield;
+            target.shield = 0;
+            target.hp -= remainder;
+        }
+        if (target.shield <= 0 && target.mesh && target.mesh.userData && target.mesh.userData.shieldMesh) {
+            target.mesh.userData.shieldMesh.visible = false;
+        }
+    } else {
+        target.hp -= amount;
+    }
+}
+
 // Спавн волн врагов
 function spawnWave() {
+    waveWarningGiven = false;
     waveNumber++;
 
     const waveRoster = [];
@@ -45,7 +66,17 @@ function spawnWave() {
         }
     }
 
-    for (let i = 0; i < waveRoster.length; i++) {
+    // Ограничение максимального размера волны (Cap)
+    if (waveRoster.length > MAX_WAVE_SIZE) {
+        waveRoster.length = MAX_WAVE_SIZE;
+    }
+
+    // Ограничение общего количества активных врагов на карте для сохранения 60 FPS
+    const activeCount = enemies.length;
+    const spawnBudget = Math.max(0, MAX_ACTIVE_ENEMIES - activeCount);
+    const countToSpawn = Math.min(waveRoster.length, spawnBudget);
+
+    for (let i = 0; i < countToSpawn; i++) {
         const uType = waveRoster[i];
         const spot = findFreeCellNear(ENEMY_HQ_COL, ENEMY_HQ_ROW);
         const worldPos = gridToWorld(spot.col, spot.row);
@@ -109,15 +140,9 @@ function updateEnemiesAI(currentTime, delta) {
 
         updateHealthBar(enemy.healthBar, enemy.hp, enemy.maxHp, enemy.shield, enemy.maxShield);
 
-        let nearestAlly = null;
-        let minDist = enemy.visionRange;
-
-        for (let j = 0; j < units.length; j++) {
-            const ally = units[j];
-            if (ally.hp <= 0) continue;
-            const d = pos.distanceTo(ally.mesh.position);
-            if (d < minDist) { minDist = d; nearestAlly = ally; }
-        }
+        // Поиск ближайшего союзника через пространственный хеш O(1) вместо O(n)
+        const targetQuery = spatialGrid.findNearest(pos, enemy.visionRange, 'ally');
+        let nearestAlly = targetQuery.unit;
 
         if (nearestAlly) {
             enemy.roamTarget = null;
@@ -129,7 +154,7 @@ function updateEnemiesAI(currentTime, delta) {
                 _v1.subVectors(allyPos, pos);
                 _v1.y = 0;
                 _v1.normalize();
-                enemy.mesh.rotation.y = Math.atan2(-_v1.z, _v1.x);
+                enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
 
                 if (currentTime - enemy.lastAttackTime >= enemy.attackCooldown) {
                     enemy.lastAttackTime = currentTime;
@@ -147,36 +172,43 @@ function updateEnemiesAI(currentTime, delta) {
                         if (targets.length < 3 && playerHQ.hp > 0 && pos.distanceTo(playerHQ.mesh.position) <= enemy.attackRange + playerHQ.radius) {
                             targets.push(playerHQ);
                         }
-
                         if (targets.length <= 1) {
                             // Одиночная цель — тройной концентрированный залп
-                            nearestAlly.hp -= enemy.damage;
+                            applyDamageToAlly(nearestAlly, enemy.damage);
                             fireLaser(pos, allyPos, false);
-                            _v2.copy(allyPos).add(new THREE.Vector3(0.3, 0, 0.3));
+                            _v2.copy(allyPos);
+                            _v2.x += 0.3; _v2.z += 0.3;
                             fireLaser(pos, _v2, false);
-                            _v3.copy(allyPos).add(new THREE.Vector3(-0.3, 0, -0.3));
+                            _v3.copy(allyPos);
+                            _v3.x -= 0.3; _v3.z -= 0.3;
                             fireLaser(pos, _v3, false);
                         } else {
                             // Залп веером по всем целям
                             for (let t = 0; t < targets.length; t++) {
                                 const tgt = targets[t];
-                                tgt.hp -= Math.floor(enemy.damage * 0.75);
+                                applyDamageToAlly(tgt, Math.floor(enemy.damage * 0.75));
                                 fireLaser(pos, tgt.mesh.position, false);
                             }
                         }
                     } else {
                         // Стандартный одиночный выстрел
-                        nearestAlly.hp -= enemy.damage;
+                        applyDamageToAlly(nearestAlly, enemy.damage);
                         fireLaser(pos, allyPos, false);
                     }
                 }
             } else {
-                _v1.subVectors(allyPos, pos);
-                _v1.y = 0;
-                _v1.normalize();
+                // CHASE с учётом препятствий: если прямая заблокирована стеной, обходим угол
+                const los = hasLineOfSight(pos.x, pos.z, allyPos.x, allyPos.z);
+                if (los) {
+                    _v1.subVectors(allyPos, pos);
+                    _v1.y = 0;
+                    _v1.normalize();
+                } else {
+                    findBypassDirection(pos.x, pos.z, allyPos.x, allyPos.z, _v1);
+                }
                 pos.addScaledVector(_v1, enemy.speed * delta);
                 enemy.velocity.copy(_v1).multiplyScalar(enemy.speed);
-                enemy.mesh.rotation.y = Math.atan2(-_v1.z, _v1.x);
+                enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
             }
         } else if (enemy.sabotageNode) {
             // ДИВЕРСИОННЫЙ ОТРЯД: марш на отбитие захваченной точки
@@ -197,7 +229,7 @@ function updateEnemiesAI(currentTime, delta) {
                     _v1.normalize();
                     pos.addScaledVector(_v1, enemy.speed * delta);
                     enemy.velocity.copy(_v1).multiplyScalar(enemy.speed);
-                    enemy.mesh.rotation.y = Math.atan2(-_v1.z, _v1.x);
+                    enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
                 }
             }
         } else if (enemy.isWaveUnit) {
@@ -218,8 +250,13 @@ function updateEnemiesAI(currentTime, delta) {
                     enemy.lastAttackTime = currentTime;
                     playerHQ.hp -= (enemy.type === 'boss' ? 30 : 12);
                     fireLaser(pos, hqPos, false);
+                    if (currentTime - lastHQAlertTime > 8.0 && typeof showTacticalAlert === 'function') {
+                        lastHQAlertTime = currentTime;
+                        showTacticalAlert('🚨 ВНИМАНИЕ: Наш штаб находится под атакой!', true);
+                    }
                     if (enemy.type === 'boss') {
-                        _v2.copy(hqPos).add(new THREE.Vector3(0.4, 0, 0.4));
+                        _v2.copy(hqPos);
+                        _v2.x += 0.4; _v2.z += 0.4;
                         fireLaser(pos, _v2, false);
                     }
                 }
@@ -238,7 +275,7 @@ function updateEnemiesAI(currentTime, delta) {
 
                 pos.addScaledVector(_v1, enemy.speed * delta);
                 enemy.velocity.copy(_v1).multiplyScalar(enemy.speed);
-                enemy.mesh.rotation.y = Math.atan2(-_v1.z, _v1.x);
+                enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
             }
         } else {
             // Патрулирование обычной картой
@@ -283,7 +320,7 @@ function updateEnemiesAI(currentTime, delta) {
                     _v1.normalize();
                     pos.addScaledVector(_v1, enemy.speed * delta);
                     enemy.velocity.copy(_v1).multiplyScalar(enemy.speed);
-                    enemy.mesh.rotation.y = Math.atan2(-_v1.z, _v1.x);
+                    enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
                 }
             }
         }

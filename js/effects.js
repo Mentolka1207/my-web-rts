@@ -96,6 +96,83 @@ function fireLaser(fromPos, toPos, isAlly) {
     spawnHitFlash(toPos, isAlly);
 }
 
+// Пул маркеров приказа (Move / Attack Waypoint Marker)
+const MAX_ORDER_MARKERS = 8;
+const orderMarkers = [];
+const orderRingGeo = new THREE.RingGeometry(0.55, 0.72, 24);
+orderRingGeo.rotateX(-Math.PI / 2);
+const baseMarkerMat = new THREE.MeshBasicMaterial({
+    color: 0x00ffcc, side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false
+});
+
+for (let i = 0; i < MAX_ORDER_MARKERS; i++) {
+    const mesh = new THREE.Mesh(orderRingGeo, baseMarkerMat.clone());
+    mesh.visible = false;
+    mesh.position.y = 0.04;
+    scene.add(mesh);
+    orderMarkers.push({ mesh: mesh, active: false, elapsed: 0, maxLife: 0.38 });
+}
+
+function spawnOrderMarker(x, z, isAttack = false) {
+    let m = orderMarkers.find(o => !o.active);
+    if (!m) m = orderMarkers[0];
+    m.mesh.material.color.setHex(isAttack ? 0xff3333 : 0x00ffcc);
+    m.mesh.position.set(x, 0.04, z);
+    m.mesh.scale.set(0.5, 0.5, 0.5);
+    m.mesh.material.opacity = 0.9;
+    m.mesh.visible = true;
+    m.active = true;
+    m.elapsed = 0;
+}
+
+// Пул частиц неонового шлейфа двигателей (Overdrive Engine Trail)
+const MAX_TRAIL_PARTICLES = 36;
+const trailParticles = [];
+const trailBoxGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+const trailMat = new THREE.MeshBasicMaterial({
+    color: 0x00ffff, transparent: true, opacity: 0.85, depthWrite: false
+});
+
+for (let i = 0; i < MAX_TRAIL_PARTICLES; i++) {
+    const mesh = new THREE.Mesh(trailBoxGeo, trailMat.clone());
+    mesh.visible = false;
+    scene.add(mesh);
+    trailParticles.push({
+        mesh: mesh,
+        age: 0,
+        maxLife: 0.35,
+        active: false
+    });
+}
+
+function spawnTrailParticle(x, y, z) {
+    let p = trailParticles.find(t => !t.active);
+    if (!p) p = trailParticles[0];
+    p.active = true;
+    p.age = 0;
+    p.mesh.position.set(x + (Math.random() - 0.5) * 0.1, y, z + (Math.random() - 0.5) * 0.1);
+    p.mesh.scale.setScalar(1.0);
+    p.mesh.material.opacity = 0.85;
+    p.mesh.visible = true;
+}
+
+function updateTrailParticles(delta) {
+    for (let i = 0; i < MAX_TRAIL_PARTICLES; i++) {
+        const p = trailParticles[i];
+        if (!p.active) continue;
+        p.age += delta;
+        const progress = p.age / p.maxLife;
+        if (progress >= 1) {
+            p.active = false;
+            p.mesh.visible = false;
+        } else {
+            const scale = 1.0 - progress * 0.6;
+            p.mesh.scale.setScalar(scale);
+            p.mesh.material.opacity = 0.85 * (1 - progress);
+        }
+    }
+}
+
 function updateVFX(delta) {
     for (let i = 0; i < MAX_LASERS; i++) {
         if (!laserData[i].active) continue;
@@ -119,6 +196,23 @@ function updateVFX(delta) {
             flashSprites[i].scale.set(s, s, s);
         }
     }
+
+    for (let i = 0; i < MAX_ORDER_MARKERS; i++) {
+        const m = orderMarkers[i];
+        if (!m.active) continue;
+        m.elapsed += delta;
+        const progress = m.elapsed / m.maxLife;
+        if (progress >= 1) {
+            m.active = false;
+            m.mesh.visible = false;
+        } else {
+            const s = 0.5 + progress * 0.6;
+            m.mesh.scale.set(s, s, s);
+            m.mesh.material.opacity = 0.9 * (1 - progress);
+        }
+    }
+
+    updateTrailParticles(delta);
 }
 
 // Пул частиц взрывов
