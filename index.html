@@ -30,16 +30,21 @@
             <strong>Управление Swarm RTS:</strong><br>
             • <strong>Клик ЛКМ</strong> — выделить одного дрона<br>
             • Зажми <strong>ЛКМ и тяни</strong> — выделить рамкой группу<br>
-            • Клик <strong>ПКМ</strong> — отправить рой в точку (Flow Field)<br>
+            • Клик <strong>ПКМ</strong> — переместить рой / фокус-атака врага и штаба<br>
+            • <strong>Способности юнитов:</strong><br>
+            &nbsp;&nbsp;⚡ <strong>Форсаж [Q]</strong> (Разведчик) — +80% скорости на 3с<br>
+            &nbsp;&nbsp;🛡️ <strong>Щит [E]</strong> (Дрон) — энергобарьер 50 HP на 6с<br>
+            &nbsp;&nbsp;⚓ <strong>Осада [R/F]</strong> (Танк) — дальность огня x2, сплэш-урон<br>
             • <strong>Колёсико мыши:</strong> зажми и тяни (MMB) — перемещение карты, крути — зум<br>
-            • <strong>Сенсор / Тач:</strong> свайп одним пальцем — перемещение карты, щипок — зум, тап — приказ/выбор<br>
-            • <strong>W, A, S, D</strong> — движение камеры, <strong>E</strong> — спавн врага<br>
+            • <strong>Сенсор / Тач:</strong> свайп одним пальцем — перемещение карты, щипок — зум, тап — выбор/приказ<br>
+            • <strong>W, A, S, D</strong> — движение камеры, <strong>G</strong> — спавн врага<br>
             • <strong>Точки сбора:</strong> захватывай кристаллы на карте (+3⚡/сек за точку)<br>
             • <strong>Волны:</strong> эволюция врагов с волны 3+, Босс «Левиафан» на волне 10!<br><br>
             <strong>Тактическое построение:</strong><br>
-            <button onclick="setFormation('line')">Шеренга</button>
-            <button onclick="setFormation('wedge')">Клин</button>
+            <button id="formation-line-btn" onclick="setFormation('line')">Шеренга</button>
+            <button id="formation-wedge-btn" onclick="setFormation('wedge')">Клин</button>
             <button id="mobile-spawn-btn" onclick="spawnEnemyNearCenter()">Спавн врага</button>
+            <button onclick="toggleDebugOverlay()">Дебаг (F3)</button>
         </div>
     </div>
     <div id="resource-panel" style="display:none;">
@@ -61,18 +66,53 @@
     <div id="touch-mode-panel" style="display:none;">
         <button id="touch-mode-btn" onclick="toggleTouchMode()">🖐 Карта (Сенсор)</button>
     </div>
+    <div id="ability-panel" style="display:none;">
+        <button id="btn-ability-shield" class="ability-btn" onclick="triggerAbilityForSelected('shield')">
+            <span class="ability-icon">🛡️</span>
+            <div class="ability-info">
+                <span class="ability-name">Щит <span class="ability-key">[E]</span></span>
+                <span class="ability-status" id="status-ability-shield">ГОТОВО</span>
+            </div>
+        </button>
+        <button id="btn-ability-overdrive" class="ability-btn" onclick="triggerAbilityForSelected('overdrive')">
+            <span class="ability-icon">⚡</span>
+            <div class="ability-info">
+                <span class="ability-name">Форсаж <span class="ability-key">[Q]</span></span>
+                <span class="ability-status" id="status-ability-overdrive">ГОТОВО</span>
+            </div>
+        </button>
+        <button id="btn-ability-siege" class="ability-btn" onclick="triggerAbilityForSelected('siege')">
+            <span class="ability-icon">⚓</span>
+            <div class="ability-info">
+                <span class="ability-name">Осада <span class="ability-key">[R]</span></span>
+                <span class="ability-status" id="status-ability-siege">МОБИЛЬНЫЙ</span>
+            </div>
+        </button>
+    </div>
     <div id="minimap-wrap" style="display:none;">
         <canvas id="minimap" width="170" height="170"></canvas>
     </div>
+    <div id="debug-overlay" style="display:none;">
+        <div class="debug-title">🛠️ RTS ENGINE DEBUG (F3)</div>
+        <div class="debug-row"><span>FPS:</span> <span id="dbg-fps" class="dbg-val">60</span></div>
+        <div class="debug-row"><span>Кадр (мс):</span> <span id="dbg-frame-time" class="dbg-val">16.6 ms</span></div>
+        <div class="debug-row"><span>Юниты (союз/враг):</span> <span id="dbg-units" class="dbg-val">0 / 0</span></div>
+        <div class="debug-row"><span>Выделено:</span> <span id="dbg-selected" class="dbg-val">0</span></div>
+        <div class="debug-row"><span>Draw Calls:</span> <span id="dbg-draw-calls" class="dbg-val">0</span></div>
+        <div class="debug-row"><span>Треугольники:</span> <span id="dbg-triangles" class="dbg-val">0</span></div>
+        <div class="debug-row"><span>Flow Field BFS:</span> <span id="dbg-flowfield" class="dbg-val">0.00 ms</span></div>
+    </div>
     <div id="game-over-overlay">
         <div id="game-over-title">ПОБЕДА!</div>
-        <button onclick="location.reload()">Начать заново</button>
+        <div id="game-over-stats"></div>
+        <button id="game-over-restart-btn" onclick="location.reload()">▶ Играть снова</button>
     </div>
     <div id="canvas-container"></div>
 
     <!-- Модули Minimal Web RTS -->
     <script src="js/config.js"></script>
     <script src="js/grid.js"></script>
+    <script src="js/spatialhash.js"></script>
     <script src="js/formations.js"></script>
     <script src="js/flowfield.js"></script>
     <script src="js/scene.js"></script>
