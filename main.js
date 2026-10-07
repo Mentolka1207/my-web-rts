@@ -42,12 +42,20 @@ function animate() {
         energyAccumulator += delta;
         if (energyAccumulator >= 1) {
             energyAccumulator -= 1;
-            energy += (ENERGY_INCOME_PER_SEC + playerNodesCount * NODE_ENERGY_BONUS);
+            const inc = (ENERGY_INCOME_PER_SEC + playerNodesCount * NODE_ENERGY_BONUS);
+            energy += inc;
+            if (typeof matchStats !== 'undefined') matchStats.energyHarvested += inc;
             updateResourceUI();
         }
 
         // 3. Таймер волн врагов
         waveTimer -= delta;
+        if (waveTimer <= 10 && !waveWarningGiven && gameStarted) {
+            waveWarningGiven = true;
+            const nextWave = waveNumber + 1;
+            const isBoss = (nextWave === 10 || (nextWave > 10 && nextWave % 10 === 0));
+            showTacticalAlert(isBoss ? `⚠️ ТРЕВОГА: Приближается БОСС «Левиафан» через 10с!` : `🌊 Внимание: Волна ${nextWave} начнётся через 10 секунд!`, isBoss);
+        }
         if (waveTimer <= 0) {
             waveTimer += WAVE_INTERVAL;
             spawnWave();
@@ -61,23 +69,27 @@ function animate() {
         if (playerHQ.hp > 0) updateHealthBar(playerHQ.healthBar, playerHQ.hp, playerHQ.maxHp);
         if (enemyHQ.hp > 0) updateHealthBar(enemyHQ.healthBar, enemyHQ.hp, enemyHQ.maxHp);
 
+        // 5.5. Обновление пространственного хеша для O(1) поиска целей и коллизий
+        spatialGrid.clear();
+        for (let i = 0; i < units.length; i++) {
+            if (units[i].hp > 0) spatialGrid.insert(units[i], false);
+        }
+        for (let i = 0; i < enemies.length; i++) {
+            if (enemies[i].hp > 0) spatialGrid.insert(enemies[i], true);
+        }
+
         // 6. FSM логика союзных юнитов игрока
         for (let i = 0; i < units.length; i++) {
             const unit = units[i];
             if (unit.hp <= 0) continue;
             const pos = unit.mesh.position;
 
-            updateHealthBar(unit.healthBar, unit.hp, unit.maxHp);
+            updateHealthBar(unit.healthBar, unit.hp, unit.maxHp, unit.shield || 0, unit.maxShield || 50);
 
-            let nearestEnemy = null;
-            let minDist = unit.visionRange;
-
-            for (let j = 0; j < enemies.length; j++) {
-                const enemy = enemies[j];
-                if (enemy.hp <= 0) continue;
-                const d = pos.distanceTo(enemy.mesh.position);
-                if (d < minDist) { minDist = d; nearestEnemy = enemy; }
-            }
+            // Быстрый поиск ближайшего врага через пространственный хеш
+            const query = spatialGrid.findNearest(pos, unit.visionRange, 'enemy');
+            let nearestEnemy = query.unit;
+            let minDist = query.dist;
 
             if (enemyHQ.hp > 0) {
                 const dHQ = pos.distanceTo(enemyHQ.mesh.position);
@@ -126,7 +138,8 @@ function animate() {
                             const distance = _v1.length();
                             _v1.normalize();
 
-                            if (distance < 4.0 || (flowVector.x === 0 && flowVector.y === 0)) {
+                            const hasLOS = hasLineOfSight(pos.x, pos.z, unit.personalTarget.x, unit.personalTarget.z);
+                            if ((distance < 4.0 && hasLOS) || (flowVector.x === 0 && flowVector.y === 0)) {
                                 _v2.copy(_v1);
                             } else {
                                 _v3.set(flowVector.x, 0, flowVector.y);
@@ -136,13 +149,14 @@ function animate() {
                             const step = Math.min(unit.speed * delta, distance);
                             pos.addScaledVector(_v2, step);
                             unit.velocity.copy(_v2).multiplyScalar(unit.speed);
-                            unit.mesh.rotation.y = THREE.MathUtils.lerp(unit.mesh.rotation.y, Math.atan2(-_v2.z, _v2.x), 10 * delta);
+                            unit.mesh.rotation.y = THREE.MathUtils.lerpAngle(unit.mesh.rotation.y, Math.atan2(-_v2.z, _v2.x), 10 * delta);
                         }
                     }
                     break;
 
                 case States.CHASE:
                     if (!unit.targetEnemy || unit.targetEnemy.hp <= 0) {
+                        unit.targetEnemy = null;
                         unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
                         unit.velocity.set(0, 0, 0);
                         break;
@@ -159,18 +173,25 @@ function animate() {
                         unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
                         unit.velocity.set(0, 0, 0);
                     } else {
-                        _v1.subVectors(enemyPos, pos);
-                        _v1.y = 0;
-                        _v1.normalize();
+                        // CHASE с учётом препятствий: если прямая заблокирована стеной, обходим угол
+                        const los = hasLineOfSight(pos.x, pos.z, enemyPos.x, enemyPos.z);
+                        if (los) {
+                            _v1.subVectors(enemyPos, pos);
+                            _v1.y = 0;
+                            _v1.normalize();
+                        } else {
+                            findBypassDirection(pos.x, pos.z, enemyPos.x, enemyPos.z, _v1);
+                        }
                         pos.addScaledVector(_v1, unit.speed * delta);
                         unit.velocity.copy(_v1).multiplyScalar(unit.speed);
-                        unit.mesh.rotation.y = Math.atan2(-_v1.z, _v1.x);
+                        unit.mesh.rotation.y = THREE.MathUtils.lerpAngle(unit.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
                     }
                     break;
 
                 case States.ATTACK:
                     unit.velocity.set(0, 0, 0);
                     if (!unit.targetEnemy || unit.targetEnemy.hp <= 0) {
+                        unit.targetEnemy = null;
                         unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
                         break;
                     }
@@ -184,7 +205,7 @@ function animate() {
                         _v1.subVectors(attEnemyPos, pos);
                         _v1.y = 0;
                         _v1.normalize();
-                        unit.mesh.rotation.y = Math.atan2(-_v1.z, _v1.x);
+                        unit.mesh.rotation.y = THREE.MathUtils.lerpAngle(unit.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
 
                         if (currentTime - unit.lastAttackTime >= unit.attackCooldown) {
                             unit.lastAttackTime = currentTime;
@@ -206,6 +227,20 @@ function animate() {
                             }
 
                             fireLaser(pos, attEnemyPos, true);
+
+                            // Осадный сплэш-урон Танка по площади в радиусе 2.2
+                            if (unit.isSieged) {
+                                spawnExplosion(attEnemyPos, 8);
+                                for (let oIdx = 0; oIdx < enemies.length; oIdx++) {
+                                    const other = enemies[oIdx];
+                                    if (other !== unit.targetEnemy && other.hp > 0) {
+                                        if (other.mesh.position.distanceTo(attEnemyPos) <= 2.2) {
+                                            other.hp -= Math.floor(unit.damage * 0.5);
+                                            spawnHitFlash(other.mesh.position, true);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     break;
@@ -243,6 +278,11 @@ function animate() {
                 enemies.splice(i, 1);
                 const reward = e.reward || ENEMY_KILL_REWARD;
                 energy += reward;
+                if (typeof matchStats !== 'undefined') {
+                    matchStats.energyHarvested += reward;
+                    matchStats.enemiesKilled++;
+                    if (isBoss) matchStats.bossesKilled++;
+                }
                 updateResourceUI();
                 if (isBoss) {
                     showTacticalAlert('🏆 БОСС «ЛЕВИАФАН» УНИЧТОЖЕН! (+100⚡)', false);
@@ -253,44 +293,12 @@ function animate() {
         // Проверка победы или поражения
         checkGameOverConditions();
 
-        // 10. Скалярная 2D физика расталкивания (Unit-Unit & Unit-Wall)
+        // 10. Высокопроизводительное пространственное расталкивание юнитов O(n) (Spatial Grid)
+        spatialGrid.resolveSeparation();
+
         const numAllies = units.length;
         const numEnemies = enemies.length;
         const totalUnits = numAllies + numEnemies;
-
-        for (let i = 0; i < totalUnits; i++) {
-            const u1 = i < numAllies ? units[i] : enemies[i - numAllies];
-            if (u1.hp <= 0) continue;
-            const p1 = u1.mesh.position;
-
-            for (let j = i + 1; j < totalUnits; j++) {
-                const u2 = j < numAllies ? units[j] : enemies[j - numAllies];
-                if (u2.hp <= 0) continue;
-                const p2 = u2.mesh.position;
-
-                const dx = p2.x - p1.x;
-                const dz = p2.z - p1.z;
-                const distSq = dx * dx + dz * dz;
-                const minDist = u1.radius + u2.radius;
-
-                if (distSq < minDist * minDist) {
-                    let dist = Math.sqrt(distSq);
-                    let nx, nz;
-                    if (dist > 0.0001) {
-                        nx = dx / dist;
-                        nz = dz / dist;
-                    } else {
-                        nx = 1; nz = 0;
-                        dist = 0.0001;
-                    }
-                    const overlap = (minDist - dist) * 0.5;
-                    p1.x -= nx * overlap;
-                    p1.z -= nz * overlap;
-                    p2.x += nx * overlap;
-                    p2.z += nz * overlap;
-                }
-            }
-        }
 
         // Столкновения со стенами
         for (let i = 0; i < totalUnits; i++) {
@@ -337,8 +345,17 @@ function animate() {
     updateExplosions(delta);
     updateMinimap();
 
-    // 12. Финальный рендер кадра
+    // 12. Обновление Debug-Overlay и панели способностей
+    if (typeof updateDebugOverlay === 'function') {
+        updateDebugOverlay(delta);
+    }
+    if (typeof updateAbilityUI === 'function') {
+        updateAbilityUI(currentTime);
+    }
+
+    // 13. Финальный рендер кадра
     renderer.render(scene, camera);
+    
 }
 
 // Старт игрового цикла
