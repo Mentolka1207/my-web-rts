@@ -31,10 +31,11 @@
             • <strong>Клик ЛКМ</strong> — выделить одного дрона<br>
             • Зажми <strong>ЛКМ и тяни</strong> — выделить рамкой группу<br>
             • Клик <strong>ПКМ</strong> — отправить рой в точку (Flow Field)<br>
-            • Клавиша <strong>E</strong> — спавн вражеского патрульного дрона<br>
-            • <strong>W, A, S, D</strong> — движение камеры, <strong>колесо мыши</strong> — зум<br>
-            • <strong>Тач:</strong> тап — выделить/приказ, тяни одним пальцем — рамка, двумя пальцами — панорама/зум<br>
-            • <strong>Точки сбора:</strong> захватывай кристаллы на карте (+3⚡/сек за точку)<br><br>
+            • <strong>Колёсико мыши:</strong> зажми и тяни (MMB) — перемещение карты, крути — зум<br>
+            • <strong>Сенсор / Тач:</strong> свайп одним пальцем — перемещение карты, щипок — зум, тап — приказ/выбор<br>
+            • <strong>W, A, S, D</strong> — движение камеры, <strong>E</strong> — спавн врага<br>
+            • <strong>Точки сбора:</strong> захватывай кристаллы на карте (+3⚡/сек за точку)<br>
+            • <strong>Волны:</strong> эволюция врагов с волны 3+, Босс «Левиафан» на волне 10!<br><br>
             <strong>Тактическое построение:</strong><br>
             <button onclick="setFormation('line')">Шеренга</button>
             <button onclick="setFormation('wedge')">Клин</button>
@@ -56,6 +57,10 @@
     <div id="wave-panel" style="display:none;">
         🌊 Волна <span id="wave-number">0</span> — след. через <span id="wave-timer">60</span>с
     </div>
+    <div id="tactical-alert" style="display:none;"></div>
+    <div id="touch-mode-panel" style="display:none;">
+        <button id="touch-mode-btn" onclick="toggleTouchMode()">🖐 Карта (Сенсор)</button>
+    </div>
     <div id="minimap-wrap" style="display:none;">
         <canvas id="minimap" width="170" height="170"></canvas>
     </div>
@@ -65,6 +70,23 @@
     </div>
     <div id="canvas-container"></div>
 
+    <!-- Модули Minimal Web RTS -->
+    <script src="js/config.js"></script>
+    <script src="js/grid.js"></script>
+    <script src="js/formations.js"></script>
+    <script src="js/flowfield.js"></script>
+    <script src="js/scene.js"></script>
+    <script src="js/terrain.js"></script>
+    <script src="js/healthbar.js"></script>
+    <script src="js/models.js"></script>
+    <script src="js/effects.js"></script>
+    <script src="js/units.js"></script>
+    <script src="js/resources.js"></script>
+    <script src="js/economy.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/ai.js"></script>
+    <script src="js/minimap.js"></script>
+    <script src="js/input.js"></script>
     <script src="main.js"></script>
 </body>
 </html>
