@@ -44,11 +44,18 @@ body {
     box-sizing: border-box;
 }
 
-#instructions-toggle {
+#instructions-toggle,
+#sound-toggle-btn {
     display: inline-block;
     padding: 4px 10px;
     font-size: 12px;
-    margin: 0 0 8px 0;
+    margin: 0;
+}
+
+#sound-toggle-btn {
+    background: rgba(0, 119, 255, 0.4);
+    border-color: #00ffcc;
+    color: #00ffcc;
 }
 
 button {
