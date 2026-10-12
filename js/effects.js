@@ -2,16 +2,26 @@
 // js/effects.js — Пул визуальных эффектов (Object Pooling для лазеров, вспышек, взрывов)
 // =============================================================================
 
-// Процедурная текстура вспышки
+// Процедурная текстура вспышки выстрела и попадания высокого разрешения
 const flashCanvas = document.createElement('canvas');
-flashCanvas.width = 32; flashCanvas.height = 32;
+flashCanvas.width = 64; flashCanvas.height = 64;
 const flashCtx = flashCanvas.getContext('2d');
-const flashGrad = flashCtx.createRadialGradient(16, 16, 0, 16, 16, 16);
-flashGrad.addColorStop(0, 'rgba(255,255,255,1)');
-flashGrad.addColorStop(0.4, 'rgba(255,220,120,0.9)');
-flashGrad.addColorStop(1, 'rgba(255,150,0,0)');
+const flashGrad = flashCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
+flashGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+flashGrad.addColorStop(0.2, 'rgba(255, 240, 180, 0.95)');
+flashGrad.addColorStop(0.5, 'rgba(0, 255, 204, 0.6)');
+flashGrad.addColorStop(1, 'rgba(0, 200, 255, 0)');
 flashCtx.fillStyle = flashGrad;
-flashCtx.fillRect(0, 0, 32, 32);
+flashCtx.fillRect(0, 0, 64, 64);
+
+// Лучистый крестообразный блик оптики (Lens Flare Spikes)
+flashCtx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+flashCtx.lineWidth = 1.5;
+flashCtx.beginPath();
+flashCtx.moveTo(4, 32); flashCtx.lineTo(60, 32);
+flashCtx.moveTo(32, 4); flashCtx.lineTo(32, 60);
+flashCtx.stroke();
+
 const flashTexture = new THREE.CanvasTexture(flashCanvas);
 flashTexture.generateMipmaps = false;
 flashTexture.minFilter = THREE.LinearFilter;
@@ -57,6 +67,7 @@ for (let i = 0; i < MAX_FLASHES; i++) {
 }
 
 function spawnHitFlash(position, isAlly) {
+    if (typeof playHitSound === 'function') playHitSound(false);
     let idx = -1;
     for (let i = 0; i < MAX_FLASHES; i++) {
         if (!flashData[i].active) { idx = i; break; }
@@ -73,7 +84,8 @@ function spawnHitFlash(position, isAlly) {
     flashData[idx].elapsed = 0;
 }
 
-function fireLaser(fromPos, toPos, isAlly) {
+function fireLaser(fromPos, toPos, isAlly, laserType) {
+    if (typeof playLaserSound === 'function') playLaserSound(laserType || (isAlly ? 'ally' : 'enemy'));
     let idx = -1;
     for (let i = 0; i < MAX_LASERS; i++) {
         if (!laserData[i].active) { idx = i; break; }
@@ -114,6 +126,7 @@ for (let i = 0; i < MAX_ORDER_MARKERS; i++) {
 }
 
 function spawnOrderMarker(x, z, isAttack = false) {
+    if (typeof playOrderSound === 'function') playOrderSound(isAttack);
     let m = orderMarkers.find(o => !o.active);
     if (!m) m = orderMarkers[0];
     m.mesh.material.color.setHex(isAttack ? 0xff3333 : 0x00ffcc);
@@ -213,6 +226,16 @@ function updateVFX(delta) {
     }
 
     updateTrailParticles(delta);
+
+    // Вращение радаров и голографических колец связи штабов
+    if (typeof playerHQ !== 'undefined' && playerHQ) {
+        if (playerHQ.radarMesh) playerHQ.radarMesh.rotation.y += delta * 1.6;
+        if (playerHQ.holoRing) playerHQ.holoRing.rotation.z += delta * 0.8;
+    }
+    if (typeof enemyHQ !== 'undefined' && enemyHQ) {
+        if (enemyHQ.radarMesh) enemyHQ.radarMesh.rotation.y -= delta * 1.6;
+        if (enemyHQ.holoRing) enemyHQ.holoRing.rotation.z -= delta * 0.8;
+    }
 }
 
 // Пул частиц взрывов
@@ -243,6 +266,10 @@ for (let i = 0; i < MAX_EXPLOSION_PARTICLES; i++) {
 }
 
 function spawnExplosion(position, count = 10) {
+    if (typeof playExplosionSound === 'function') {
+        const scale = count >= 25 ? 2.2 : (count >= 15 ? 1.4 : 1.0);
+        playExplosionSound(scale);
+    }
     let spawned = 0;
     for (let i = 0; i < MAX_EXPLOSION_PARTICLES && spawned < count; i++) {
         const p = explosionParticles[i];
@@ -285,21 +312,45 @@ function updateExplosions(delta) {
     }
 }
 
-// Опалённые следы на земле
+// Опалённые следы на земле высокого качества
 const scorchCanvas = document.createElement('canvas');
-scorchCanvas.width = 64; scorchCanvas.height = 64;
+scorchCanvas.width = 128; scorchCanvas.height = 128;
 const scorchCtx = scorchCanvas.getContext('2d');
-const scorchGrad = scorchCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
-scorchGrad.addColorStop(0, 'rgba(10,8,6,0.75)');
-scorchGrad.addColorStop(0.7, 'rgba(10,8,6,0.4)');
-scorchGrad.addColorStop(1, 'rgba(10,8,6,0)');
+
+// Радиальный ожог металла
+const scorchGrad = scorchCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
+scorchGrad.addColorStop(0, 'rgba(8, 6, 5, 0.9)');
+scorchGrad.addColorStop(0.35, 'rgba(12, 10, 8, 0.7)');
+scorchGrad.addColorStop(0.7, 'rgba(15, 12, 10, 0.35)');
+scorchGrad.addColorStop(1, 'rgba(15, 12, 10, 0)');
 scorchCtx.fillStyle = scorchGrad;
-scorchCtx.fillRect(0, 0, 64, 64);
+scorchCtx.fillRect(0, 0, 128, 128);
+
+// Тлеющее внутреннее свечение раскаленного титана
+const emberGrad = scorchCtx.createRadialGradient(64, 64, 0, 64, 64, 28);
+emberGrad.addColorStop(0, 'rgba(255, 100, 20, 0.32)');
+emberGrad.addColorStop(0.5, 'rgba(255, 60, 0, 0.12)');
+emberGrad.addColorStop(1, 'rgba(255, 40, 0, 0)');
+scorchCtx.fillStyle = emberGrad;
+scorchCtx.beginPath(); scorchCtx.arc(64, 64, 28, 0, Math.PI * 2); scorchCtx.fill();
+
+// Радиальные трещины и разбрызгивание окалины
+scorchCtx.strokeStyle = 'rgba(8, 6, 5, 0.6)';
+scorchCtx.lineWidth = 2;
+for (let i = 0; i < 12; i++) {
+    const angle = (i * Math.PI * 2) / 12 + Math.random() * 0.3;
+    const len = 35 + Math.random() * 25;
+    scorchCtx.beginPath();
+    scorchCtx.moveTo(64, 64);
+    scorchCtx.lineTo(64 + Math.cos(angle) * len, 64 + Math.sin(angle) * len);
+    scorchCtx.stroke();
+}
+
 const scorchTexture = new THREE.CanvasTexture(scorchCanvas);
 scorchTexture.generateMipmaps = false;
 scorchTexture.minFilter = THREE.LinearFilter;
 
-const scorchGeo = new THREE.PlaneGeometry(1.6, 1.6);
+const scorchGeo = new THREE.PlaneGeometry(1.8, 1.8);
 const scorchMat = new THREE.MeshBasicMaterial({ map: scorchTexture, transparent: true, depthWrite: false });
 const scorches = [];
 const MAX_SCORCHES = 60;

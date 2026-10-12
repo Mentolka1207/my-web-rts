@@ -49,7 +49,7 @@ function findFreeCellNear(col, row) {
 // Создание союзного юнита
 function createUnit(col, row, type = 'standard') {
     const stats = DRONE_TYPES[type];
-    const mesh = createDroneUnit(true);
+    const mesh = createDroneUnit(true, type);
     mesh.scale.setScalar(stats.scale);
     const pos = gridToWorld(col, row);
     mesh.position.set(pos.x, 0.75, pos.z);
@@ -92,7 +92,7 @@ function createEnemy(x, z, type = 'standard', isWaveUnit = false, sabotageNode =
     const stats = ENEMY_TYPES[type] || ENEMY_TYPES.standard;
     const isBoss = type === 'boss';
 
-    const mesh = isBoss ? createBossUnit() : createDroneUnit(false);
+    const mesh = isBoss ? createBossUnit() : createDroneUnit(false, type);
     mesh.scale.setScalar(stats.scale);
     mesh.position.set(x, 0.75, z);
     scene.add(mesh);
@@ -283,6 +283,10 @@ function triggerAbilityForSelected(abilityType) {
         } else if (abilityType === 'shield' && u.type === 'standard') {
             if (activateDroneShield(u, curTime)) activated++;
         }
+    }
+
+    if (activated > 0 && typeof playAbilitySound === 'function') {
+        playAbilitySound(abilityType);
     }
 
     if (typeof showTacticalAlert === 'function') {

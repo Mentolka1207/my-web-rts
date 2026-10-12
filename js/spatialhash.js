@@ -150,11 +150,38 @@ class SpatialGrid {
                 nx = 1; nz = 0;
                 dist = 0.0001;
             }
-            const overlap = (minDist - dist) * 0.5;
-            p1.x -= nx * overlap;
-            p1.z -= nz * overlap;
-            p2.x += nx * overlap;
-            p2.z += nz * overlap;
+            const overlap = minDist - dist;
+
+            // Учет осадного режима и массы юнитов при разделении
+            const s1 = !!u1.isSieged;
+            const s2 = !!u2.isSieged;
+
+            if (s1 && s2) {
+                p1.x -= nx * overlap * 0.5;
+                p1.z -= nz * overlap * 0.5;
+                p2.x += nx * overlap * 0.5;
+                p2.z += nz * overlap * 0.5;
+            } else if (s1) {
+                // u1 зафиксирован на грунте — отталкиваем только u2
+                p2.x += nx * overlap;
+                p2.z += nz * overlap;
+            } else if (s2) {
+                // u2 зафиксирован на грунте — отталкиваем только u1
+                p1.x -= nx * overlap;
+                p1.z -= nz * overlap;
+            } else {
+                // Распределение импульса по массе (квадрат радиуса)
+                const m1 = u1.radius * u1.radius;
+                const m2 = u2.radius * u2.radius;
+                const totalM = m1 + m2;
+                const w1 = totalM > 0 ? (m2 / totalM) : 0.5;
+                const w2 = totalM > 0 ? (m1 / totalM) : 0.5;
+
+                p1.x -= nx * overlap * w1;
+                p1.z -= nz * overlap * w1;
+                p2.x += nx * overlap * w2;
+                p2.z += nz * overlap * w2;
+            }
         }
     }
 }

@@ -74,6 +74,12 @@ class FlowFieldGenerator {
                         const nc = c + dx;
                         const nr = r + dy;
                         if (nc < 0 || nc >= this.width || nr < 0 || nr >= this.height) continue;
+                        // Диагональное движение запрещено через углы препятствий
+                        if (dx !== 0 && dy !== 0) {
+                            if (this.costField[r][c + dx] === 255 || this.costField[r + dy][c] === 255) {
+                                continue;
+                            }
+                        }
                         const neighborCost = this.integrationField[nr][nc];
                         if (neighborCost < minCost) {
                             minCost = neighborCost;

@@ -47,6 +47,7 @@ function produceUnit(type = 'standard') {
     const spot = findFreeCellNear(BASE_COL, BASE_ROW);
     createUnit(spot.col, spot.row, type);
     matchStats.unitsProduced++;
+    if (typeof playProduceSound === 'function') playProduceSound();
     updateResourceUI();
 }
 

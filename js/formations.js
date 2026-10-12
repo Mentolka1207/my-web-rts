@@ -27,6 +27,7 @@ function updateFormationUI() {
 function setFormation(type) {
     currentFormation = type;
     updateFormationUI();
+    if (typeof playSelectSound === 'function') playSelectSound();
 }
 
 // Первичная инициализация подсветки кнопки построения

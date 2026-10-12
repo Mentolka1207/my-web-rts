@@ -3,7 +3,7 @@
 // =============================================================================
 
 // --- 0. ВСТРОЕННЫЙ ДЕБАГГЕР ОШИБОК ---
-window.addEventListener('error', function(e) {
+function showSystemError(err, sourceInfo) {
     if (document.getElementById('sys-error-overlay')) return;
     const errEl = document.createElement('div');
     errEl.id = 'sys-error-overlay';
@@ -22,10 +22,34 @@ window.addEventListener('error', function(e) {
     errEl.style.maxWidth = '80vw';
     errEl.style.whiteSpace = 'pre-wrap';
 
-    const errMessage = (e.error && e.error.message) || e.message || 'Неизвестная ошибка';
-    const stack = (e.error && e.error.stack) ? `<br><br><pre style="font-size:11px;overflow:auto;max-height:200px;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;">${e.error.stack}</pre>` : '';
-    errEl.innerHTML = `<strong>🚨 Системный сбой JS-кода:</strong><br><br>${errMessage}${stack}<br><br><span style="color: #fecaca;">Файл: ${e.filename ? e.filename.split('/').pop() : 'script'}<br>Строка: ${e.lineno}:${e.colno}</span><br><br><button onclick="this.parentElement.remove()" style="padding:6px 16px;background:#fff;color:#c00;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Закрыть</button>`;
+    const errMessage = (err && err.message) || String(err) || 'Неизвестная ошибка';
+    const stack = (err && err.stack) ? `<br><br><pre style="font-size:11px;overflow:auto;max-height:200px;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;">${err.stack}</pre>` : '';
+    const src = sourceInfo ? `<br><br><span style="color: #fecaca;">Источник: ${sourceInfo}</span>` : '';
+
+    errEl.innerHTML = `<strong>🚨 Системный сбой JS-кода:</strong><br><br>${errMessage}${stack}${src}<br><br><button onclick="this.parentElement.remove()" style="padding:6px 16px;background:#fff;color:#c00;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Закрыть</button>`;
     document.body.appendChild(errEl);
+}
+
+window.addEventListener('error', function(e) {
+    // Игнорируем анонимные сторонние события расширений браузера (CORS-маскированный "Script error." без стека и файла)
+    const isAnonymousScriptError = (!e.filename || e.filename === 'script' || e.lineno === 0) &&
+                                  (!e.error || !e.error.stack) &&
+                                  (e.message === 'Script error.' || !e.message);
+    if (isAnonymousScriptError) {
+        console.warn('[RTS Debugger] Игнорировано внешнее событие Script error (расширение браузера или сторонний скрипт):', e);
+        return;
+    }
+
+    const err = e.error || new Error(e.message || 'Ошибка выполнения');
+    const file = e.filename ? e.filename.split('/').pop() : 'script';
+    showSystemError(err, `${file} [${e.lineno}:${e.colno}]`);
+});
+
+window.addEventListener('unhandledrejection', function(e) {
+    console.error('[RTS Debugger] Необработанное исключение Promise:', e.reason);
+    if (e.reason) {
+        showSystemError(e.reason, 'Promise rejection');
+    }
 });
 
 // --- ПОЛИФИЛЛ ПЛАВНОГО ИНТЕРПОЛИРОВАНИЯ УГЛОВ (КРАТЧАЙШАЯ ДУГА) ---
@@ -81,6 +105,7 @@ const RESOURCE_NODE_COORDS = [
     { col: 11, row: 11, name: 'Центр' },
     { col: 5,  row: 16, name: 'Бета' }
 ];
+const RESOURCE_CORE_RADIUS = 1.35;
 
 // FSM Состояния юнитов
 const States = {

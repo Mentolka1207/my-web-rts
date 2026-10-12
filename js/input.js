@@ -9,7 +9,7 @@ let isDragging = false;
 const DRAG_THRESHOLD = 6;
 const selectionBoxEl = document.getElementById('selection-box');
 const raycaster = new THREE.Raycaster();
-const UI_SELECTOR = '#instructions, #resource-panel, #minimap-wrap, #wave-panel, #tactical-alert, #main-menu-overlay, #game-over-overlay, #touch-mode-panel';
+const UI_SELECTOR = '#instructions, #resource-panel, #minimap-wrap, #wave-panel, #tactical-alert, #main-menu-overlay, #game-over-overlay, #touch-mode-panel, #ability-panel, #debug-overlay';
 
 // --- Состояние перемещения колёсиком мыши (MMB Drag) ---
 let isMiddlePanning = false;
@@ -173,16 +173,59 @@ function issueMoveOrderAtPoint(clientX, clientY) {
     const cosA = Math.cos(-angle);
     const sinA = Math.sin(-angle);
 
+// Проверка и корректировка целевой позиции отряда от застревания в стенах и кристаллах
+function sanitizeTargetPosition(targetX, targetZ, fallbackX, fallbackZ) {
+    const halfPlayable = (MAP_WORLD_SIZE * 0.5) - CELL_SIZE * 1.2;
+    let clampedX = THREE.MathUtils.clamp(targetX, -halfPlayable, halfPlayable);
+    let clampedZ = THREE.MathUtils.clamp(targetZ, -halfPlayable, halfPlayable);
+
+    const g = worldToGrid(clampedX, clampedZ);
+    const inObstacle = (g.col >= 0 && g.col < GRID_SIZE && g.row >= 0 && g.row < GRID_SIZE && grid[g.row][g.col] === 1);
+
+    let inResource = false;
+    if (typeof resourceNodes !== 'undefined') {
+        const minCoreDistSq = (RESOURCE_CORE_RADIUS + 0.3) * (RESOURCE_CORE_RADIUS + 0.3);
+        for (let i = 0; i < resourceNodes.length; i++) {
+            const rn = resourceNodes[i];
+            const dSq = (clampedX - rn.pos.x) * (clampedX - rn.pos.x) + (clampedZ - rn.pos.z) * (clampedZ - rn.pos.z);
+            if (dSq < minCoreDistSq) {
+                inResource = true;
+                break;
+            }
+        }
+    }
+
+    if (inObstacle || inResource) {
+        for (let t = 0.8; t >= 0.2; t -= 0.2) {
+            const testX = fallbackX + (clampedX - fallbackX) * t;
+            const testZ = fallbackZ + (clampedZ - fallbackZ) * t;
+            const tg = worldToGrid(testX, testZ);
+            if (tg.col > 0 && tg.col < GRID_SIZE - 1 && tg.row > 0 && tg.row < GRID_SIZE - 1 && grid[tg.row][tg.col] === 0) {
+                return { x: testX, z: testZ };
+            }
+        }
+        const free = findFreeCellNear(g.col, g.row);
+        const freeWorld = gridToWorld(free.col, free.row);
+        return { x: freeWorld.x, z: freeWorld.z };
+    }
+
+    return { x: clampedX, z: clampedZ };
+}
+
     for (let i = 0; i < count; i++) {
         const unit = selectedUnits[i];
         const offset = offsets[i];
         const rotatedX = offset.x * cosA - offset.y * sinA;
         const rotatedZ = offset.x * sinA + offset.y * cosA;
 
+        const candidateX = targetPoint.x + rotatedX;
+        const candidateZ = targetPoint.z + rotatedZ;
+        const safePos = sanitizeTargetPosition(candidateX, candidateZ, targetPoint.x, targetPoint.z);
+
         if (!unit.personalTarget) {
             unit.personalTarget = new THREE.Vector3();
         }
-        unit.personalTarget.set(targetPoint.x + rotatedX, 0.75, targetPoint.z + rotatedZ);
+        unit.personalTarget.set(safePos.x, 0.75, safePos.z);
         unit.state = States.MOVE;
         unit.targetEnemy = null;
     }
@@ -256,7 +299,7 @@ window.addEventListener('mouseup', (e) => {
     if (e.button === 0) {
         isSelecting = false;
         selectionBoxEl.style.display = 'none';
-        if (!isDragging && !e.target.closest(UI_SELECTOR)) {
+        if (!isDragging && !e.target.closest(UI_SELECTOR) && !e.target.closest('button, a')) {
             const clickedUnit = getUnitUnderScreenPoint(e.clientX, e.clientY);
             if (!e.shiftKey) {
                 for (let i = 0; i < units.length; i++) {
@@ -267,8 +310,12 @@ window.addEventListener('mouseup', (e) => {
             if (clickedUnit) {
                 clickedUnit.selected = true;
                 if (clickedUnit.mesh.userData.selectionRing) clickedUnit.mesh.userData.selectionRing.visible = true;
+                if (typeof playSelectSound === 'function') playSelectSound();
             }
             if (typeof updateAbilityUI === 'function') updateAbilityUI();
+        } else if (isDragging) {
+            const hasSelected = units.some(u => u.selected && u.hp > 0);
+            if (hasSelected && typeof playSelectSound === 'function') playSelectSound();
         }
         isDragging = false;
     }
@@ -283,7 +330,7 @@ window.addEventListener('contextmenu', (e) => {
 
 // Вращение колёсика мыши (Зум и Touchpad горизонтальный скролл)
 window.addEventListener('wheel', (e) => {
-    if (e.target.closest(UI_SELECTOR)) return;
+    if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
     e.preventDefault();
 
     // Горизонтальный скролл (например, тачпад или наклон колеса)
@@ -310,6 +357,7 @@ function handleTap(clientX, clientY) {
         }
         tappedUnit.selected = true;
         if (tappedUnit.mesh.userData.selectionRing) tappedUnit.mesh.userData.selectionRing.visible = true;
+        if (typeof playSelectSound === 'function') playSelectSound();
         if (typeof updateAbilityUI === 'function') updateAbilityUI();
         return;
     }

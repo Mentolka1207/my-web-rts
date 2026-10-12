@@ -13,6 +13,7 @@ const waveTimerEl = document.getElementById('wave-timer');
 // Нанесение урона союзнику с учётом поглощения энергетическим щитом
 function applyDamageToAlly(target, amount) {
     if (target.shield && target.shield > 0) {
+        if (typeof playHitSound === 'function') playHitSound(true);
         if (target.shield >= amount) {
             target.shield -= amount;
         } else {
@@ -32,6 +33,9 @@ function applyDamageToAlly(target, amount) {
 function spawnWave() {
     waveWarningGiven = false;
     waveNumber++;
+
+    const isBossWave = (waveNumber === 10 || (waveNumber > 10 && waveNumber % 10 === 0));
+    if (typeof playWaveSound === 'function') playWaveSound(isBossWave);
 
     const waveRoster = [];
 
@@ -175,25 +179,25 @@ function updateEnemiesAI(currentTime, delta) {
                         if (targets.length <= 1) {
                             // Одиночная цель — тройной концентрированный залп
                             applyDamageToAlly(nearestAlly, enemy.damage);
-                            fireLaser(pos, allyPos, false);
+                            fireLaser(pos, allyPos, false, 'boss');
                             _v2.copy(allyPos);
                             _v2.x += 0.3; _v2.z += 0.3;
-                            fireLaser(pos, _v2, false);
+                            fireLaser(pos, _v2, false, 'boss');
                             _v3.copy(allyPos);
                             _v3.x -= 0.3; _v3.z -= 0.3;
-                            fireLaser(pos, _v3, false);
+                            fireLaser(pos, _v3, false, 'boss');
                         } else {
                             // Залп веером по всем целям
                             for (let t = 0; t < targets.length; t++) {
                                 const tgt = targets[t];
                                 applyDamageToAlly(tgt, Math.floor(enemy.damage * 0.75));
-                                fireLaser(pos, tgt.mesh.position, false);
+                                fireLaser(pos, tgt.mesh.position, false, 'boss');
                             }
                         }
                     } else {
                         // Стандартный одиночный выстрел
                         applyDamageToAlly(nearestAlly, enemy.damage);
-                        fireLaser(pos, allyPos, false);
+                        fireLaser(pos, allyPos, false, enemy.type === 'tank' ? 'heavy' : 'enemy');
                     }
                 }
             } else {
@@ -310,7 +314,8 @@ function updateEnemiesAI(currentTime, delta) {
                 }
             } else if (enemy.state === States.MOVE && enemy.roamTarget) {
                 const distToRoam = pos.distanceTo(enemy.roamTarget);
-                if (distToRoam < 0.25) {
+                const stopThreshold = Math.max(0.4, enemy.radius * 0.9);
+                if (distToRoam <= stopThreshold) {
                     enemy.state = States.IDLE;
                     enemy.roamCooldown = Math.random() * 4 + 2;
                     enemy.velocity.set(0, 0, 0);
@@ -318,8 +323,10 @@ function updateEnemiesAI(currentTime, delta) {
                     _v1.subVectors(enemy.roamTarget, pos);
                     _v1.y = 0;
                     _v1.normalize();
-                    pos.addScaledVector(_v1, enemy.speed * delta);
-                    enemy.velocity.copy(_v1).multiplyScalar(enemy.speed);
+                    let spd = enemy.speed;
+                    if (distToRoam < 1.5) spd *= Math.max(0.25, distToRoam / 1.5);
+                    pos.addScaledVector(_v1, spd * delta);
+                    enemy.velocity.copy(_v1).multiplyScalar(spd);
                     enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
                 }
             }

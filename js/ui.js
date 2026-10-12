@@ -14,6 +14,11 @@ function startGame() {
         if (el) el.style.display = '';
     });
     gameStarted = true;
+    if (typeof soundEngine !== 'undefined') {
+        soundEngine.ensureContext();
+        soundEngine.startAmbient();
+        playOrderSound(false);
+    }
     if (typeof matchStats !== 'undefined') matchStats.startTime = performance.now();
     updateResourceUI();
     updateWaveUI();
@@ -39,6 +44,7 @@ function toggleInstructions() {
 // Тактические всплывающие оповещения (неоновые баннеры)
 let alertTimeout = null;
 function showTacticalAlert(text, isDanger = false) {
+    if (typeof playAlertSound === 'function') playAlertSound(isDanger);
     const el = document.getElementById('tactical-alert');
     if (!el) return;
     el.textContent = text;
@@ -59,6 +65,9 @@ function showTacticalAlert(text, isDanger = false) {
 function triggerGameOver(playerWon) {
     if (gameOver) return;
     gameOver = true;
+
+    if (typeof soundEngine !== 'undefined') soundEngine.stopAmbient();
+    if (typeof playGameOverSound === 'function') playGameOverSound(playerWon);
 
     const losingHQ = playerWon ? enemyHQ : playerHQ;
     spawnExplosion(losingHQ.mesh.position, 28);

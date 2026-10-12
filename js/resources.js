@@ -6,49 +6,78 @@ const NODE_ENERGY_BONUS = 3;
 const CAPTURE_RADIUS = 2.8;
 const CAPTURE_RADIUS_SQ = CAPTURE_RADIUS * CAPTURE_RADIUS;
 
-const nodeBaseGeo = new THREE.CylinderGeometry(1.2, 1.4, 0.22, 8);
-const nodeRingGeo = new THREE.RingGeometry(CAPTURE_RADIUS - 0.2, CAPTURE_RADIUS, 32);
+const nodeBaseGeo = new THREE.CylinderGeometry(1.2, 1.45, 0.24, 8);
+const nodeRingGeo = new THREE.RingGeometry(CAPTURE_RADIUS - 0.18, CAPTURE_RADIUS, 32);
 nodeRingGeo.rotateX(-Math.PI / 2);
-const nodeCrystalGeo = new THREE.OctahedronGeometry(0.75, 0);
-nodeCrystalGeo.scale(0.7, 1.35, 0.7);
-const nodeCoreGeo = new THREE.SphereGeometry(0.25, 8, 8);
+const nodeInnerRingGeo = new THREE.RingGeometry(1.4, 1.55, 24);
+nodeInnerRingGeo.rotateX(-Math.PI / 2);
+
+const nodeCrystalGeo = new THREE.IcosahedronGeometry(0.72, 0);
+nodeCrystalGeo.scale(0.65, 1.45, 0.65);
+const nodeShardGeo = new THREE.OctahedronGeometry(0.25, 0);
+nodeShardGeo.scale(0.55, 1.25, 0.55);
+const nodeCoreGeo = new THREE.OctahedronGeometry(0.32, 0);
 
 function createResourceNode(col, row, name) {
     const group = new THREE.Group();
     const worldPos = gridToWorld(col, row);
     group.position.set(worldPos.x, 0, worldPos.z);
 
-    const baseMat = new THREE.MeshStandardMaterial({ color: 0x181c26, roughness: 0.35, metalness: 0.85 });
+    const baseMat = new THREE.MeshStandardMaterial({
+        color: 0x141824, roughness: 0.3, metalness: 0.85,
+        emissive: 0xffaa00, emissiveIntensity: 0.15
+    });
     const baseMesh = new THREE.Mesh(nodeBaseGeo, baseMat);
-    baseMesh.position.y = 0.11;
+    baseMesh.position.y = 0.12;
     baseMesh.receiveShadow = true;
     group.add(baseMesh);
 
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, side: THREE.DoubleSide, transparent: true, opacity: 0.65 });
+    // Внешнее и внутреннее голографические кольца захвата
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
     const ringMesh = new THREE.Mesh(nodeRingGeo, ringMat);
     ringMesh.position.y = 0.03;
     group.add(ringMesh);
 
+    const innerRingMesh = new THREE.Mesh(nodeInnerRingGeo, ringMat);
+    innerRingMesh.position.y = 0.035;
+    group.add(innerRingMesh);
+
+    // Главный кристалл-призма
     const crystalMat = new THREE.MeshStandardMaterial({
-        color: 0x223344, roughness: 0.15, metalness: 0.5,
-        emissive: 0xffaa00, emissiveIntensity: 0.8, transparent: true, opacity: 0.92
+        color: 0x1f2c3d, roughness: 0.12, metalness: 0.45,
+        emissive: 0xffaa00, emissiveIntensity: 0.85, transparent: true, opacity: 0.92
     });
     const crystalMesh = new THREE.Mesh(nodeCrystalGeo, crystalMat);
-    crystalMesh.position.y = 1.45;
+    crystalMesh.position.y = 1.48;
     crystalMesh.castShadow = true;
     group.add(crystalMesh);
 
+    // Внутреннее пульсирующее ядро
     const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const coreMesh = new THREE.Mesh(nodeCoreGeo, coreMat);
-    coreMesh.position.y = 1.45;
+    coreMesh.position.y = 1.48;
     group.add(coreMesh);
 
-    const light = new THREE.PointLight(0xffaa00, 2.0, 7.5);
+    // Кластер орбитальных кристаллов-спутников
+    const satellitesGroup = new THREE.Group();
+    satellitesGroup.position.y = 1.48;
+    const shardAngles = [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3];
+    shardAngles.forEach((angle, i) => {
+        const shard = new THREE.Mesh(nodeShardGeo, crystalMat);
+        const radius = 1.15;
+        shard.position.set(Math.cos(angle) * radius, (i - 1) * 0.18, Math.sin(angle) * radius);
+        shard.rotation.z = 0.2;
+        shard.rotation.y = angle;
+        satellitesGroup.add(shard);
+    });
+    group.add(satellitesGroup);
+
+    const light = new THREE.PointLight(0xffaa00, 2.2, 8.5);
     light.position.y = 1.8;
     group.add(light);
 
     const barGroup = new THREE.Group();
-    barGroup.position.set(0, 2.7, 0);
+    barGroup.position.set(0, 2.8, 0);
     const barWidth = 1.4;
     const barBg = new THREE.Mesh(new THREE.PlaneGeometry(barWidth, 0.12), new THREE.MeshBasicMaterial({ color: 0x111622, side: THREE.DoubleSide }));
     barGroup.add(barBg);
@@ -70,8 +99,11 @@ function createResourceNode(col, row, name) {
         group: group,
         crystalMesh: crystalMesh,
         coreMesh: coreMesh,
+        satellitesGroup: satellitesGroup,
+        innerRingMesh: innerRingMesh,
         ringMat: ringMat,
         crystalMat: crystalMat,
+        baseMat: baseMat,
         light: light,
         barGroup: barGroup,
         barFg: barFg,
@@ -88,9 +120,20 @@ function updateResourceNodes(delta, currentTime) {
 
     for (let idx = 0; idx < resourceNodes.length; idx++) {
         const node = resourceNodes[idx];
-        node.crystalMesh.rotation.y += delta * 1.5;
-        node.crystalMesh.position.y = 1.45 + Math.sin(currentTime * 2.2 + idx * 1.8) * 0.2;
-        node.coreMesh.position.y = node.crystalMesh.position.y;
+        const hoverY = 1.48 + Math.sin(currentTime * 2.2 + idx * 1.8) * 0.18;
+        node.crystalMesh.rotation.y += delta * 1.4;
+        node.crystalMesh.position.y = hoverY;
+        node.coreMesh.rotation.y -= delta * 2.2;
+        node.coreMesh.position.y = hoverY;
+
+        if (node.satellitesGroup) {
+            node.satellitesGroup.rotation.y -= delta * 1.6;
+            node.satellitesGroup.position.y = hoverY;
+        }
+        if (node.innerRingMesh) {
+            node.innerRingMesh.rotation.z += delta * 0.8;
+        }
+
         node.barGroup.quaternion.copy(camera.quaternion);
 
         let allyCount = 0;
@@ -130,14 +173,22 @@ function updateResourceNodes(delta, currentTime) {
         else if (node.captureProgress <= -1.0) node.owner = 'enemy';
         else if (Math.abs(node.captureProgress) < 0.05) node.owner = 'neutral';
 
-        if (prevOwner !== node.owner && typeof showTacticalAlert === 'function') {
-            if (node.owner === 'player') {
-                if (typeof matchStats !== 'undefined') matchStats.nodesCaptured++;
-                showTacticalAlert(`🟢 Точка «${node.name}» под нашим контролем! (+${NODE_ENERGY_BONUS}⚡/сек)`, false);
-            } else if (prevOwner === 'player') {
-                showTacticalAlert(`⚠️ Внимание: контроль над точкой «${node.name}» потерян!`, true);
-            } else if (node.owner === 'enemy') {
-                showTacticalAlert(`🔴 Враг захватил точку «${node.name}»!`, true);
+        if (prevOwner !== node.owner) {
+            if (node.owner === 'player' && typeof playCaptureSound === 'function') {
+                playCaptureSound(true);
+            } else if (node.owner === 'enemy' && typeof playCaptureSound === 'function') {
+                playCaptureSound(false);
+            }
+
+            if (typeof showTacticalAlert === 'function') {
+                if (node.owner === 'player') {
+                    if (typeof matchStats !== 'undefined') matchStats.nodesCaptured++;
+                    showTacticalAlert(`🟢 Точка «${node.name}» под нашим контролем! (+${NODE_ENERGY_BONUS}⚡/сек)`, false);
+                } else if (prevOwner === 'player') {
+                    showTacticalAlert(`⚠️ Внимание: контроль над точкой «${node.name}» потерян!`, true);
+                } else if (node.owner === 'enemy') {
+                    showTacticalAlert(`🔴 Враг захватил точку «${node.name}»!`, true);
+                }
             }
         }
 
