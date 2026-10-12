@@ -1,18 +1,23 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Minimal Web RTS: Neo-Drone Swarm &amp; Patrolling AI</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
     <link rel="stylesheet" href="style.css">
-    <!-- Three.js (обновлено до последней версии r186) -->
+    <!-- Three.js (автономная локальная библиотека r186 / v0.186.1) -->
     <script src="libs/three.min.js"></script>
     <script>
         if (typeof THREE === 'undefined') {
+            console.warn('Локальный libs/three.min.js не найден, загрузка резервной копии Three.js...');
             document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"><\/script>');
         }
     </script>
 </head>
+
 <body>
     <div id="main-menu-overlay">
         <div id="main-menu-title">🛰️ Minimal Web RTS</div>
@@ -21,11 +26,15 @@
             <button id="play-btn" onclick="startGame()">▶ Играть</button>
             <button id="exit-btn" onclick="exitGame()">✕ Выйти</button>
         </div>
-        <a id="main-menu-github" href="https://github.com/Mentolka1207/my-web-rts" target="_blank" rel="noopener noreferrer">📦 Репозиторий на GitHub</a>
+        <a id="main-menu-github" href="https://github.com/Mentolka1207/my-web-rts" target="_blank"
+            rel="noopener noreferrer">📦 Репозиторий на GitHub</a>
     </div>
     <div id="selection-box"></div>
     <div id="instructions" style="display:none;">
-        <button id="instructions-toggle" onclick="toggleInstructions()">Скрыть ▲</button>
+        <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">
+            <button id="instructions-toggle" onclick="toggleInstructions()">Скрыть ▲</button>
+            <button id="sound-toggle-btn" onclick="toggleSound()">🔊 Звук: ВКЛ</button>
+        </div>
         <div id="instructions-content">
             <strong>Управление Swarm RTS:</strong><br>
             • <strong>Клик ЛКМ</strong> — выделить одного дрона<br>
@@ -36,10 +45,12 @@
             &nbsp;&nbsp;🛡️ <strong>Щит [E]</strong> (Дрон) — энергобарьер 50 HP на 6с<br>
             &nbsp;&nbsp;⚓ <strong>Осада [R/F]</strong> (Танк) — дальность огня x2, сплэш-урон<br>
             • <strong>Колёсико мыши:</strong> зажми и тяни (MMB) — перемещение карты, крути — зум<br>
-            • <strong>Сенсор / Тач:</strong> свайп одним пальцем — перемещение карты, щипок — зум, тап — выбор/приказ<br>
+            • <strong>Сенсор / Тач:</strong> свайп одним пальцем — перемещение карты, щипок — зум, тап —
+            выбор/приказ<br>
             • <strong>W, A, S, D</strong> — движение камеры, <strong>G</strong> — спавн врага<br>
             • <strong>Точки сбора:</strong> захватывай кристаллы на карте (+3⚡/сек за точку)<br>
-            • <strong>Волны:</strong> эволюция врагов с волны 3+, Босс «Левиафан» на волне 10!<br><br>
+            • <strong>Волны:</strong> эволюция врагов с волны 3+, Босс «Левиафан» на волне 10!<br>
+            • <strong>Звук:</strong> кнопка 🔊/🔇 переключает процедурные звуковые эффекты и эмбиент<br><br>
             <strong>Тактическое построение:</strong><br>
             <button id="formation-line-btn" onclick="setFormation('line')">Шеренга</button>
             <button id="formation-wedge-btn" onclick="setFormation('wedge')">Клин</button>
@@ -100,7 +111,8 @@
         <div class="debug-row"><span>Выделено:</span> <span id="dbg-selected" class="dbg-val">0</span></div>
         <div class="debug-row"><span>Draw Calls:</span> <span id="dbg-draw-calls" class="dbg-val">0</span></div>
         <div class="debug-row"><span>Треугольники:</span> <span id="dbg-triangles" class="dbg-val">0</span></div>
-        <div class="debug-row"><span>Flow Field BFS:</span> <span id="dbg-flowfield" class="dbg-val">0.00 ms</span></div>
+        <div class="debug-row"><span>Flow Field BFS:</span> <span id="dbg-flowfield" class="dbg-val">0.00 ms</span>
+        </div>
     </div>
     <div id="game-over-overlay">
         <div id="game-over-title">ПОБЕДА!</div>
@@ -111,6 +123,7 @@
 
     <!-- Модули Minimal Web RTS -->
     <script src="js/config.js"></script>
+    <script src="js/audio.js"></script>
     <script src="js/grid.js"></script>
     <script src="js/spatialhash.js"></script>
     <script src="js/formations.js"></script>
@@ -129,4 +142,5 @@
     <script src="js/input.js"></script>
     <script src="main.js"></script>
 </body>
+
 </html>

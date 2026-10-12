@@ -22,14 +22,26 @@
 // Создание начальных отрядов
 initStartingUnits();
 
-// Часы анимации
-const clock = new THREE.Clock();
+// Таймер Three.js r186 (замена устаревшему THREE.Clock с сохранением обратной совместимости)
+const rtsTimer = (typeof THREE !== 'undefined' && THREE.Timer) ? new THREE.Timer() : null;
+const rtsClock = rtsTimer ? null : (typeof THREE !== 'undefined' && THREE.Clock ? new THREE.Clock() : null);
+
+const clock = {
+    get elapsedTime() {
+        return rtsTimer ? rtsTimer.getElapsed() : (rtsClock ? rtsClock.elapsedTime : (performance.now() / 1000));
+    },
+    getDelta() {
+        return rtsTimer ? rtsTimer.getDelta() : (rtsClock ? rtsClock.getDelta() : 0.016);
+    }
+};
 
 // Главный игровой цикл (Zero-allocation RAF loop)
-function animate() {
+function animate(timestamp) {
     requestAnimationFrame(animate);
-    const delta = Math.min(clock.getDelta(), 0.1);
-    const currentTime = clock.elapsedTime;
+    try {
+        if (rtsTimer) rtsTimer.update(timestamp);
+        const delta = Math.min(rtsTimer ? rtsTimer.getDelta() : rtsClock.getDelta(), 0.1);
+        const currentTime = rtsTimer ? rtsTimer.getElapsed() : rtsClock.elapsedTime;
 
     // Обновление позиции камеры по WASD / Стрелкам
     updateCamera(delta);
@@ -114,41 +126,40 @@ function animate() {
 
                     if (unit.personalTarget) {
                         const distToTarget = pos.distanceTo(unit.personalTarget);
-                        if (distToTarget < 0.15) {
+                        const stopThreshold = Math.max(0.4, unit.radius * 0.9);
+                        if (distToTarget <= stopThreshold) {
                             unit.state = States.IDLE;
+                            unit.personalTarget = null;
                             unit.velocity.set(0, 0, 0);
                             break;
                         }
 
                         const gridPos = worldToGrid(pos.x, pos.z);
                         if (gridPos.col >= 0 && gridPos.col < GRID_SIZE && gridPos.row >= 0 && gridPos.row < GRID_SIZE) {
-                            if (grid[gridPos.row][gridPos.col] === 1) {
-                                _v1.subVectors(unit.personalTarget, pos);
-                                _v1.y = 0;
-                                if (_v1.lengthSq() > 0.001) _v1.normalize();
-                                else _v1.set(1, 0, 0);
-                                pos.addScaledVector(_v1, 0.4);
-                                unit.velocity.copy(_v1).multiplyScalar(unit.speed);
-                                break;
-                            }
-
                             const flowVector = flowFieldGen.flowField[gridPos.row][gridPos.col];
                             _v1.subVectors(unit.personalTarget, pos);
                             _v1.y = 0;
                             const distance = _v1.length();
-                            _v1.normalize();
+                            if (distance > 0.001) _v1.normalize();
+                            else _v1.set(1, 0, 0);
 
                             const hasLOS = hasLineOfSight(pos.x, pos.z, unit.personalTarget.x, unit.personalTarget.z);
-                            if ((distance < 4.0 && hasLOS) || (flowVector.x === 0 && flowVector.y === 0)) {
+                            if ((distance < 3.5 && hasLOS) || (flowVector.x === 0 && flowVector.y === 0)) {
                                 _v2.copy(_v1);
                             } else {
                                 _v3.set(flowVector.x, 0, flowVector.y);
                                 _v2.lerpVectors(_v3, _v1, 0.25).normalize();
                             }
 
-                            const step = Math.min(unit.speed * delta, distance);
+                            // Плавное торможение перед финишем для предотвращения толкучки и вибраций
+                            let currentSpeed = unit.speed;
+                            if (distance < 1.6) {
+                                currentSpeed *= Math.max(0.25, distance / 1.6);
+                            }
+
+                            const step = Math.min(currentSpeed * delta, distance);
                             pos.addScaledVector(_v2, step);
-                            unit.velocity.copy(_v2).multiplyScalar(unit.speed);
+                            unit.velocity.copy(_v2).multiplyScalar(currentSpeed);
                             unit.mesh.rotation.y = THREE.MathUtils.lerpAngle(unit.mesh.rotation.y, Math.atan2(-_v2.z, _v2.x), 10 * delta);
                         }
                     }
@@ -212,6 +223,7 @@ function animate() {
 
                             // Поглощение урона щитом (для Босса-Левиафана)
                             if (unit.targetEnemy.shield && unit.targetEnemy.shield > 0) {
+                                if (typeof playHitSound === 'function') playHitSound(true);
                                 unit.targetEnemy.shield -= unit.damage;
                                 if (unit.targetEnemy.shieldMesh) {
                                     unit.targetEnemy.shieldMesh.material.opacity = 0.85;
@@ -226,7 +238,7 @@ function animate() {
                                 unit.targetEnemy.hp -= unit.damage;
                             }
 
-                            fireLaser(pos, attEnemyPos, true);
+                            fireLaser(pos, attEnemyPos, true, unit.type === 'tank' ? 'heavy' : 'ally');
 
                             // Осадный сплэш-урон Танка по площади в радиусе 2.2
                             if (unit.isSieged) {
@@ -260,20 +272,28 @@ function animate() {
 
         // 9. Гибель и удаление уничтоженных юнитов
         for (let i = units.length - 1; i >= 0; i--) {
-            if (units[i].hp <= 0) {
-                spawnExplosion(units[i].mesh.position, 10);
-                spawnScorch(units[i].mesh.position);
-                scene.remove(units[i].mesh);
+            const u = units[i];
+            if (u.hp <= 0) {
+                spawnExplosion(u.mesh.position, 10);
+                spawnScorch(u.mesh.position);
+                if (u.mesh.userData) {
+                    if (u.mesh.userData.shieldMesh && u.mesh.userData.shieldMesh.material) u.mesh.userData.shieldMesh.material.dispose();
+                    if (u.mesh.userData.siegeMesh && u.mesh.userData.siegeMesh.material) u.mesh.userData.siegeMesh.material.dispose();
+                }
+                scene.remove(u.mesh);
                 units.splice(i, 1);
             }
         }
 
         for (let i = enemies.length - 1; i >= 0; i--) {
-            if (enemies[i].hp <= 0) {
-                const e = enemies[i];
+            const e = enemies[i];
+            if (e.hp <= 0) {
                 const isBoss = e.type === 'boss';
                 spawnExplosion(e.mesh.position, isBoss ? 36 : 10);
                 spawnScorch(e.mesh.position);
+                if (e.mesh.userData && e.mesh.userData.shieldMesh && e.mesh.userData.shieldMesh.material) {
+                    e.mesh.userData.shieldMesh.material.dispose();
+                }
                 scene.remove(e.mesh);
                 enemies.splice(i, 1);
                 const reward = e.reward || ENEMY_KILL_REWARD;
@@ -293,50 +313,108 @@ function animate() {
         // Проверка победы или поражения
         checkGameOverConditions();
 
-        // 10. Высокопроизводительное пространственное расталкивание юнитов O(n) (Spatial Grid)
-        spatialGrid.resolveSeparation();
-
+        // 10. Высокопроизводительное пространственное расталкивание юнитов и коллизии с препятствиями
         const numAllies = units.length;
         const numEnemies = enemies.length;
         const totalUnits = numAllies + numEnemies;
 
-        // Столкновения со стенами
-        for (let i = 0; i < totalUnits; i++) {
-            const u = i < numAllies ? units[i] : enemies[i - numAllies];
-            if (u.hp <= 0) continue;
+        function resolveUnitEnvironmentCollisions(u) {
             const pos = u.mesh.position;
-            const gridPos = worldToGrid(pos.x, pos.z);
+            const r = u.radius;
 
+            // А. Ограничение границами арены
+            const maxBound = (MAP_WORLD_SIZE * 0.5) - (CELL_SIZE * 1.05) - r;
+            pos.x = THREE.MathUtils.clamp(pos.x, -maxBound, maxBound);
+            pos.z = THREE.MathUtils.clamp(pos.z, -maxBound, maxBound);
+
+            // Б. Коллизии с твердыми кристаллами точек сбора ресурсов (Cylinder Core)
+            if (typeof resourceNodes !== 'undefined') {
+                for (let rn = 0; rn < resourceNodes.length; rn++) {
+                    const node = resourceNodes[rn];
+                    const diffX = pos.x - node.pos.x;
+                    const diffZ = pos.z - node.pos.z;
+                    const minD = RESOURCE_CORE_RADIUS + r;
+                    const dSq = diffX * diffX + diffZ * diffZ;
+                    if (dSq < minD * minD) {
+                        let d = Math.sqrt(dSq);
+                        let nx, nz;
+                        if (d > 0.0001) {
+                            nx = diffX / d;
+                            nz = diffZ / d;
+                        } else {
+                            nx = 1; nz = 0;
+                            d = 0.0001;
+                        }
+                        pos.x = node.pos.x + nx * minD;
+                        pos.z = node.pos.z + nz * minD;
+                    }
+                }
+            }
+
+            // В. Точные прямоугольные коллизии стен (Circle vs Box AABB) и штабов
+            const gridPos = worldToGrid(pos.x, pos.z);
             for (let dx = -1; dx <= 1; dx++) {
                 for (let dy = -1; dy <= 1; dy++) {
                     const nc = gridPos.col + dx;
                     const nr = gridPos.row + dy;
                     if (nc >= 0 && nc < GRID_SIZE && nr >= 0 && nr < GRID_SIZE && grid[nr][nc] === 1) {
                         const isHQCell = (nr === HQ_ROW && nc === HQ_COL) || (nr === ENEMY_HQ_ROW && nc === ENEMY_HQ_COL);
-                        const wallPos = gridToWorld(nc, nr);
-                        const diffX = pos.x - wallPos.x;
-                        const diffZ = pos.z - wallPos.z;
-                        const distSq = diffX * diffX + diffZ * diffZ;
-                        const wallRadius = isHQCell ? 1.8 : 1.1;
-                        const minDist = wallRadius + u.radius;
+                        let minX, maxX, minZ, maxZ;
 
-                        if (distSq < minDist * minDist) {
-                            let dist = Math.sqrt(distSq);
-                            let nx, nz;
-                            if (dist > 0.0001) {
-                                nx = diffX / dist;
-                                nz = diffZ / dist;
-                            } else {
-                                nx = 1; nz = 0;
-                                dist = 0.0001;
+                        if (isHQCell) {
+                            const hqObj = (nr === HQ_ROW) ? playerHQ : enemyHQ;
+                            const hqCenter = hqObj.mesh.position;
+                            const hw = 1.8; // База штаба 3.6 x 3.6
+                            minX = hqCenter.x - hw; maxX = hqCenter.x + hw;
+                            minZ = hqCenter.z - hw; maxZ = hqCenter.z + hw;
+                        } else {
+                            const wallPos = gridToWorld(nc, nr);
+                            const hw = 0.98; // Монолит 1.96 x 1.96
+                            minX = wallPos.x - hw; maxX = wallPos.x + hw;
+                            minZ = wallPos.z - hw; maxZ = wallPos.z + hw;
+                        }
+
+                        // Ближайшая точка AABB коробки
+                        const clX = Math.max(minX, Math.min(pos.x, maxX));
+                        const clZ = Math.max(minZ, Math.min(pos.z, maxZ));
+                        const offX = pos.x - clX;
+                        const offZ = pos.z - clZ;
+                        const distSq = offX * offX + offZ * offZ;
+
+                        if (distSq > 0.000001) {
+                            if (distSq < r * r) {
+                                const dist = Math.sqrt(distSq);
+                                const push = r - dist;
+                                pos.x += (offX / dist) * push;
+                                pos.z += (offZ / dist) * push;
                             }
-                            const push = (minDist - dist) * 0.8;
-                            pos.x += nx * push;
-                            pos.z += nz * push;
+                        } else {
+                            // Центр юнита оказался внутри коробки препятствия — выталкиваем к ближайшей грани
+                            const dL = pos.x - minX;
+                            const dR = maxX - pos.x;
+                            const dT = pos.z - minZ;
+                            const dB = maxZ - pos.z;
+                            const minD = Math.min(dL, dR, dT, dB);
+                            if (minD === dL) pos.x = minX - r;
+                            else if (minD === dR) pos.x = maxX + r;
+                            else if (minD === dT) pos.z = minZ - r;
+                            else pos.z = maxZ + r;
                         }
                     }
                 }
             }
+        }
+
+        // Двухэтапная релаксация: расталкивание юнитов + твердые препятствия
+        spatialGrid.resolveSeparation();
+        for (let i = 0; i < totalUnits; i++) {
+            const u = i < numAllies ? units[i] : enemies[i - numAllies];
+            if (u.hp > 0) resolveUnitEnvironmentCollisions(u);
+        }
+        spatialGrid.resolveSeparation();
+        for (let i = 0; i < totalUnits; i++) {
+            const u = i < numAllies ? units[i] : enemies[i - numAllies];
+            if (u.hp > 0) resolveUnitEnvironmentCollisions(u);
         }
     }
 
@@ -355,7 +433,12 @@ function animate() {
 
     // 13. Финальный рендер кадра
     renderer.render(scene, camera);
-    
+    } catch (err) {
+        console.error('Ошибка в игровом цикле animate():', err);
+        if (typeof showSystemError === 'function') {
+            showSystemError(err, 'Игровой цикл (animate)');
+        }
+    }
 }
 
 // Старт игрового цикла
