@@ -24,6 +24,11 @@ class SpatialGrid {
         // Вправо (1,0), вниз-влево (-1,1), вниз (0,1), вниз-вправо (1,1)
         this.dCols = [1, -1, 0, 1];
         this.dRows = [0,  1, 1, 1];
+
+        // Телеметрия и бенчмаркинг алгоритма коллизий
+        this.collisionMode = 'spatial'; // 'spatial' (O(N)) или 'naive' (O(N²))
+        this.pairsTested = 0;
+        this.lastPairsTested = 0;
     }
 
     // Очистка списков ячеек без выделения новой памяти (zero GC pauses)
@@ -34,6 +39,8 @@ class SpatialGrid {
             this.cells[i].enemies.length = 0;
             this.cells[i].all.length = 0;
         }
+        this.lastPairsTested = this.pairsTested;
+        this.pairsTested = 0;
     }
 
     // Вставка юнита в соответствующую ячейку
@@ -52,9 +59,9 @@ class SpatialGrid {
         }
     }
 
-    // Поиск ближайшей цели заданной команды в радиусе maxDist
-    // targetTeam: 'enemy' (ищет врагов) или 'ally' (ищет союзников)
-    findNearest(pos, maxDist, targetTeam) {
+    // Поиск оптимальной цели заданной команды с учётом тактического приоритета
+    // (Focus Fire по раненым целям и приоритет осадным орудиям)
+    findNearest(pos, maxDist, targetTeam, usePriority = true) {
         const cMin = Math.max(0, Math.floor((pos.x - maxDist + this.halfMap) / this.cellSize));
         const cMax = Math.min(this.cols - 1, Math.floor((pos.x + maxDist + this.halfMap) / this.cellSize));
         const rMin = Math.max(0, Math.floor((pos.z - maxDist + this.halfMap) / this.cellSize));
@@ -62,6 +69,7 @@ class SpatialGrid {
 
         let nearest = null;
         let minDist = maxDist;
+        let bestScore = maxDist + 999;
         const isEnemyTarget = (targetTeam === 'enemy');
 
         for (let r = rMin; r <= rMax; r++) {
@@ -73,9 +81,27 @@ class SpatialGrid {
                     const u = list[i];
                     if (u.hp <= 0) continue;
                     const d = pos.distanceTo(u.mesh.position);
-                    if (d < minDist) {
-                        minDist = d;
-                        nearest = u;
+                    if (d > maxDist) continue;
+
+                    if (!usePriority) {
+                        if (d < minDist) {
+                            minDist = d;
+                            nearest = u;
+                        }
+                    } else {
+                        // Тактический скоринг:
+                        // 1. Раненые цели получают приоритет (Focus Fire для быстрого снятия урона противника)
+                        const hpRatio = Math.max(0, Math.min(1, u.hp / (u.maxHp || 100)));
+                        const woundedBonus = (1.0 - hpRatio) * 1.8;
+                        // 2. Опасные осадные платформы и боссы имеют высокий приоритет
+                        const threatBonus = (u.isSieged ? 2.5 : (u.type === 'tank' ? 1.5 : (u.type === 'boss' ? 2.2 : 0)));
+                        const score = d - woundedBonus - threatBonus;
+
+                        if (score < bestScore) {
+                            bestScore = score;
+                            minDist = d;
+                            nearest = u;
+                        }
                     }
                 }
             }
@@ -83,9 +109,15 @@ class SpatialGrid {
         return { unit: nearest, dist: minDist };
     }
 
-    // Высокопроизводительное расталкивание юнитов: проверка пар только внутри ячейки
-    // и с 4 смежными ячейками. Каждая пара проверяется ровно 1 раз.
-    resolveSeparation() {
+    // Расталкивание юнитов:
+    // В режиме 'spatial' (O(N)): проверка пар только внутри ячейки и с 4 смежными ячейками.
+    // В режиме 'naive' (O(N²)): полный перебор всех возможных пар для демонстрации просадки FPS.
+    resolveSeparation(allUnits) {
+        if (this.collisionMode === 'naive') {
+            this.resolveSeparationNaive(allUnits);
+            return;
+        }
+
         for (let r = 0; r < this.rows; r++) {
             const rowOffset = r * this.cols;
             for (let c = 0; c < this.cols; c++) {
@@ -134,7 +166,26 @@ class SpatialGrid {
         }
     }
 
+    // Наивный квадратичный алгоритм O(N²) без разбиения на ячейки
+    resolveSeparationNaive(allUnits) {
+        if (!allUnits) return;
+        const len = allUnits.length;
+        for (let i = 0; i < len; i++) {
+            const u1 = allUnits[i];
+            if (u1.hp <= 0) continue;
+            const p1 = u1.mesh.position;
+
+            for (let j = i + 1; j < len; j++) {
+                const u2 = allUnits[j];
+                if (u2.hp <= 0) continue;
+                const p2 = u2.mesh.position;
+                this._collidePair(u1, u2, p1, p2);
+            }
+        }
+    }
+
     _collidePair(u1, u2, p1, p2) {
+        this.pairsTested++;
         const dx = p2.x - p1.x;
         const dz = p2.z - p1.z;
         const distSq = dx * dx + dz * dz;

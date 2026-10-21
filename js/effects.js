@@ -104,6 +104,13 @@ function fireLaser(fromPos, toPos, isAlly, laserType) {
 
     laserData[idx].active = true;
     laserData[idx].life = 0.08;
+    laserData[idx].isAlly = isAlly;
+    if (!laserData[idx].from) {
+        laserData[idx].from = new THREE.Vector3();
+        laserData[idx].to = new THREE.Vector3();
+    }
+    laserData[idx].from.copy(fromPos);
+    laserData[idx].to.copy(toPos);
 
     spawnHitFlash(toPos, isAlly);
 }
@@ -194,6 +201,10 @@ function updateVFX(delta) {
             laserData[i].active = false;
             laserMeshes[i].visible = false;
         }
+    }
+
+    if (typeof instancedRenderer !== 'undefined' && instancedRenderer.updateLasers) {
+        instancedRenderer.updateLasers(laserData);
     }
 
     const FLASH_DURATION = 0.15;

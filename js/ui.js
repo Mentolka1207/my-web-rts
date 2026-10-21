@@ -142,6 +142,14 @@ function updateDebugOverlay(delta) {
         currentFPS = Math.round((fpsFrames * 1000) / (now - fpsLastTime));
         fpsFrames = 0;
         fpsLastTime = now;
+        if (typeof engineProfiler !== 'undefined') {
+            engineProfiler.fps = currentFPS;
+            engineProfiler.fpsHistory.push(currentFPS);
+            if (engineProfiler.fpsHistory.length > 20) engineProfiler.fpsHistory.shift();
+            engineProfiler.minFps = Math.min(...engineProfiler.fpsHistory);
+            const sum = engineProfiler.fpsHistory.reduce((a, b) => a + b, 0);
+            engineProfiler.avgFps = Math.round(sum / engineProfiler.fpsHistory.length);
+        }
     }
 
     const fpsEl = document.getElementById('dbg-fps');
@@ -151,14 +159,51 @@ function updateDebugOverlay(delta) {
     const dcEl = document.getElementById('dbg-draw-calls');
     const triEl = document.getElementById('dbg-triangles');
     const ffEl = document.getElementById('dbg-flowfield');
+    const spEl = document.getElementById('dbg-spatial');
+    const fsmEl = document.getElementById('dbg-fsm');
+    const sndEl = document.getElementById('dbg-audio');
+    const sndVoicesEl = document.getElementById('dbg-audio-voices');
+    const rndEl = document.getElementById('dbg-render');
+    const pairsEl = document.getElementById('dbg-pairs-tested');
+    const tickEl = document.getElementById('dbg-tick-time');
 
-    if (fpsEl) fpsEl.textContent = currentFPS;
+    if (fpsEl) {
+        fpsEl.textContent = currentFPS;
+        fpsEl.style.color = currentFPS >= 50 ? '#00ffcc' : (currentFPS >= 30 ? '#ffaa00' : '#ff4444');
+    }
     if (ftEl) ftEl.textContent = (delta * 1000).toFixed(1) + ' ms';
+    if (tickEl && typeof engineProfiler !== 'undefined') {
+        tickEl.textContent = (engineProfiler.totalTickTime || 0).toFixed(2) + ' ms';
+    }
     if (uEl) uEl.textContent = `${units.length} / ${enemies.length} (всего ${units.length + enemies.length})`;
     if (selEl) selEl.textContent = units.filter(u => u.selected && u.hp > 0).length;
     if (dcEl && typeof renderer !== 'undefined' && renderer.info) dcEl.textContent = renderer.info.render.calls;
-    if (triEl && typeof renderer !== 'undefined' && renderer.info) triEl.textContent = renderer.info.render.triangles;
-    if (ffEl && typeof flowFieldGen !== 'undefined') ffEl.textContent = (flowFieldGen.lastComputeTime || 0).toFixed(2) + ' ms';
+    if (triEl && typeof renderer !== 'undefined' && renderer.info) triEl.textContent = renderer.info.render.triangles.toLocaleString();
+
+    if (typeof engineProfiler !== 'undefined') {
+        if (ffEl) ffEl.textContent = (engineProfiler.flowFieldTime || 0).toFixed(2) + ' ms';
+        if (spEl) spEl.textContent = (engineProfiler.spatialTime || 0).toFixed(2) + ' ms';
+        if (fsmEl) fsmEl.textContent = (engineProfiler.fsmTime || 0).toFixed(2) + ' ms';
+        if (sndEl) sndEl.textContent = (engineProfiler.audioTime || 0).toFixed(2) + ' ms';
+        if (sndVoicesEl) sndVoicesEl.textContent = `${engineProfiler.audioVoices} акт. / ${engineProfiler.soundEvents} соб.`;
+        if (rndEl) rndEl.textContent = (engineProfiler.renderTime || 0).toFixed(2) + ' ms';
+        if (pairsEl) {
+            const numPairs = (typeof spatialGrid !== 'undefined') ? (spatialGrid.lastPairsTested || spatialGrid.pairsTested || 0) : 0;
+            pairsEl.textContent = numPairs.toLocaleString();
+            pairsEl.style.color = (typeof spatialGrid !== 'undefined' && spatialGrid.collisionMode === 'naive') ? '#ffaa00' : '#38bdf8';
+        }
+    }
+
+    const simModeEl = document.getElementById('dbg-sim-mode');
+    if (simModeEl && typeof simWorkerManager !== 'undefined') {
+        if (simWorkerManager.isWorkerActive) {
+            simModeEl.textContent = 'Web Worker (Multi-thread)';
+            simModeEl.style.color = '#00ffcc';
+        } else {
+            simModeEl.textContent = 'SoA Typed Arrays (Main)';
+            simModeEl.style.color = '#38bdf8';
+        }
+    }
 }
 
 // --- ПАНЕЛЬ АКТИВНЫХ СПОСОБНОСТЕЙ ЮНИТОВ (ACTION BAR) ---

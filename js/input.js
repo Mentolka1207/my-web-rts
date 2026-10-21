@@ -496,6 +496,12 @@ window.addEventListener('keydown', (e) => {
         if (typeof triggerAbilityForSelected === 'function') triggerAbilityForSelected('overdrive');
     } else if (e.code === 'Digit3') {
         if (typeof triggerAbilityForSelected === 'function') triggerAbilityForSelected('siege');
+    } else if (e.code === 'KeyZ') {
+        if (typeof setFormation === 'function') setFormation('line');
+    } else if (e.code === 'KeyX') {
+        if (typeof setFormation === 'function') setFormation('wedge');
+    } else if (e.code === 'KeyC') {
+        if (typeof setFormation === 'function') setFormation('circle');
     } else if (e.code === 'KeyG') {
         // Спавн тестового врага (дебаг)
         raycaster.setFromCamera(mouse, camera);

@@ -12,10 +12,10 @@ for (let i = 0; i < GRID_SIZE; i++) {
     grid[i][GRID_SIZE - 1] = 1;
 }
 
-// Случайные внутренние препятствия
+// Случайные внутренние препятствия (детерминированная генерация по сиду)
 for (let i = 0; i < 25; i++) {
-    const rx = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
-    const rz = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+    const rx = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.int(1, GRID_SIZE - 2) : Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+    const rz = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.int(1, GRID_SIZE - 2) : Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
     if ((rx > 4 || rz > 4) && (rx < GRID_SIZE - 5 || rz < GRID_SIZE - 5) && grid[rz][rx] === 0) {
         grid[rz][rx] = 1;
     }

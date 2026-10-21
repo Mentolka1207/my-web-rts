@@ -47,26 +47,39 @@ function spawnWave() {
         for (let i = 0; i < 3; i++) waveRoster.push('standard');
         showTacticalAlert(`⚠️ ВНИМАНИЕ: ВОЛНА ${waveNumber} — ПРИБЛИЖАЕТСЯ ЛЕВИАФАН!`, true);
     } else {
-        // Базовые дроны
-        const standardCount = Math.min(8, 3 + Math.floor(waveNumber * 0.5));
-        for (let i = 0; i < standardCount; i++) waveRoster.push('standard');
+        // Комбинированные тактические волны
+        if (waveNumber % 3 === 0) {
+            // Волна «Рой перехватчиков» (Swarm: наскок быстрых разведчиков)
+            const swarmCount = Math.min(8, 3 + Math.floor(waveNumber * 0.7));
+            for (let i = 0; i < swarmCount; i++) waveRoster.push('scout');
+            waveRoster.push('tank');
+            showTacticalAlert(`🌊 Волна ${waveNumber}: РОЙ ПЕРЕХВАТЧИКОВ! Приготовьте плотный строй!`, false);
+        } else if (waveNumber % 4 === 0) {
+            // Волна «Осадный таран» (Armored: тяжёлые танки при поддержке дронов)
+            const armorTanks = Math.min(4, 2 + Math.floor(waveNumber / 3));
+            for (let i = 0; i < armorTanks; i++) waveRoster.push('tank');
+            for (let i = 0; i < 4; i++) waveRoster.push('standard');
+            showTacticalAlert(`🌊 Волна ${waveNumber}: ОСАДНЫЙ ТАРАН! Требуется осадный режим или фокус огня!`, false);
+        } else {
+            // Сбалансированная волна
+            const standardCount = Math.min(8, 3 + Math.floor(waveNumber * 0.5));
+            for (let i = 0; i < standardCount; i++) waveRoster.push('standard');
 
-        // С волны 3+ появляются быстрые Разведчики (фланговый наскок)
-        if (waveNumber >= 3) {
-            const scoutCount = Math.min(6, 1 + Math.floor((waveNumber - 2) * 0.8));
-            for (let i = 0; i < scoutCount; i++) waveRoster.push('scout');
-        }
+            if (waveNumber >= 3) {
+                const scoutCount = Math.min(6, 1 + Math.floor((waveNumber - 2) * 0.8));
+                for (let i = 0; i < scoutCount; i++) waveRoster.push('scout');
+            }
 
-        // С волны 5+ появляются тяжёлые Танки (прорыв обороны)
-        if (waveNumber >= 5) {
-            const tankCount = Math.min(4, 1 + Math.floor((waveNumber - 4) * 0.5));
-            for (let i = 0; i < tankCount; i++) waveRoster.push('tank');
-        }
+            if (waveNumber >= 5) {
+                const tankCount = Math.min(4, 1 + Math.floor((waveNumber - 4) * 0.5));
+                for (let i = 0; i < tankCount; i++) waveRoster.push('tank');
+            }
 
-        if (waveNumber >= 5) {
-            showTacticalAlert(`🌊 Волна ${waveNumber}: зафиксированы вражеские Танки и Разведчики!`, false);
-        } else if (waveNumber >= 3) {
-            showTacticalAlert(`🌊 Волна ${waveNumber}: зафиксированы быстрые фланговые Разведчики!`, false);
+            if (waveNumber >= 5) {
+                showTacticalAlert(`🌊 Волна ${waveNumber}: зафиксированы вражеские Танки и Разведчики!`, false);
+            } else if (waveNumber >= 3) {
+                showTacticalAlert(`🌊 Волна ${waveNumber}: зафиксированы быстрые фланговые Разведчики!`, false);
+            }
         }
     }
 
@@ -288,19 +301,19 @@ function updateEnemiesAI(currentTime, delta) {
                 enemy.roamCooldown -= delta;
 
                 if (enemy.roamCooldown <= 0) {
-                    if (Math.random() < 0.35 && resourceNodes.length > 0) {
-                        const targetNode = resourceNodes[Math.floor(Math.random() * resourceNodes.length)];
+                    const rnd = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.random() : Math.random();
+                    if (rnd < 0.35 && resourceNodes.length > 0) {
+                        const nodeIdx = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.int(0, resourceNodes.length - 1) : Math.floor(Math.random() * resourceNodes.length);
+                        const targetNode = resourceNodes[nodeIdx];
+                        const offX = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.range(-1, 1) : (Math.random() - 0.5) * 2;
+                        const offZ = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.range(-1, 1) : (Math.random() - 0.5) * 2;
                         if (!enemy.roamTarget) enemy.roamTarget = new THREE.Vector3();
-                        enemy.roamTarget.set(
-                            targetNode.pos.x + (Math.random() - 0.5) * 2,
-                            0.75,
-                            targetNode.pos.z + (Math.random() - 0.5) * 2
-                        );
+                        enemy.roamTarget.set(targetNode.pos.x + offX, 0.75, targetNode.pos.z + offZ);
                     } else {
                         let col = 1, row = 1;
                         for (let attempt = 0; attempt < 50; attempt++) {
-                            const rc = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
-                            const rr = Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+                            const rc = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.int(1, GRID_SIZE - 2) : Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
+                            const rr = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.int(1, GRID_SIZE - 2) : Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
                             if (grid[rr][rc] === 0) {
                                 col = rc; row = rr;
                                 break;
@@ -317,7 +330,7 @@ function updateEnemiesAI(currentTime, delta) {
                 const stopThreshold = Math.max(0.4, enemy.radius * 0.9);
                 if (distToRoam <= stopThreshold) {
                     enemy.state = States.IDLE;
-                    enemy.roamCooldown = Math.random() * 4 + 2;
+                    enemy.roamCooldown = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.range(2, 6) : (Math.random() * 4 + 2);
                     enemy.velocity.set(0, 0, 0);
                 } else {
                     _v1.subVectors(enemy.roamTarget, pos);

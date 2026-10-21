@@ -179,6 +179,101 @@ function createGroundRoughnessTexture() {
     return texture;
 }
 
+// 3.5. Процедурная карта нормалей (Normal Map) поверхности для кинематографичного PBR-освещения
+function createGroundNormalTexture() {
+    const width = 256, height = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    // Генерация карты высот для расчета градиентов нормалей
+    const heights = new Float32Array(width * height);
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const isSeam = (x === 0 || y === 0 || x === 128 || y === 128);
+            const isSub = (x % 64 === 0 || y % 64 === 0);
+            heights[y * width + x] = isSeam ? 0.0 : (isSub ? 0.4 : 0.85);
+        }
+    }
+
+    const imgData = ctx.createImageData(width, height);
+    const data = imgData.data;
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const xL = (x - 1 + width) % width;
+            const xR = (x + 1) % width;
+            const yU = (y - 1 + height) % height;
+            const yD = (y + 1) % height;
+
+            const dx = (heights[y * width + xR] - heights[y * width + xL]) * 2.2;
+            const dy = (heights[yD * width + x] - heights[yU * width + x]) * 2.2;
+            const dz = 1.0;
+            const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            const idx = (y * width + x) * 4;
+            data[idx] = Math.floor((-dx / len * 0.5 + 0.5) * 255);
+            data[idx + 1] = Math.floor((-dy / len * 0.5 + 0.5) * 255);
+            data[idx + 2] = Math.floor((dz / len * 0.5 + 0.5) * 255);
+            data[idx + 3] = 255;
+        }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(11, 11);
+    return texture;
+}
+
+// 3.6. Процедурная карта свечения (Emissive Map) для неоновых энерголиний
+function createGroundEmissiveTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // Черный фон (нет свечения)
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Неоновые линии энерго-магистралей (Cyan circuit)
+    ctx.strokeStyle = 'rgba(0, 255, 204, 0.85)';
+    ctx.lineWidth = 2.5;
+
+    for (let py = 0; py < 2; py++) {
+        for (let px = 0; px < 2; px++) {
+            const ox = px * 256;
+            const oy = py * 256;
+            ctx.beginPath();
+            if ((px + py) % 2 === 0) {
+                ctx.moveTo(ox + 20, oy + 128);
+                ctx.lineTo(ox + 80, oy + 128);
+                ctx.lineTo(ox + 128, oy + 80);
+                ctx.lineTo(ox + 236, oy + 80);
+            } else {
+                ctx.moveTo(ox + 128, oy + 20);
+                ctx.lineTo(ox + 128, oy + 90);
+                ctx.lineTo(ox + 160, oy + 122);
+                ctx.lineTo(ox + 160, oy + 236);
+            }
+            ctx.stroke();
+
+            // Светящиеся узлы
+            ctx.fillStyle = '#00ffcc';
+            const nodeX = (px + py) % 2 === 0 ? ox + 80 : ox + 128;
+            const nodeY = (px + py) % 2 === 0 ? oy + 128 : oy + 90;
+            ctx.beginPath(); ctx.arc(nodeX, nodeY, 4, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(11, 11);
+    return texture;
+}
+
 // 4. Текстура стен-препятствий (Monolith Blast Shields)
 function createWallTexture() {
     const canvas = document.createElement('canvas');
@@ -260,15 +355,22 @@ function createWallBumpTexture() {
 const groundTex = createGroundAlbedoTexture();
 const groundBumpTex = createGroundBumpTexture();
 const groundRoughnessTex = createGroundRoughnessTexture();
+const groundNormalTex = createGroundNormalTexture();
+const groundEmissiveTex = createGroundEmissiveTexture();
 
 const groundGeo = new THREE.PlaneGeometry(MAP_WORLD_SIZE, MAP_WORLD_SIZE);
 const groundMat = new THREE.MeshStandardMaterial({
     map: groundTex,
     bumpMap: groundBumpTex,
     bumpScale: 0.045,
+    normalMap: groundNormalTex,
+    normalScale: new THREE.Vector2(0.35, 0.35),
     roughnessMap: groundRoughnessTex,
     roughness: 0.45,
-    metalness: 0.35
+    metalness: 0.35,
+    emissiveMap: groundEmissiveTex,
+    emissive: 0x00ffcc,
+    emissiveIntensity: 0.18
 });
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;

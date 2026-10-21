@@ -57,8 +57,15 @@ function createUnit(col, row, type = 'standard') {
 
     const hpBar = attachHealthBar(mesh, true, 0.7 * stats.scale);
 
+    let simId = -1;
+    if (typeof simWorld !== 'undefined') {
+        const typeNum = (type === 'standard') ? 0 : (type === 'scout' ? 1 : (type === 'tank' ? 2 : 3));
+        simId = simWorld.spawn(0, typeNum, pos.x, pos.z, stats.hp, stats.hp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
+    }
+
     units.push({
         mesh: mesh,
+        simId: simId,
         type: type,
         selected: false,
         state: States.IDLE,
@@ -99,8 +106,15 @@ function createEnemy(x, z, type = 'standard', isWaveUnit = false, sabotageNode =
 
     const hpBar = isBoss ? attachBossHealthBar(mesh) : attachHealthBar(mesh, false, 0.7 * stats.scale);
 
+    let simId = -1;
+    if (typeof simWorld !== 'undefined') {
+        const typeNum = (type === 'standard') ? 0 : (type === 'scout' ? 1 : (type === 'tank' ? 2 : 3));
+        simId = simWorld.spawn(1, typeNum, x, z, stats.hp, stats.hp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
+    }
+
     enemies.push({
         mesh: mesh,
+        simId: simId,
         type: type,
         state: States.IDLE,
         hp: stats.hp,
@@ -120,7 +134,7 @@ function createEnemy(x, z, type = 'standard', isWaveUnit = false, sabotageNode =
         healthBar: hpBar,
         velocity: new THREE.Vector3(),
         roamTarget: null,
-        roamCooldown: Math.random() * 2,
+        roamCooldown: (typeof rtsPRNG !== 'undefined') ? rtsPRNG.range(0.2, 2.0) : Math.random() * 2,
         isWaveUnit: isWaveUnit,
         sabotageNode: sabotageNode
     });

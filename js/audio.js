@@ -26,6 +26,38 @@ class SoundEngine {
 
         // Ограничение частоты воспроизведения однотипных звуков (лимитер перегруза)
         this.lastSoundTimes = {};
+
+        // Телеметрия и замер времени расчёта Web Audio API за тик (HUD-профайлер)
+        this.tickSynthesisTime = 0;
+        this.lastTickSynthesisTime = 0;
+        this.soundEventsThisTick = 0;
+        this.activeVoices = 0;
+    }
+
+    resetTickStats() {
+        this.lastTickSynthesisTime = this.tickSynthesisTime;
+        this.tickSynthesisTime = 0;
+        this.soundEventsThisTick = 0;
+    }
+
+    _trackVoice(node) {
+        if (!node) return;
+        this.activeVoices++;
+        try {
+            node.addEventListener('ended', () => {
+                this.activeVoices = Math.max(0, this.activeVoices - 1);
+            }, { once: true });
+        } catch (_) {}
+    }
+
+    _runProfiled(fn) {
+        const _t0 = performance.now();
+        try {
+            return fn();
+        } finally {
+            this.tickSynthesisTime += (performance.now() - _t0);
+            this.soundEventsThisTick++;
+        }
     }
 
     // Инициализация аудиоконтекста (вызывается по первому клику/действию пользователя)
@@ -43,10 +75,19 @@ class SoundEngine {
         try {
             this.ctx = new AudioContextClass();
 
+            // Мастер-компрессор динамического диапазона (предотвращение клиппинга и искажений при канонаде)
+            this.compressor = this.ctx.createDynamicsCompressor();
+            this.compressor.threshold.setValueAtTime(-14, this.ctx.currentTime);
+            this.compressor.knee.setValueAtTime(30, this.ctx.currentTime);
+            this.compressor.ratio.setValueAtTime(12, this.ctx.currentTime);
+            this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
+            this.compressor.release.setValueAtTime(0.25, this.ctx.currentTime);
+            this.compressor.connect(this.ctx.destination);
+
             // Мастер-шина
             this.masterGain = this.ctx.createGain();
             this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
-            this.masterGain.connect(this.ctx.destination);
+            this.masterGain.connect(this.compressor);
 
             // Шина звуковых эффектов (SFX)
             this.sfxGain = this.ctx.createGain();
@@ -67,6 +108,9 @@ class SoundEngine {
                 data[i] = Math.random() * 2 - 1;
             }
 
+            // Лимитер максимального числа событий синтеза за тик
+            this.maxSoundEventsPerTick = 18;
+
             this.initialized = true;
         } catch (e) {
             console.warn('[SoundEngine] Ошибка инициализации Web Audio API:', e);
@@ -81,15 +125,28 @@ class SoundEngine {
         }
     }
 
-    // Проверка лимита частоты запуска звука (не чаще раза в minInterval сек)
+    // Проверка лимита частоты запуска звука (не чаще раза в minInterval сек) и лимитера событий за тик
     canPlay(id, minInterval = 0.04) {
         if (!this.initialized || this.isMuted || !this.ctx) return false;
+        if (this.soundEventsThisTick >= this.maxSoundEventsPerTick) return false;
+
         const now = this.ctx.currentTime;
         if (this.lastSoundTimes[id] && (now - this.lastSoundTimes[id] < minInterval)) {
             return false;
         }
         this.lastSoundTimes[id] = now;
         return true;
+    }
+
+    // Расчёт пространственного затухания звука в зависимости от расстояния до камеры
+    getSpatialAttenuation(worldX, worldZ, maxDist = 45) {
+        if (typeof camera === 'undefined' || worldX === undefined) return 1.0;
+        const dx = camera.position.x - worldX;
+        const dz = camera.position.z - worldZ;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist <= 10) return 1.0;
+        if (dist >= maxDist) return 0.2;
+        return 1.0 - ((dist - 10) / (maxDist - 10)) * 0.8;
     }
 
     // Включение / выключение звука
@@ -120,96 +177,103 @@ class SoundEngine {
         if (!this.canPlay('laser_' + type, type === 'boss' ? 0.08 : 0.04)) return;
         this.ensureContext();
         if (!this.ctx) return;
-        const t = this.ctx.currentTime;
+        return this._runProfiled(() => {
+            const t = this.ctx.currentTime;
 
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        const filter = this.ctx.createBiquadFilter();
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            const filter = this.ctx.createBiquadFilter();
 
-        if (type === 'ally') {
-            // Быстрый бирюзовый sci-fi импульс
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(820, t);
-            osc.frequency.exponentialRampToValueAtTime(220, t + 0.08);
+            if (type === 'ally') {
+                // Быстрый бирюзовый sci-fi импульс
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(820, t);
+                osc.frequency.exponentialRampToValueAtTime(220, t + 0.08);
 
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(2200, t);
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(2200, t);
 
-            gain.gain.setValueAtTime(0.3, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+                gain.gain.setValueAtTime(0.3, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
 
-            osc.connect(filter);
-            filter.connect(gain);
-            gain.connect(this.sfxGain);
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.sfxGain);
 
-            osc.start(t);
-            osc.stop(t + 0.08);
-        } else if (type === 'heavy') {
-            // Мощный осадный выстрел танка
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(280, t);
-            osc.frequency.exponentialRampToValueAtTime(50, t + 0.22);
+                this._trackVoice(osc);
+                osc.start(t);
+                osc.stop(t + 0.08);
+            } else if (type === 'heavy') {
+                // Мощный осадный выстрел танка
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(280, t);
+                osc.frequency.exponentialRampToValueAtTime(50, t + 0.22);
 
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(1400, t);
-            filter.frequency.exponentialRampToValueAtTime(200, t + 0.22);
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(1400, t);
+                filter.frequency.exponentialRampToValueAtTime(200, t + 0.22);
 
-            gain.gain.setValueAtTime(0.5, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+                gain.gain.setValueAtTime(0.5, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
 
-            // Саб-басовый толчок
-            const sub = this.ctx.createOscillator();
-            const subGain = this.ctx.createGain();
-            sub.type = 'sine';
-            sub.frequency.setValueAtTime(110, t);
-            sub.frequency.exponentialRampToValueAtTime(30, t + 0.25);
-            subGain.gain.setValueAtTime(0.6, t);
-            subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
-            sub.connect(subGain);
-            subGain.connect(this.sfxGain);
-            sub.start(t);
-            sub.stop(t + 0.25);
+                // Саб-басовый толчок
+                const sub = this.ctx.createOscillator();
+                const subGain = this.ctx.createGain();
+                sub.type = 'sine';
+                sub.frequency.setValueAtTime(110, t);
+                sub.frequency.exponentialRampToValueAtTime(30, t + 0.25);
+                subGain.gain.setValueAtTime(0.6, t);
+                subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+                sub.connect(subGain);
+                subGain.connect(this.sfxGain);
+                this._trackVoice(sub);
+                sub.start(t);
+                sub.stop(t + 0.25);
 
-            osc.connect(filter);
-            filter.connect(gain);
-            gain.connect(this.sfxGain);
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.sfxGain);
 
-            osc.start(t);
-            osc.stop(t + 0.22);
-        } else if (type === 'boss') {
-            // Массивный залп флагмана-Левиафана
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(450, t);
-            osc.frequency.exponentialRampToValueAtTime(70, t + 0.28);
+                this._trackVoice(osc);
+                osc.start(t);
+                osc.stop(t + 0.22);
+            } else if (type === 'boss') {
+                // Массивный залп флагмана-Левиафана
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(450, t);
+                osc.frequency.exponentialRampToValueAtTime(70, t + 0.28);
 
-            filter.type = 'bandpass';
-            filter.frequency.setValueAtTime(800, t);
-            filter.Q.setValueAtTime(2.5, t);
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(800, t);
+                filter.Q.setValueAtTime(2.5, t);
 
-            gain.gain.setValueAtTime(0.55, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+                gain.gain.setValueAtTime(0.55, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
 
-            osc.connect(filter);
-            filter.connect(gain);
-            gain.connect(this.sfxGain);
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.sfxGain);
 
-            osc.start(t);
-            osc.stop(t + 0.28);
-        } else {
-            // Вражеский штурмовой выстрел
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(580, t);
-            osc.frequency.exponentialRampToValueAtTime(140, t + 0.09);
+                this._trackVoice(osc);
+                osc.start(t);
+                osc.stop(t + 0.28);
+            } else {
+                // Вражеский штурмовой выстрел
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(580, t);
+                osc.frequency.exponentialRampToValueAtTime(140, t + 0.09);
 
-            gain.gain.setValueAtTime(0.32, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+                gain.gain.setValueAtTime(0.32, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
 
-            osc.connect(gain);
-            gain.connect(this.sfxGain);
+                osc.connect(gain);
+                gain.connect(this.sfxGain);
 
-            osc.start(t);
-            osc.stop(t + 0.09);
-        }
+                this._trackVoice(osc);
+                osc.start(t);
+                osc.stop(t + 0.09);
+            }
+        });
     }
 
     // --- 2. ВСПЫШКА ПОПАДАНИЯ ИЛИ ЩИТ (HIT / SHIELD SFX) ---
@@ -217,33 +281,36 @@ class SoundEngine {
         if (!this.canPlay('hit', 0.03)) return;
         this.ensureContext();
         if (!this.ctx) return;
-        const t = this.ctx.currentTime;
+        return this._runProfiled(() => {
+            const t = this.ctx.currentTime;
 
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
 
-        if (isShield) {
-            // Резонансный звон щита
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(1250, t);
-            osc.frequency.exponentialRampToValueAtTime(950, t + 0.08);
+            if (isShield) {
+                // Резонансный звон щита
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1250, t);
+                osc.frequency.exponentialRampToValueAtTime(950, t + 0.08);
 
-            gain.gain.setValueAtTime(0.28, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
-        } else {
-            // Металлический щелчок пробития брони
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(320, t);
-            osc.frequency.exponentialRampToValueAtTime(80, t + 0.04);
+                gain.gain.setValueAtTime(0.28, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+            } else {
+                // Металлический щелчок пробития брони
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(320, t);
+                osc.frequency.exponentialRampToValueAtTime(80, t + 0.04);
 
-            gain.gain.setValueAtTime(0.2, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
-        }
+                gain.gain.setValueAtTime(0.2, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+            }
 
-        osc.connect(gain);
-        gain.connect(this.sfxGain);
-        osc.start(t);
-        osc.stop(t + (isShield ? 0.08 : 0.04));
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+            this._trackVoice(osc);
+            osc.start(t);
+            osc.stop(t + (isShield ? 0.08 : 0.04));
+        });
     }
 
     // --- 3. ВЗРЫВ (EXPLOSION SFX) ---
@@ -252,44 +319,48 @@ class SoundEngine {
         this.ensureContext();
         if (!this.ctx || !this.noiseBuffer) return;
 
-        const t = this.ctx.currentTime;
-        const duration = Math.min(1.2, 0.45 * scale);
+        return this._runProfiled(() => {
+            const t = this.ctx.currentTime;
+            const duration = Math.min(1.2, 0.45 * scale);
 
-        // 1. Шумовой компонент взрыва (White Noise + Lowpass Filter Sweep)
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this.noiseBuffer;
+            // 1. Шумовой компонент взрыва (White Noise + Lowpass Filter Sweep)
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = this.noiseBuffer;
 
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(1000 * Math.min(scale, 1.5), t);
-        filter.frequency.exponentialRampToValueAtTime(45, t + duration);
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(1000 * Math.min(scale, 1.5), t);
+            filter.frequency.exponentialRampToValueAtTime(45, t + duration);
 
-        const noiseGain = this.ctx.createGain();
-        noiseGain.gain.setValueAtTime(0.65 * Math.min(scale, 1.4), t);
-        noiseGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+            const noiseGain = this.ctx.createGain();
+            noiseGain.gain.setValueAtTime(0.65 * Math.min(scale, 1.4), t);
+            noiseGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
 
-        noise.connect(filter);
-        filter.connect(noiseGain);
-        noiseGain.connect(this.sfxGain);
+            noise.connect(filter);
+            filter.connect(noiseGain);
+            noiseGain.connect(this.sfxGain);
 
-        noise.start(t);
-        noise.stop(t + duration);
+            this._trackVoice(noise);
+            noise.start(t);
+            noise.stop(t + duration);
 
-        // 2. Глубокий суб-басовый удар
-        const sub = this.ctx.createOscillator();
-        const subGain = this.ctx.createGain();
-        sub.type = 'sine';
-        sub.frequency.setValueAtTime(95 * Math.max(0.6, 1 / scale), t);
-        sub.frequency.exponentialRampToValueAtTime(25, t + duration * 0.9);
+            // 2. Глубокий суб-басовый удар
+            const sub = this.ctx.createOscillator();
+            const subGain = this.ctx.createGain();
+            sub.type = 'sine';
+            sub.frequency.setValueAtTime(95 * Math.max(0.6, 1 / scale), t);
+            sub.frequency.exponentialRampToValueAtTime(25, t + duration * 0.9);
 
-        subGain.gain.setValueAtTime(0.55 * Math.min(scale, 1.6), t);
-        subGain.gain.exponentialRampToValueAtTime(0.001, t + duration * 0.9);
+            subGain.gain.setValueAtTime(0.55 * Math.min(scale, 1.6), t);
+            subGain.gain.exponentialRampToValueAtTime(0.001, t + duration * 0.9);
 
-        sub.connect(subGain);
-        subGain.connect(this.sfxGain);
+            sub.connect(subGain);
+            subGain.connect(this.sfxGain);
 
-        sub.start(t);
-        sub.stop(t + duration * 0.9);
+            this._trackVoice(sub);
+            sub.start(t);
+            sub.stop(t + duration * 0.9);
+        });
     }
 
     // --- 4. ПРИКАЗ ПЕРЕМЕЩЕНИЯ ИЛИ АТАКИ (ORDER BEEP SFX) ---
@@ -297,33 +368,36 @@ class SoundEngine {
         if (!this.canPlay('order', 0.08)) return;
         this.ensureContext();
         if (!this.ctx) return;
-        const t = this.ctx.currentTime;
+        return this._runProfiled(() => {
+            const t = this.ctx.currentTime;
 
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = isAttack ? 'sawtooth' : 'sine';
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = isAttack ? 'sawtooth' : 'sine';
 
-        if (isAttack) {
-            // Резкий двухтоновый боевой сигнал
-            osc.frequency.setValueAtTime(440, t);
-            osc.frequency.setValueAtTime(660, t + 0.05);
+            if (isAttack) {
+                // Резкий двухтоновый боевой сигнал
+                osc.frequency.setValueAtTime(440, t);
+                osc.frequency.setValueAtTime(660, t + 0.05);
 
-            gain.gain.setValueAtTime(0.35, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-            osc.stop(t + 0.12);
-        } else {
-            // Приятный восходящий sci-fi пинг
-            osc.frequency.setValueAtTime(580, t);
-            osc.frequency.exponentialRampToValueAtTime(880, t + 0.07);
+                gain.gain.setValueAtTime(0.35, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+                osc.stop(t + 0.12);
+            } else {
+                // Приятный восходящий sci-fi пинг
+                osc.frequency.setValueAtTime(580, t);
+                osc.frequency.exponentialRampToValueAtTime(880, t + 0.07);
 
-            gain.gain.setValueAtTime(0.25, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
-            osc.stop(t + 0.1);
-        }
+                gain.gain.setValueAtTime(0.25, t);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+                osc.stop(t + 0.1);
+            }
 
-        osc.connect(gain);
-        gain.connect(this.sfxGain);
-        osc.start(t);
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+            this._trackVoice(osc);
+            osc.start(t);
+        });
     }
 
     // --- 5. ВЫДЕЛЕНИЕ ЮНИТОВ (SELECT CLICK SFX) ---
@@ -331,21 +405,24 @@ class SoundEngine {
         if (!this.canPlay('select', 0.06)) return;
         this.ensureContext();
         if (!this.ctx) return;
-        const t = this.ctx.currentTime;
+        return this._runProfiled(() => {
+            const t = this.ctx.currentTime;
 
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(1600, t);
-        osc.frequency.exponentialRampToValueAtTime(1100, t + 0.03);
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(1600, t);
+            osc.frequency.exponentialRampToValueAtTime(1100, t + 0.03);
 
-        gain.gain.setValueAtTime(0.18, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+            gain.gain.setValueAtTime(0.18, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
 
-        osc.connect(gain);
-        gain.connect(this.sfxGain);
-        osc.start(t);
-        osc.stop(t + 0.03);
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+            this._trackVoice(osc);
+            osc.start(t);
+            osc.stop(t + 0.03);
+        });
     }
 
     // --- 6. ПРОИЗВОДСТВО ДРОНА (PRODUCE SFX) ---
@@ -353,25 +430,28 @@ class SoundEngine {
         if (!this.canPlay('produce', 0.1)) return;
         this.ensureContext();
         if (!this.ctx) return;
-        const t = this.ctx.currentTime;
+        return this._runProfiled(() => {
+            const t = this.ctx.currentTime;
 
-        // Восходящее электронное трезвучие (C5 -> E5 -> G5)
-        const notes = [523.25, 659.25, 783.99];
-        notes.forEach((freq, idx) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            const noteStart = t + idx * 0.045;
+            // Восходящее электронное трезвучие (C5 -> E5 -> G5)
+            const notes = [523.25, 659.25, 783.99];
+            notes.forEach((freq, idx) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                const noteStart = t + idx * 0.045;
 
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, noteStart);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, noteStart);
 
-            gain.gain.setValueAtTime(0.24, noteStart);
-            gain.gain.exponentialRampToValueAtTime(0.001, noteStart + 0.15);
+                gain.gain.setValueAtTime(0.24, noteStart);
+                gain.gain.exponentialRampToValueAtTime(0.001, noteStart + 0.15);
 
-            osc.connect(gain);
-            gain.connect(this.sfxGain);
-            osc.start(noteStart);
-            osc.stop(noteStart + 0.15);
+                osc.connect(gain);
+                gain.connect(this.sfxGain);
+                this._trackVoice(osc);
+                osc.start(noteStart);
+                osc.stop(noteStart + 0.15);
+            });
         });
     }
 
@@ -380,24 +460,27 @@ class SoundEngine {
         if (!this.canPlay('capture', 0.2)) return;
         this.ensureContext();
         if (!this.ctx) return;
-        const t = this.ctx.currentTime;
+        return this._runProfiled(() => {
+            const t = this.ctx.currentTime;
 
-        const freqs = isPlayer ? [440, 554.37, 659.25, 880] : [659.25, 554.37, 440, 370];
-        freqs.forEach((freq, idx) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            const noteStart = t + idx * 0.07;
+            const freqs = isPlayer ? [440, 554.37, 659.25, 880] : [659.25, 554.37, 440, 370];
+            freqs.forEach((freq, idx) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                const noteStart = t + idx * 0.07;
 
-            osc.type = isPlayer ? 'sine' : 'sawtooth';
-            osc.frequency.setValueAtTime(freq, noteStart);
+                osc.type = isPlayer ? 'sine' : 'sawtooth';
+                osc.frequency.setValueAtTime(freq, noteStart);
 
-            gain.gain.setValueAtTime(isPlayer ? 0.26 : 0.2, noteStart);
-            gain.gain.exponentialRampToValueAtTime(0.001, noteStart + 0.22);
+                gain.gain.setValueAtTime(isPlayer ? 0.26 : 0.2, noteStart);
+                gain.gain.exponentialRampToValueAtTime(0.001, noteStart + 0.22);
 
-            osc.connect(gain);
-            gain.connect(this.sfxGain);
-            osc.start(noteStart);
-            osc.stop(noteStart + 0.22);
+                osc.connect(gain);
+                gain.connect(this.sfxGain);
+                this._trackVoice(osc);
+                osc.start(noteStart);
+                osc.stop(noteStart + 0.22);
+            });
         });
     }
 

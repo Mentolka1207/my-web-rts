@@ -8,20 +8,19 @@ const SPACING = 1.2;
 function updateFormationUI() {
     const lineBtn = document.getElementById('formation-line-btn');
     const wedgeBtn = document.getElementById('formation-wedge-btn');
-    if (lineBtn) {
-        const isLine = currentFormation === 'line';
-        lineBtn.style.background = isLine ? '#00ffcc' : '#0077ff';
-        lineBtn.style.color = isLine ? '#000000' : '#ffffff';
-        lineBtn.style.borderColor = isLine ? '#00ffcc' : '#00a2ff';
-        lineBtn.style.boxShadow = isLine ? '0 0 10px rgba(0, 255, 204, 0.6)' : 'none';
-    }
-    if (wedgeBtn) {
-        const isWedge = currentFormation === 'wedge';
-        wedgeBtn.style.background = isWedge ? '#00ffcc' : '#0077ff';
-        wedgeBtn.style.color = isWedge ? '#000000' : '#ffffff';
-        wedgeBtn.style.borderColor = isWedge ? '#00ffcc' : '#00a2ff';
-        wedgeBtn.style.boxShadow = isWedge ? '0 0 10px rgba(0, 255, 204, 0.6)' : 'none';
-    }
+    const circleBtn = document.getElementById('formation-circle-btn');
+
+    const updateBtn = (btn, active) => {
+        if (!btn) return;
+        btn.style.background = active ? '#00ffcc' : '#0077ff';
+        btn.style.color = active ? '#000000' : '#ffffff';
+        btn.style.borderColor = active ? '#00ffcc' : '#00a2ff';
+        btn.style.boxShadow = active ? '0 0 10px rgba(0, 255, 204, 0.6)' : 'none';
+    };
+
+    updateBtn(lineBtn, currentFormation === 'line');
+    updateBtn(wedgeBtn, currentFormation === 'wedge');
+    updateBtn(circleBtn, currentFormation === 'circle');
 }
 
 function setFormation(type) {
@@ -53,6 +52,13 @@ function getFormationOffsets(numUnits, type) {
             const side = i % 2 === 0 ? 1 : -1;
             const step = Math.ceil(i / 2);
             offsets.push(new THREE.Vector2(side * step * SPACING, -step * SPACING));
+        }
+    } else if (type === 'circle') {
+        // Круговое защитное построение вокруг осадных танков или командира
+        const radius = Math.max(1.8, (numUnits * SPACING) / (2 * Math.PI));
+        for (let i = 0; i < numUnits; i++) {
+            const angle = (i / numUnits) * Math.PI * 2;
+            offsets.push(new THREE.Vector2(Math.cos(angle) * radius, Math.sin(angle) * radius));
         }
     }
     return offsets;
