@@ -206,6 +206,74 @@ function updateDebugOverlay(delta) {
     }
 }
 
+// Компактная панель FPS / времени кадра / активных юнитов (клавиша ` / ~)
+let perfPanelVisible = false;
+let perfFrames = 0;
+let perfWindowStart = 0;
+let perfLastTimestamp = 0;
+let perfWorstFrame = 0;
+const PERF_WINDOW_MS = 500;
+
+function togglePerfPanel() {
+    perfPanelVisible = !perfPanelVisible;
+    const el = document.getElementById('perf-panel');
+    if (el) el.style.display = perfPanelVisible ? 'block' : 'none';
+    // Сброс окна, чтобы пауза в скрытом состоянии не исказила первый замер
+    perfFrames = 0;
+    perfWorstFrame = 0;
+    perfWindowStart = 0;
+    perfLastTimestamp = 0;
+}
+
+window.addEventListener('keydown', (e) => {
+    // e.code не зависит от раскладки (на русской раскладке это клавиша «Ё»)
+    if (e.code === 'Backquote' && !e.repeat) {
+        e.preventDefault();
+        togglePerfPanel();
+    }
+});
+
+// timestamp — метка requestAnimationFrame (мс), реальный интервал между кадрами без клампа дельты
+function updatePerfPanel(timestamp) {
+    if (!perfPanelVisible) return;
+
+    if (perfLastTimestamp > 0) {
+        const frameMs = timestamp - perfLastTimestamp;
+        if (frameMs > perfWorstFrame) perfWorstFrame = frameMs;
+        perfFrames++;
+    }
+    perfLastTimestamp = timestamp;
+
+    if (perfWindowStart === 0) {
+        perfWindowStart = timestamp;
+        return;
+    }
+    const elapsed = timestamp - perfWindowStart;
+    if (elapsed < PERF_WINDOW_MS || perfFrames === 0) return;
+
+    const fps = Math.round((perfFrames * 1000) / elapsed);
+    const avgMs = elapsed / perfFrames;
+
+    let alliesAlive = 0;
+    let enemiesAlive = 0;
+    for (let i = 0; i < units.length; i++) if (units[i].hp > 0) alliesAlive++;
+    for (let i = 0; i < enemies.length; i++) if (enemies[i].hp > 0) enemiesAlive++;
+
+    const fpsEl = document.getElementById('perf-fps');
+    const ftEl = document.getElementById('perf-frame-time');
+    const uEl = document.getElementById('perf-units');
+    if (fpsEl) {
+        fpsEl.textContent = fps;
+        fpsEl.style.color = fps >= 50 ? '#00ffcc' : (fps >= 30 ? '#ffaa00' : '#ff4444');
+    }
+    if (ftEl) ftEl.textContent = `${avgMs.toFixed(1)} / ${perfWorstFrame.toFixed(1)} ms`;
+    if (uEl) uEl.textContent = `${alliesAlive} / ${enemiesAlive} (всего ${alliesAlive + enemiesAlive})`;
+
+    perfFrames = 0;
+    perfWorstFrame = 0;
+    perfWindowStart = timestamp;
+}
+
 // --- ПАНЕЛЬ АКТИВНЫХ СПОСОБНОСТЕЙ ЮНИТОВ (ACTION BAR) ---
 let lastAbilityUIUpdate = 0;
 function updateAbilityUI(currentTime) {

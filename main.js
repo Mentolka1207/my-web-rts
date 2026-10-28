@@ -514,6 +514,9 @@ function animate(timestamp) {
         if (typeof updateDebugOverlay === 'function') {
             updateDebugOverlay(rawDelta);
         }
+        if (typeof updatePerfPanel === 'function') {
+            updatePerfPanel(timestamp);
+        }
         // 12.5. GPU Instanced Rendering синхронизация (InstancedMesh)
         if (typeof instancedRenderer !== 'undefined' && instancedRenderer.enabled) {
             for (let i = 0; i < units.length; i++) {
