@@ -25,7 +25,9 @@ function loadGame() {
         performance,
         // config.js навешивает глобальные обработчики ошибок
         window: { addEventListener() {} },
-        document: {}
+        // formations.js ищет кнопки построений и откладывает их подсветку таймером
+        document: { readyState: 'complete', getElementById: () => null, addEventListener() {} },
+        setTimeout: () => 0
     });
     ctx.globalThis = ctx;
 
@@ -38,16 +40,24 @@ function loadGame() {
     runFile(ctx, 'js/config.js');
     runFile(ctx, 'js/prng.js');
     runFile(ctx, 'js/grid.js');
+    runFile(ctx, 'js/spatialhash.js');
+    runFile(ctx, 'js/formations.js');
     runFile(ctx, 'js/flowfield.js');
 
-    return vm.runInContext(`({
+    const game = vm.runInContext(`({
         THREE,
         GRID_SIZE, CELL_SIZE, MAP_WORLD_SIZE,
         HQ_COL, HQ_ROW, ENEMY_HQ_COL, ENEMY_HQ_ROW, RESOURCE_NODE_COORDS,
         grid, worldToGrid, gridToWorld, hasLineOfSight, findBypassDirection,
         FlowFieldGenerator, invalidateFlowFieldCache,
-        flowFieldGen, enemyFlowFieldGen
+        flowFieldGen, enemyFlowFieldGen,
+        SpatialGrid, spatialGrid,
+        SPACING, getFormationOffsets, setFormation, updateFormationUI,
+        getCurrentFormation: () => currentFormation
     })`, ctx);
+    // Сам глобальный объект «страницы»: позволяет подменять document, playSelectSound и т.п.
+    game.context = ctx;
+    return game;
 }
 
 // Заполняет левый-верхний фрагмент глобальной сетки по ASCII-схеме
