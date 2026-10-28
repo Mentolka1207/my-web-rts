@@ -1,0 +1,13 @@
+{
+  "name": "my-web-rts",
+  "version": "0.0.0",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "type": "commonjs",
+  "private": true,
+  "devDependencies": {
+    "vitest": "^5.0.5"
+  }
+}
