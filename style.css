@@ -554,6 +554,33 @@ button:hover {
     }
 }
 
+/* Компактная панель FPS / времени кадра / юнитов (клавиша `) */
+#perf-panel {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    width: 290px;
+    max-width: calc(100vw - 24px);
+    background: rgba(8, 13, 24, 0.85);
+    border: 1px solid rgba(0, 255, 204, 0.35);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    color: #cbd5e1;
+    z-index: 50;
+    pointer-events: none;
+    line-height: 1.45;
+    user-select: none;
+    box-sizing: border-box;
+}
+
+@media (pointer: coarse) {
+    #perf-panel {
+        bottom: 60px;
+    }
+}
+
 /* Sci-Fi Debug Overlay & HUD Profiler (F3) */
 #debug-overlay {
     position: absolute;
