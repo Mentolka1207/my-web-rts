@@ -76,6 +76,7 @@
             • <strong>Сенсор / Тач:</strong> свайп одним пальцем — перемещение карты, щипок — зум, тап —
             выбор/приказ<br>
             • <strong>W, A, S, D</strong> — движение камеры, <strong>G</strong> — спавн врага<br>
+            • <strong>`</strong> (тильда) — компактная панель FPS / времени кадра / числа юнитов, <strong>F3</strong> — полный профайлер<br>
             • <strong>Точки сбора:</strong> захватывай кристаллы на карте (+3⚡/сек за точку)<br>
             • <strong>Волны:</strong> эволюция врагов с волны 3+, Босс «Левиафан» на волне 10!<br>
             • <strong>Звук:</strong> кнопка 🔊/🔇 переключает процедурные звуковые эффекты и эмбиент<br><br>
@@ -85,6 +86,7 @@
             <button id="formation-circle-btn" onclick="setFormation('circle')" title="Кольцо [C]">Кольцо [C]</button>
             <button id="mobile-spawn-btn" onclick="spawnEnemyNearCenter()">Спавн врага</button>
             <button onclick="toggleDebugOverlay()">Дебаг (F3)</button>
+            <button onclick="togglePerfPanel()">FPS-панель (`)</button>
         </div>
     </div>
     <div id="resource-panel" style="display:none;">
@@ -131,6 +133,11 @@
     </div>
     <div id="minimap-wrap" style="display:none;">
         <canvas id="minimap" width="170" height="170"></canvas>
+    </div>
+    <div id="perf-panel" style="display:none;">
+        <div class="debug-row"><span>FPS</span> <span id="perf-fps" class="dbg-val">--</span></div>
+        <div class="debug-row"><span>Кадр (сред / макс)</span> <span id="perf-frame-time" class="dbg-val">-- ms</span></div>
+        <div class="debug-row"><span>Юниты (союз / враг)</span> <span id="perf-units" class="dbg-val">0 / 0</span></div>
     </div>
     <div id="debug-overlay" style="display:none;">
         <div class="debug-header">
@@ -367,6 +374,7 @@
     <script src="js/healthbar.js"></script>
     <script src="js/models.js"></script>
     <script src="js/instancing.js"></script>
+    <script src="js/particles.js"></script>
     <script src="js/effects.js"></script>
     <script src="js/units.js"></script>
     <script src="js/resources.js"></script>

@@ -82,6 +82,9 @@ function clearAllUnitsForBenchmark() {
     if (typeof instancedRenderer !== 'undefined') {
         instancedRenderer.clear();
     }
+    if (typeof particleSystem !== 'undefined') {
+        particleSystem.clear();
+    }
     if (typeof simWorld !== 'undefined') {
         simWorld.clear();
     }

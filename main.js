@@ -9,7 +9,8 @@
 // - js/terrain.js     — Процедурные текстуры, поверхность и препятствия
 // - js/healthbar.js   — 3D полоски здоровья и щита
 // - js/models.js      — 3D модели дронов, флагмана-Левиафана и штабов
-// - js/effects.js     — Пул лазеров, вспышек, взрывов и следов попаданий
+// - js/particles.js   — Пул частиц (THREE.Points): искры попаданий и обломки взрывов
+// - js/effects.js     — Пул лазеров, вспышек и следов попаданий
 // - js/units.js       — Юниты, спавн, физика анимаций и проверка позиций
 // - js/resources.js   — Кристаллы сбора ресурсов и логика захвата
 // - js/economy.js     — Энергия, доходы и производство
@@ -521,6 +522,9 @@ function animate(timestamp) {
         // 12. Обновление Debug-Overlay и панели способностей
         if (typeof updateDebugOverlay === 'function') {
             updateDebugOverlay(rawDelta);
+        }
+        if (typeof updatePerfPanel === 'function') {
+            updatePerfPanel(timestamp);
         }
         // 12.5. GPU Instanced Rendering синхронизация (InstancedMesh)
         if (typeof instancedRenderer !== 'undefined' && instancedRenderer.enabled) {

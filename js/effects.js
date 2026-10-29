@@ -1,5 +1,6 @@
 // =============================================================================
 // js/effects.js — Пул визуальных эффектов (Object Pooling для лазеров, вспышек, взрывов)
+// Зависит от js/particles.js (particleSystem)
 // =============================================================================
 
 // Процедурная текстура вспышки выстрела и попадания высокого разрешения
@@ -82,6 +83,8 @@ function spawnHitFlash(position, isAlly) {
 
     flashData[idx].active = true;
     flashData[idx].elapsed = 0;
+
+    particleSystem.emitImpact(position, isAlly);
 }
 
 function fireLaser(fromPos, toPos, isAlly, laserType) {
@@ -249,78 +252,17 @@ function updateVFX(delta) {
     }
 }
 
-// Пул частиц взрывов
-const MAX_EXPLOSION_PARTICLES = 120;
-const explosionParticles = [];
-const sharedBoxGeo = new THREE.BoxGeometry(1, 1, 1);
-const particleMaterials = [
-    new THREE.MeshBasicMaterial({ color: 0xffaa00 }),
-    new THREE.MeshBasicMaterial({ color: 0xff6600 }),
-    new THREE.MeshBasicMaterial({ color: 0xffcc33 }),
-    new THREE.MeshBasicMaterial({ color: 0xff3300 }),
-    new THREE.MeshBasicMaterial({ color: 0x00d4ff }) // искры щита
-];
-
-for (let i = 0; i < MAX_EXPLOSION_PARTICLES; i++) {
-    const mat = particleMaterials[i % particleMaterials.length];
-    const mesh = new THREE.Mesh(sharedBoxGeo, mat);
-    mesh.visible = false;
-    scene.add(mesh);
-    explosionParticles.push({
-        mesh: mesh,
-        velocity: new THREE.Vector3(),
-        age: 0,
-        maxLife: 0.5,
-        baseSize: 0.1,
-        active: false
-    });
-}
-
+// Частицы взрывов и искры попаданий — пул на одном THREE.Points (см. js/particles.js)
 function spawnExplosion(position, count = 10) {
     if (typeof playExplosionSound === 'function') {
         const scale = count >= 25 ? 2.2 : (count >= 15 ? 1.4 : 1.0);
         playExplosionSound(scale);
     }
-    let spawned = 0;
-    for (let i = 0; i < MAX_EXPLOSION_PARTICLES && spawned < count; i++) {
-        const p = explosionParticles[i];
-        if (!p.active) {
-            p.active = true;
-            p.age = 0;
-            p.maxLife = 0.35 + Math.random() * 0.25;
-            p.baseSize = 0.08 + Math.random() * 0.12;
-            p.mesh.position.set(position.x, position.y, position.z);
-            p.mesh.scale.setScalar(p.baseSize);
-            p.mesh.visible = true;
-
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 2.0 + Math.random() * 4.0;
-            p.velocity.set(
-                Math.cos(angle) * speed,
-                3.0 + Math.random() * 3.5,
-                Math.sin(angle) * speed
-            );
-            spawned++;
-        }
-    }
+    particleSystem.emitDestruction(position, count);
 }
 
 function updateExplosions(delta) {
-    for (let i = 0; i < MAX_EXPLOSION_PARTICLES; i++) {
-        const p = explosionParticles[i];
-        if (!p.active) continue;
-        p.age += delta;
-        p.velocity.y -= 9.0 * delta;
-        p.mesh.position.addScaledVector(p.velocity, delta);
-
-        const lifeRatio = 1 - (p.age / p.maxLife);
-        if (lifeRatio <= 0 || p.mesh.position.y < 0) {
-            p.active = false;
-            p.mesh.visible = false;
-        } else {
-            p.mesh.scale.setScalar(Math.max(0.01, p.baseSize * lifeRatio));
-        }
-    }
+    particleSystem.update(delta);
 }
 
 // Опалённые следы на земле высокого качества
