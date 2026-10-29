@@ -9,7 +9,7 @@ let isDragging = false;
 const DRAG_THRESHOLD = 6;
 const selectionBoxEl = document.getElementById('selection-box');
 const raycaster = new THREE.Raycaster();
-const UI_SELECTOR = '#instructions, #resource-panel, #minimap-wrap, #wave-panel, #tactical-alert, #main-menu-overlay, #game-over-overlay, #touch-mode-panel, #ability-panel, #debug-overlay';
+const UI_SELECTOR = '#instructions, #resource-panel, #minimap-wrap, #wave-panel, #tactical-alert, #main-menu-overlay, #game-over-overlay, #touch-mode-panel, #ability-panel, #debug-overlay, #pause-overlay, #settings-modal, #records-modal, #tutorial-modal, #licenses-modal, #hud-pause-btn';
 
 // --- Состояние перемещения колёсиком мыши (MMB Drag) ---
 let isMiddlePanning = false;
@@ -37,11 +37,11 @@ function toggleTouchMode() {
     const btn = document.getElementById('touch-mode-btn');
     if (btn) {
         if (currentTouchMode === 'pan') {
-            btn.textContent = '🖐 Карта (Сенсор)';
+            btn.textContent = typeof t === 'function' ? t('TOUCH_PAN') : '🖐 Карта (Сенсор)';
             btn.style.borderColor = '#00ffcc';
             btn.style.color = '#00ffcc';
         } else {
-            btn.textContent = '⬚ Рамка (Выбор)';
+            btn.textContent = typeof t === 'function' ? t('TOUCH_SELECT') : '⬚ Рамка (Выбор)';
             btn.style.borderColor = '#ffaa00';
             btn.style.color = '#ffaa00';
         }
@@ -482,6 +482,12 @@ window.addEventListener('touchcancel', () => {
 const keys = {};
 window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
+
+    // Пауза по клавише Esc или P
+    if (e.code === 'KeyP' || e.code === 'Escape') {
+        if (typeof togglePause === 'function') togglePause();
+        return;
+    }
 
     // Горячие клавиши способностей: Q (Форсаж), E (Щит), R/F (Осада), 1/2/3
     if (e.code === 'KeyQ') {

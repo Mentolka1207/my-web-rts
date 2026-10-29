@@ -454,28 +454,58 @@ const wallCapMat = new THREE.MeshStandardMaterial({
     emissiveIntensity: 0.25
 });
 
-for (let row = 0; row < GRID_SIZE; row++) {
-    for (let col = 0; col < GRID_SIZE; col++) {
-        const isHQCell = (row === HQ_ROW && col === HQ_COL) || (row === ENEMY_HQ_ROW && col === ENEMY_HQ_COL);
-        if (grid[row][col] === 1 && !isHQCell) {
-            const wallGroup = new THREE.Group();
-            const wall = new THREE.Mesh(wallGeo, wallMat);
-            wall.position.y = 0.75;
-            wall.castShadow = true;
-            wall.receiveShadow = true;
-            wallGroup.add(wall);
+let instancedWalls = null;
+let instancedCaps = null;
 
-            // Бронированный оголовок монолита с неоновой каймой
-            const cap = new THREE.Mesh(wallCapGeo, wallCapMat);
-            cap.position.y = 1.55;
-            cap.castShadow = true;
-            cap.receiveShadow = true;
-            wallGroup.add(cap);
+function buildInstancedWalls() {
+    if (instancedWalls) {
+        scene.remove(instancedWalls);
+        instancedWalls = null;
+    }
+    if (instancedCaps) {
+        scene.remove(instancedCaps);
+        instancedCaps = null;
+    }
 
-            const pos = gridToWorld(col, row);
-            wallGroup.position.set(pos.x, 0, pos.z);
-            scene.add(wallGroup);
+    const wallPositions = [];
+    for (let row = 0; row < GRID_SIZE; row++) {
+        for (let col = 0; col < GRID_SIZE; col++) {
+            const isHQCell = (row === HQ_ROW && col === HQ_COL) || (row === ENEMY_HQ_ROW && col === ENEMY_HQ_COL);
+            if (grid[row][col] === 1 && !isHQCell) {
+                wallPositions.push(gridToWorld(col, row));
+            }
         }
     }
+
+    if (wallPositions.length === 0) return;
+
+    instancedWalls = new THREE.InstancedMesh(wallGeo, wallMat, wallPositions.length);
+    instancedCaps = new THREE.InstancedMesh(wallCapGeo, wallCapMat, wallPositions.length);
+    instancedWalls.castShadow = true;
+    instancedWalls.receiveShadow = true;
+    instancedCaps.castShadow = true;
+    instancedCaps.receiveShadow = true;
+
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < wallPositions.length; i++) {
+        const pos = wallPositions[i];
+        dummy.position.set(pos.x, 0.75, pos.z);
+        dummy.scale.set(1, 1, 1);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        instancedWalls.setMatrixAt(i, dummy.matrix);
+
+        dummy.position.set(pos.x, 1.55, pos.z);
+        dummy.updateMatrix();
+        instancedCaps.setMatrixAt(i, dummy.matrix);
+    }
+
+    instancedWalls.instanceMatrix.needsUpdate = true;
+    instancedCaps.instanceMatrix.needsUpdate = true;
+
+    scene.add(instancedWalls);
+    scene.add(instancedCaps);
 }
+
+buildInstancedWalls();
 

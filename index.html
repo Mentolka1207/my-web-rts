@@ -7,6 +7,7 @@
     <title>Minimal Web RTS: Neo-Drone Swarm &amp; Patrolling AI</title>
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
+    <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="style.css">
     <!-- Three.js (автономная локальная библиотека r186 / v0.186.1) -->
     <script src="libs/three.min.js"></script>
@@ -20,20 +21,45 @@
 
 <body>
     <div id="main-menu-overlay">
-        <div id="main-menu-title">🛰️ Minimal Web RTS</div>
-        <div id="main-menu-subtitle">Neo-Drone Swarm &amp; Patrolling AI</div>
+        <div id="main-menu-title" data-i18n="MENU_TITLE">🛰️ Minimal Web RTS</div>
+        <div id="main-menu-subtitle" data-i18n="MENU_SUBTITLE">Neo-Drone Swarm &amp; Patrolling AI</div>
+        
+        <div class="menu-config-row">
+            <div class="menu-config-item">
+                <label data-i18n="MENU_MAP_LABEL">Карта:</label>
+                <select id="map-select" class="menu-select" onchange="selectMap(this.value)">
+                    <option value="canyon" data-i18n="MAP_CANYON">Каньон (Классика)</option>
+                    <option value="arena" data-i18n="MAP_ARENA">Арена Бастионов</option>
+                    <option value="maze" data-i18n="MAP_MAZE">Лабиринт Кристаллов</option>
+                </select>
+            </div>
+            <div class="menu-config-item">
+                <label data-i18n="MENU_DIFF_LABEL">Сложность:</label>
+                <select id="difficulty-select" class="menu-select" onchange="setDifficulty(this.value)">
+                    <option value="easy" data-i18n="DIFF_EASY">Рекрут (Легко)</option>
+                    <option value="normal" selected data-i18n="DIFF_NORMAL">Офицер (Норма)</option>
+                    <option value="hard" data-i18n="DIFF_HARD">Командир (Сложно)</option>
+                </select>
+            </div>
+        </div>
+
         <div id="main-menu-buttons">
-            <button id="play-btn" onclick="startGame()">▶ Играть</button>
-            <button id="exit-btn" onclick="exitGame()">✕ Выйти</button>
+            <button id="play-btn" class="primary-btn" onclick="startGame()" data-i18n="MENU_PLAY">▶ Играть</button>
+            <button id="tutorial-btn" onclick="showTutorialModal()" data-i18n="MENU_TUTORIAL">❓ Обучение</button>
+            <button id="settings-btn" onclick="openSettingsModal()" data-i18n="MENU_SETTINGS">⚙️ Настройки</button>
+            <button id="records-btn" onclick="openRecordsModal()" data-i18n="MENU_RECORDS">🏆 Рекорды</button>
+            <button id="licenses-btn" onclick="openLicensesModal()" data-i18n="MENU_LICENSES">📜 Лицензии</button>
+            <button id="exit-btn" onclick="exitGame()" data-i18n="MENU_EXIT">✕ Выйти</button>
         </div>
         <a id="main-menu-github" href="https://github.com/Mentolka1207/my-web-rts" target="_blank"
-            rel="noopener noreferrer">📦 Репозиторий на GitHub</a>
+            rel="noopener noreferrer" data-i18n="MENU_GITHUB">📦 Репозиторий на GitHub</a>
     </div>
     <div id="selection-box"></div>
     <div id="instructions" style="display:none;">
         <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">
-            <button id="instructions-toggle" onclick="toggleInstructions()">Скрыть ▲</button>
+            <button id="instructions-toggle" onclick="toggleInstructions()" data-i18n="BTN_HIDE_INSTRUCTIONS">Скрыть ▲</button>
             <button id="sound-toggle-btn" onclick="toggleSound()">🔊 Звук: ВКЛ</button>
+            <button id="hud-pause-btn" onclick="togglePause()" data-i18n="PAUSE_BTN" title="Пауза [P/Esc]">⏸️ Пауза</button>
         </div>
         <div id="instructions-content">
             <strong>Управление Swarm RTS:</strong><br>
@@ -184,12 +210,121 @@
     <div id="game-over-overlay">
         <div id="game-over-title">ПОБЕДА!</div>
         <div id="game-over-stats"></div>
-        <button id="game-over-restart-btn" onclick="location.reload()">▶ Играть снова</button>
+        <div class="game-over-buttons">
+            <button id="game-over-restart-btn" class="primary-btn" onclick="restartMatch()" data-i18n="BTN_PLAY_AGAIN">▶ Играть снова</button>
+            <button id="game-over-menu-btn" onclick="returnToMainMenu()" data-i18n="BTN_TO_MENU">🏠 В главное меню</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно Паузы -->
+    <div id="pause-overlay" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-title" data-i18n="PAUSE_TITLE">⏸️ ПАУЗА</div>
+            <div class="modal-button-stack">
+                <button class="primary-btn" onclick="togglePause()" data-i18n="BTN_RESUME">▶ Продолжить</button>
+                <button onclick="restartMatch()" data-i18n="BTN_RESTART_MATCH">🔄 Рестарт матча</button>
+                <button onclick="openSettingsModal()" data-i18n="MENU_SETTINGS">⚙️ Настройки</button>
+                <button onclick="returnToMainMenu()" data-i18n="BTN_TO_MENU">🏠 В главное меню</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно Настроек -->
+    <div id="settings-modal" class="modal-backdrop" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-title" data-i18n="SETTINGS_TITLE">⚙️ НАСТРОЙКИ ИГРЫ</div>
+            <div class="settings-group">
+                <label data-i18n="LABEL_MASTER_VOL">Общая громкость:</label>
+                <div class="slider-row">
+                    <input type="range" id="slider-master-vol" min="0" max="100" value="100" oninput="document.getElementById('val-master-vol').textContent = this.value + '%'">
+                    <span id="val-master-vol" class="slider-val">100%</span>
+                </div>
+            </div>
+            <div class="settings-group">
+                <label data-i18n="LABEL_SFX_VOL">Звуковые эффекты (SFX):</label>
+                <div class="slider-row">
+                    <input type="range" id="slider-sfx-vol" min="0" max="100" value="100" oninput="document.getElementById('val-sfx-vol').textContent = this.value + '%'">
+                    <span id="val-sfx-vol" class="slider-val">100%</span>
+                </div>
+            </div>
+            <div class="settings-group">
+                <label data-i18n="LABEL_MUSIC_VOL">Космический эмбиент:</label>
+                <div class="slider-row">
+                    <input type="range" id="slider-music-vol" min="0" max="100" value="100" oninput="document.getElementById('val-music-vol').textContent = this.value + '%'">
+                    <span id="val-music-vol" class="slider-val">100%</span>
+                </div>
+            </div>
+            <div class="settings-group">
+                <label data-i18n="LABEL_GRAPHICS">Графика и тени:</label>
+                <select id="select-shadows" class="settings-select">
+                    <option value="on" data-i18n="OPT_SHADOWS_ON">Мягкие тени (Высокое качество)</option>
+                    <option value="off" data-i18n="OPT_SHADOWS_OFF">Без теней (Макс. производительность)</option>
+                </select>
+            </div>
+            <div class="settings-group">
+                <label data-i18n="LABEL_LANGUAGE">Язык интерфейса:</label>
+                <select id="select-language" class="settings-select">
+                    <option value="ru">Русский (RU)</option>
+                    <option value="en">English (EN)</option>
+                </select>
+            </div>
+            <button class="primary-btn" onclick="closeSettingsModal()" data-i18n="BTN_SAVE_CLOSE">Сохранить и закрыть</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно Рекордов -->
+    <div id="records-modal" class="modal-backdrop" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-title" data-i18n="RECORDS_TITLE">🏆 РЕКОРДЫ И СТАТИСТИКА</div>
+            <div id="records-content"></div>
+            <button class="primary-btn" onclick="closeRecordsModal()" data-i18n="BTN_CLOSE">Закрыть</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно Обучения -->
+    <div id="tutorial-modal" class="modal-backdrop" style="display:none;">
+        <div class="modal-card tutorial-card">
+            <div class="modal-title" data-i18n="TUTORIAL_TITLE">❓ РУКОВОДСТВО КОМАНДИРА</div>
+            <div class="tutorial-grid">
+                <div class="tutorial-step">
+                    <div class="tut-icon">💎</div>
+                    <div class="tut-step-title" data-i18n="TUT_STEP1_TITLE">1. ЭНЕРГИЯ И КРИСТАЛЛЫ</div>
+                    <div class="tut-step-desc" data-i18n="TUT_STEP1_DESC">Энергия — главный ресурс. Захватывай кристаллы Альфа, Центр и Бета на карте (+3⚡/сек за точку).</div>
+                </div>
+                <div class="tutorial-step">
+                    <div class="tut-icon">🛸</div>
+                    <div class="tut-step-title" data-i18n="TUT_STEP2_TITLE">2. ПРОИЗВОДСТВО И СТРОЙ</div>
+                    <div class="tut-step-desc" data-i18n="TUT_STEP2_DESC">Стройте армию: Разведчиков (40⚡), боевых Дронов (70⚡) и осадные Танки (150⚡). Построения: [Z] Шеренга, [X] Клин, [C] Кольцо.</div>
+                </div>
+                <div class="tutorial-step">
+                    <div class="tut-icon">🛡️</div>
+                    <div class="tut-step-title" data-i18n="TUT_STEP3_TITLE">3. ВОЛНЫ И СПОСОБНОСТИ</div>
+                    <div class="tut-step-desc" data-i18n="TUT_STEP3_DESC">Отражайте волны врагов. Используйте Форсаж [Q], Щит [E] и Осаду [R]. Уничтожьте Босса Левиафана на волне 10 и разрушьте базу врага!</div>
+                </div>
+            </div>
+            <button class="primary-btn" onclick="closeTutorialModal()" data-i18n="BTN_TUTORIAL_START">🚀 Понятно, в бой!</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно Лицензий -->
+    <div id="licenses-modal" class="modal-backdrop" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-title" data-i18n="LICENSES_TITLE">📜 ЛИЦЕНЗИИ И БЛАГОДАРНОСТИ</div>
+            <div class="licenses-text" data-i18n="LICENSES_DESC">Minimal Web RTS — открытый проект под лицензией MIT. Вся графика, процедурные PBR-текстуры, 3D-модели и аудиоэффекты созданы автономно на WebGL/Web Audio API.</div>
+            <div class="licenses-box">
+                <strong data-i18n="LICENSES_THREE_TITLE">Three.js (v0.186.1) — The MIT License</strong><br>
+                <span data-i18n="LICENSES_THREE_TEXT">Copyright © 2010-2026 three.js authors. Разрешено свободное использование, модификация и распространение.</span>
+            </div>
+            <button class="primary-btn" onclick="closeLicensesModal()" data-i18n="BTN_CLOSE">Закрыть</button>
+        </div>
     </div>
     <div id="canvas-container"></div>
 
     <!-- Модули Minimal Web RTS -->
     <script src="js/config.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/maps.js"></script>
     <script src="js/prng.js"></script>
     <script src="js/audio.js"></script>
     <script src="js/grid.js"></script>
@@ -212,6 +347,21 @@
     <script src="js/benchmark.js"></script>
     <script src="js/input.js"></script>
     <script src="main.js"></script>
+    <script>
+        // Инициализация локализации, настроек и профиля
+        loadSettingsFromStorage();
+        loadProfileFromStorage();
+        updateAllStaticTexts();
+
+        // Регистрация PWA Service Worker (при работе через HTTP/HTTPS)
+        if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').catch(err => {
+                    console.log('[PWA] Service Worker registration skipped:', err);
+                });
+            });
+        }
+    </script>
 </body>
 
 </html>

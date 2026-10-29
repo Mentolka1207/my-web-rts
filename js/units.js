@@ -55,12 +55,15 @@ function createUnit(col, row, type = 'standard') {
     mesh.position.set(pos.x, 0.75, pos.z);
     scene.add(mesh);
 
+    const allyHpMult = (typeof DIFFICULTY_CONFIGS !== 'undefined' && typeof currentDifficulty !== 'undefined' && DIFFICULTY_CONFIGS[currentDifficulty]) ? DIFFICULTY_CONFIGS[currentDifficulty].allyHpMult : 1.0;
+    const effectiveHp = Math.round(stats.hp * allyHpMult);
+
     const hpBar = attachHealthBar(mesh, true, 0.7 * stats.scale);
 
     let simId = -1;
     if (typeof simWorld !== 'undefined') {
         const typeNum = (type === 'standard') ? 0 : (type === 'scout' ? 1 : (type === 'tank' ? 2 : 3));
-        simId = simWorld.spawn(0, typeNum, pos.x, pos.z, stats.hp, stats.hp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
+        simId = simWorld.spawn(0, typeNum, pos.x, pos.z, effectiveHp, effectiveHp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
     }
 
     units.push({
@@ -71,8 +74,8 @@ function createUnit(col, row, type = 'standard') {
         state: States.IDLE,
         personalTarget: null,
         targetEnemy: null,
-        hp: stats.hp,
-        maxHp: stats.hp,
+        hp: effectiveHp,
+        maxHp: effectiveHp,
         speed: stats.speed,
         radius: stats.radius,
         visionRange: stats.visionRange,
@@ -106,10 +109,17 @@ function createEnemy(x, z, type = 'standard', isWaveUnit = false, sabotageNode =
 
     const hpBar = isBoss ? attachBossHealthBar(mesh) : attachHealthBar(mesh, false, 0.7 * stats.scale);
 
+    const enemyHpMult = (typeof DIFFICULTY_CONFIGS !== 'undefined' && typeof currentDifficulty !== 'undefined' && DIFFICULTY_CONFIGS[currentDifficulty]) ? DIFFICULTY_CONFIGS[currentDifficulty].enemyHpMult : 1.0;
+    const enemyDmgMult = (typeof DIFFICULTY_CONFIGS !== 'undefined' && typeof currentDifficulty !== 'undefined' && DIFFICULTY_CONFIGS[currentDifficulty]) ? DIFFICULTY_CONFIGS[currentDifficulty].enemyDamageMult : 1.0;
+
+    const effectiveHp = Math.round(stats.hp * enemyHpMult);
+    const effectiveDamage = Math.round(stats.damage * enemyDmgMult);
+    const effectiveShield = stats.shield ? Math.round(stats.shield * enemyHpMult) : 0;
+
     let simId = -1;
     if (typeof simWorld !== 'undefined') {
         const typeNum = (type === 'standard') ? 0 : (type === 'scout' ? 1 : (type === 'tank' ? 2 : 3));
-        simId = simWorld.spawn(1, typeNum, x, z, stats.hp, stats.hp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
+        simId = simWorld.spawn(1, typeNum, x, z, effectiveHp, effectiveHp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, effectiveDamage, stats.attackCooldown);
     }
 
     enemies.push({
@@ -117,17 +127,17 @@ function createEnemy(x, z, type = 'standard', isWaveUnit = false, sabotageNode =
         simId: simId,
         type: type,
         state: States.IDLE,
-        hp: stats.hp,
-        maxHp: stats.hp,
-        shield: stats.shield || 0,
-        maxShield: stats.maxShield || 0,
+        hp: effectiveHp,
+        maxHp: effectiveHp,
+        shield: effectiveShield,
+        maxShield: effectiveShield,
         shieldMesh: isBoss ? mesh.userData.shieldMesh : null,
         speed: stats.speed,
         radius: stats.radius,
         visionRange: stats.visionRange,
         attackRange: stats.attackRange,
         attackCooldown: stats.attackCooldown,
-        damage: stats.damage,
+        damage: effectiveDamage,
         reward: stats.reward,
         lastAttackTime: 0,
         targetAlly: null,

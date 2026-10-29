@@ -59,9 +59,12 @@ function stepSimulation(delta, currentTime) {
     energyAccumulator += delta;
     if (energyAccumulator >= 1) {
         energyAccumulator -= 1;
-        const inc = (ENERGY_INCOME_PER_SEC + playerNodesCount * NODE_ENERGY_BONUS);
+        const baseInc = (typeof getBaseIncome === 'function') ? getBaseIncome() : ENERGY_INCOME_PER_SEC;
+        const inc = (baseInc + playerNodesCount * NODE_ENERGY_BONUS);
         energy += inc;
-        if (typeof matchStats !== 'undefined') matchStats.energyHarvested += inc;
+        if (typeof matchStats !== 'undefined' && (typeof benchmarkActive === 'undefined' || !benchmarkActive)) {
+            matchStats.energyHarvested += inc;
+        }
         updateResourceUI();
     }
 
@@ -71,10 +74,13 @@ function stepSimulation(delta, currentTime) {
         waveWarningGiven = true;
         const nextWave = waveNumber + 1;
         const isBoss = (nextWave === 10 || (nextWave > 10 && nextWave % 10 === 0));
-        showTacticalAlert(isBoss ? `⚠️ ТРЕВОГА: Приближается БОСС «Левиафан» через 10с!` : `🌊 Внимание: Волна ${nextWave} начнётся через 10 секунд!`, isBoss);
+        showTacticalAlert(isBoss
+            ? (typeof t === 'function' ? t('ALERT_WAVE_10S_BOSS') : `⚠️ ТРЕВОГА: Приближается БОСС «Левиафан» через 10с!`)
+            : (typeof t === 'function' ? t('ALERT_WAVE_10S_NORMAL', nextWave) : `🌊 Внимание: Волна ${nextWave} начнётся через 10 секунд!`),
+            isBoss);
     }
     if (waveTimer <= 0) {
-        waveTimer += WAVE_INTERVAL;
+        waveTimer += (typeof getWaveInterval === 'function' ? getWaveInterval() : WAVE_INTERVAL);
         spawnWave();
     }
     updateWaveUI();
@@ -312,14 +318,14 @@ function stepSimulation(delta, currentTime) {
             enemies.splice(i, 1);
             const reward = e.reward || ENEMY_KILL_REWARD;
             energy += reward;
-            if (typeof matchStats !== 'undefined') {
+            if (typeof matchStats !== 'undefined' && (typeof benchmarkActive === 'undefined' || !benchmarkActive)) {
                 matchStats.energyHarvested += reward;
                 matchStats.enemiesKilled++;
                 if (isBoss) matchStats.bossesKilled++;
             }
             updateResourceUI();
-            if (isBoss) {
-                showTacticalAlert('🏆 БОСС «ЛЕВИАФАН» УНИЧТОЖЕН! (+100⚡)', false);
+            if (isBoss && (typeof benchmarkActive === 'undefined' || !benchmarkActive)) {
+                showTacticalAlert(typeof t === 'function' ? t('BOSS_DESTROYED_ALERT') : '🏆 БОСС «ЛЕВИАФАН» УНИЧТОЖЕН! (+100⚡)', false);
             }
         }
     }
@@ -475,11 +481,13 @@ function animate(timestamp) {
         simAccumulator += rawDelta;
         let maxSimulationTicks = 4;
         while (simAccumulator >= FIXED_TIMESTEP && maxSimulationTicks > 0) {
-            if (gameStarted && !gameOver) {
+            if (gameStarted && !gameOver && (typeof isGamePaused === 'undefined' || !isGamePaused)) {
                 stepSimulation(FIXED_TIMESTEP, simElapsedTime);
             }
-            simElapsedTime += FIXED_TIMESTEP;
-            simTickCount++;
+            if (typeof isGamePaused === 'undefined' || !isGamePaused) {
+                simElapsedTime += FIXED_TIMESTEP;
+                simTickCount++;
+            }
             simAccumulator -= FIXED_TIMESTEP;
             maxSimulationTicks--;
         }

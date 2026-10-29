@@ -477,48 +477,71 @@ button:hover {
 }
 
 /* Мобильная адаптация */
-@media (max-width: 720px), (pointer: coarse) {
+@media (max-width: 768px), (pointer: coarse) {
     #instructions {
         font-size: 12px;
-        padding: 10px;
-        max-width: 54vw;
-        line-height: 1.4;
+        padding: 6px 8px;
+        max-width: 92vw;
+        line-height: 1.35;
     }
 
-    #resource-panel {
-        font-size: 12px;
-        padding: 8px 10px;
-        min-width: 0;
-        max-width: 44vw;
-    }
-
-    button {
-        padding: 10px 14px;
-        font-size: 13px;
-    }
-
-    #minimap-wrap {
-        transform: scale(0.8);
-        transform-origin: bottom right;
+    #instructions-content {
+        display: none;
+        max-height: 55vh;
+        overflow-y: auto;
     }
 
     #wave-panel {
         font-size: 11px;
-        padding: 6px 12px;
+        padding: 5px 10px;
+        top: 52px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    #resource-panel {
+        font-size: 11px;
+        padding: 6px 8px;
+        min-width: 0;
+        max-width: 48vw;
+    }
+
+    button {
+        padding: 9px 12px;
+        font-size: 12px;
+    }
+
+    #minimap-wrap {
+        transform: scale(0.78);
+        transform-origin: bottom right;
     }
 
     #game-over-title {
-        font-size: 30px;
+        font-size: 28px;
     }
 
     #main-menu-title {
         font-size: 26px;
     }
 
-    #main-menu-buttons {
+    .menu-config-row {
         flex-direction: column;
+        gap: 8px;
+    }
+
+    #main-menu-buttons {
+        grid-template-columns: 1fr;
         width: 100%;
         max-width: 260px;
+    }
+
+    #play-btn {
+        grid-column: span 1;
+    }
+
+    .game-over-buttons {
+        flex-direction: column;
+        width: 100%;
     }
 
     #debug-overlay {
@@ -528,17 +551,17 @@ button:hover {
     }
 
     #ability-panel {
-        bottom: 60px;
+        bottom: 58px;
         padding: 4px 6px;
         gap: 6px;
-        transform: translateX(-50%) scale(0.92);
+        transform: translateX(-50%) scale(0.9);
         transform-origin: bottom center;
     }
 
     .ability-btn {
         padding: 5px 8px;
-        min-width: 92px;
-        gap: 5px;
+        min-width: 88px;
+        gap: 4px;
     }
 
     .ability-name {
@@ -550,7 +573,7 @@ button:hover {
     }
 
     .ability-icon {
-        font-size: 16px;
+        font-size: 15px;
     }
 }
 
@@ -781,4 +804,246 @@ button:hover {
 .dbg-btn-stop:hover {
     background: rgba(239, 68, 68, 0.5);
     color: white;
+}
+
+/* =============================================================================
+   Sci-Fi UI Modals: Pause, Settings, Records, Tutorial, Licenses
+   ============================================================================= */
+.modal-backdrop,
+#pause-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(4, 7, 15, 0.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 120;
+}
+
+.modal-card {
+    background: rgba(10, 15, 28, 0.96);
+    border: 1px solid rgba(0, 255, 204, 0.4);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 255, 204, 0.2);
+    border-radius: 12px;
+    padding: 24px 28px;
+    width: 90%;
+    max-width: 480px;
+    max-height: 85vh;
+    overflow-y: auto;
+    color: #e2e8f0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+}
+
+.modal-title {
+    font-size: 24px;
+    font-weight: bold;
+    color: #00ffcc;
+    text-shadow: 0 0 15px rgba(0, 255, 204, 0.5);
+    letter-spacing: 1px;
+}
+
+.modal-button-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+.primary-btn {
+    background: #00a2ff !important;
+    border-color: #00ffcc !important;
+    color: #ffffff !important;
+    font-size: 15px !important;
+    box-shadow: 0 0 15px rgba(0, 162, 255, 0.4) !important;
+}
+
+.primary-btn:hover {
+    background: #00ffcc !important;
+    color: #000000 !important;
+    box-shadow: 0 0 20px rgba(0, 255, 204, 0.7) !important;
+}
+
+/* Настройки */
+.settings-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    text-align: left;
+    width: 100%;
+}
+
+.settings-group label {
+    font-size: 13px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.slider-row input[type="range"] {
+    flex: 1;
+    accent-color: #00ffcc;
+    cursor: pointer;
+}
+
+.slider-val {
+    font-family: monospace;
+    font-size: 13px;
+    color: #00ffcc;
+    min-width: 42px;
+    text-align: right;
+}
+
+.settings-select,
+.menu-select {
+    width: 100%;
+    padding: 8px 12px;
+    background: #0d1322;
+    border: 1px solid rgba(0, 255, 204, 0.4);
+    color: #ffffff;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.settings-select:focus,
+.menu-select:focus {
+    border-color: #00ffcc;
+    box-shadow: 0 0 10px rgba(0, 255, 204, 0.4);
+}
+
+/* Меню селекторы карты и сложности */
+.menu-config-row {
+    display: flex;
+    gap: 14px;
+    margin-top: 4px;
+    width: 100%;
+    max-width: 440px;
+}
+
+.menu-config-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    text-align: left;
+}
+
+.menu-config-item label {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: bold;
+}
+
+#main-menu-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    max-width: 380px;
+    margin-top: 6px;
+}
+
+#play-btn {
+    grid-column: span 2;
+    padding: 14px;
+    font-size: 18px !important;
+}
+
+/* Обучение */
+.tutorial-card {
+    max-width: 620px;
+}
+
+.tutorial-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+    margin: 8px 0;
+}
+
+.tutorial-step {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(0, 255, 204, 0.2);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tut-icon {
+    font-size: 20px;
+}
+
+.tut-step-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #00ffcc;
+}
+
+.tut-step-desc {
+    font-size: 12px;
+    color: #cbd5e1;
+    line-height: 1.45;
+}
+
+/* Лицензии */
+.licenses-text {
+    font-size: 13px;
+    color: #94a3b8;
+    line-height: 1.4;
+    text-align: left;
+}
+
+.licenses-box {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 12px;
+    text-align: left;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #cbd5e1;
+}
+
+/* Кнопки в конце игры */
+.game-over-buttons {
+    display: flex;
+    gap: 14px;
+    margin-top: 10px;
+}
+
+/* Кнопка паузы в HUD */
+#hud-pause-btn {
+    display: inline-block;
+    padding: 4px 10px;
+    font-size: 12px;
+    margin: 0;
+    background: rgba(15, 23, 42, 0.8);
+    border-color: #00ffcc;
+    color: #00ffcc;
+}
+
+#hud-pause-btn:hover {
+    background: rgba(0, 255, 204, 0.3);
 }

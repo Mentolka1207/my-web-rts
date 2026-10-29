@@ -6,52 +6,55 @@
 // =============================================================================
 
 const DRONE_TYPES = {
-    standard: { hp: 100, speed: 6.0, radius: 0.5, damage: 15, attackCooldown: 1.0, cost: 70 },
-    scout:    { hp: 55,  speed: 12.0, radius: 0.35, damage: 6, attackCooldown: 0.45, cost: 40 },
-    tank:     { hp: 220, speed: 3.0, radius: 0.7, damage: 45, attackCooldown: 2.2, cost: 150 }
+    standard: { hp: 100, speed: 6.0, radius: 0.45, damage: 15, attackCooldown: 1.0, cost: 70 },
+    scout:    { hp: 55,  speed: 12.0, radius: 0.225, damage: 6, attackCooldown: 1.0, cost: 40 },
+    tank:     { hp: 220, speed: 3.0, radius: 0.63, damage: 45, attackCooldown: 1.6, cost: 150 }
 };
 
 const ENEMY_TYPES = {
-    standard: { hp: 85,  speed: 4.5, radius: 0.5, damage: 12, attackCooldown: 1.1, reward: 10 },
-    scout:    { hp: 50,  speed: 8.5, radius: 0.35, damage: 6, attackCooldown: 0.5, reward: 8 },
-    tank:     { hp: 240, speed: 2.6, radius: 0.7, damage: 35, attackCooldown: 2.5, reward: 25 },
-    boss:     { hp: 600, shield: 400, speed: 1.8, radius: 1.4, damage: 38, attackCooldown: 1.6, reward: 100 }
+    standard: { hp: 85,  speed: 4.5, radius: 0.45, damage: 12, attackCooldown: 1.1, reward: 10 },
+    scout:    { hp: 50,  speed: 8.5, radius: 0.28, damage: 6, attackCooldown: 0.75, reward: 8 },
+    tank:     { hp: 240, speed: 2.6, radius: 0.65, damage: 35, attackCooldown: 1.8, reward: 25 },
+    boss:     { hp: 600, shield: 400, speed: 1.8, radius: 1.4, damage: 38, attackCooldown: 1.4, reward: 100 }
 };
 
 function generateWaveRoster(waveNumber) {
-    const roster = [];
+    const waveRoster = [];
+
     if (waveNumber === 10 || (waveNumber > 10 && waveNumber % 10 === 0)) {
-        roster.push('boss');
-        for (let i = 0; i < 4; i++) roster.push('standard');
-        for (let i = 0; i < 2; i++) roster.push('tank');
-        return roster;
-    }
-
-    if (waveNumber % 3 === 0) {
-        // Рой перехватчиков
-        const count = Math.min(10, 4 + waveNumber);
-        for (let i = 0; i < count; i++) roster.push('scout');
-        roster.push('tank');
-    } else if (waveNumber % 4 === 0) {
-        // Осадный таран
-        const tanks = Math.min(5, 2 + Math.floor(waveNumber / 3));
-        for (let i = 0; i < tanks; i++) roster.push('tank');
-        for (let i = 0; i < 4; i++) roster.push('standard');
+        waveRoster.push('boss');
+        waveRoster.push('tank', 'tank');
+        for (let i = 0; i < 4; i++) waveRoster.push('scout');
+        for (let i = 0; i < 3; i++) waveRoster.push('standard');
     } else {
-        const std = Math.min(8, 3 + Math.floor(waveNumber * 0.5));
-        for (let i = 0; i < std; i++) roster.push('standard');
-        if (waveNumber >= 3) {
-            const sc = Math.min(6, 1 + Math.floor((waveNumber - 2) * 0.8));
-            for (let i = 0; i < sc; i++) roster.push('scout');
-        }
-        if (waveNumber >= 5) {
-            const tk = Math.min(4, 1 + Math.floor((waveNumber - 4) * 0.5));
-            for (let i = 0; i < tk; i++) roster.push('tank');
+        if (waveNumber % 3 === 0) {
+            const swarmCount = Math.min(8, 3 + Math.floor(waveNumber * 0.7));
+            for (let i = 0; i < swarmCount; i++) waveRoster.push('scout');
+            waveRoster.push('tank');
+        } else if (waveNumber % 4 === 0) {
+            const armorTanks = Math.min(4, 2 + Math.floor(waveNumber / 3));
+            for (let i = 0; i < armorTanks; i++) waveRoster.push('tank');
+            for (let i = 0; i < 4; i++) waveRoster.push('standard');
+        } else {
+            const standardCount = Math.min(8, 3 + Math.floor(waveNumber * 0.5));
+            for (let i = 0; i < standardCount; i++) waveRoster.push('standard');
+
+            if (waveNumber >= 3) {
+                const scoutCount = Math.min(6, 1 + Math.floor((waveNumber - 2) * 0.8));
+                for (let i = 0; i < scoutCount; i++) waveRoster.push('scout');
+            }
+
+            if (waveNumber >= 5) {
+                const tankCount = Math.min(4, 1 + Math.floor((waveNumber - 4) * 0.5));
+                for (let i = 0; i < tankCount; i++) waveRoster.push('tank');
+            }
         }
     }
 
-    if (roster.length > 14) roster.length = 14;
-    return roster;
+    if (waveRoster.length > 25) {
+        waveRoster.length = 25;
+    }
+    return waveRoster;
 }
 
 function simulateWaveBattle(waveNumber, strategy = 'balanced') {

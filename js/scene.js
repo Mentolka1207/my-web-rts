@@ -28,8 +28,16 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 container.appendChild(renderer.domElement);
+
+function setShadowsEnabled(enabled) {
+    if (!renderer) return;
+    renderer.shadowMap.enabled = enabled;
+    if (typeof dirLight !== 'undefined') {
+        dirLight.castShadow = enabled;
+    }
+}
 
 // Сбалансированная модель освещения (Ambient + Hemi + Key Directional + Rim Light)
 const ambientLight = new THREE.AmbientLight(0x182033, 0.75);

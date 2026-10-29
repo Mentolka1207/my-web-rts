@@ -4,7 +4,8 @@
 
 let gameStarted = false;
 let gameOver = false;
-const HUD_PANEL_IDS = ['instructions', 'resource-panel', 'wave-panel', 'minimap-wrap', 'touch-mode-panel'];
+let isGamePaused = false;
+const HUD_PANEL_IDS = ['instructions', 'resource-panel', 'wave-panel', 'minimap-wrap', 'touch-mode-panel', 'hud-pause-btn'];
 
 function startGame() {
     const menuEl = document.getElementById('main-menu-overlay');
@@ -13,7 +14,21 @@ function startGame() {
         const el = document.getElementById(id);
         if (el) el.style.display = '';
     });
+
+    // Применяем выбранную карту при старте матча
+    if (typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
+        applyMapToGrid(currentMapId);
+    }
+
     gameStarted = true;
+    gameOver = false;
+    isGamePaused = false;
+
+    // Если это первый запуск игрока, показать обучающий онбординг
+    if (typeof playerProfile !== 'undefined' && !playerProfile.tutorialCompleted && playerProfile.matchesPlayed === 0) {
+        showTutorialModal();
+    }
+
     if (typeof soundEngine !== 'undefined') {
         soundEngine.ensureContext();
         soundEngine.startAmbient();
@@ -28,7 +43,7 @@ function exitGame() {
     window.close();
     setTimeout(() => {
         const btn = document.getElementById('exit-btn');
-        if (btn) btn.textContent = 'Закройте вкладку вручную (браузер блокирует автозакрытие)';
+        if (btn) btn.textContent = typeof t === 'function' ? t('MENU_EXIT_NOTICE') : 'Закройте вкладку вручную (браузер блокирует автозакрытие)';
     }, 300);
 }
 
@@ -38,7 +53,145 @@ function toggleInstructions() {
     if (!content || !btn) return;
     const isHidden = content.style.display === 'none';
     content.style.display = isHidden ? 'block' : 'none';
-    btn.textContent = isHidden ? 'Скрыть ▲' : 'Управление ▼';
+    btn.textContent = isHidden ? (typeof t === 'function' ? t('BTN_HIDE_INSTRUCTIONS') : 'Скрыть ▲') : (typeof t === 'function' ? t('BTN_SHOW_INSTRUCTIONS') : 'Управление ▼');
+}
+
+// Управление паузой
+function togglePause() {
+    if (!gameStarted || gameOver) return;
+    setGamePaused(!isGamePaused);
+}
+
+function setGamePaused(paused) {
+    if (!gameStarted || gameOver) return;
+    isGamePaused = paused;
+
+    const pauseOverlay = document.getElementById('pause-overlay');
+    if (pauseOverlay) {
+        pauseOverlay.style.display = isGamePaused ? 'flex' : 'none';
+    }
+
+    const pauseBtn = document.getElementById('hud-pause-btn');
+    if (pauseBtn) {
+        pauseBtn.textContent = isGamePaused ? '▶' : '⏸️';
+    }
+}
+
+// Быстрый перезапуск боя без перезагрузки страницы
+function restartMatch() {
+    // 1. Очистка всех юнитов с Three.js сцены
+    for (let i = 0; i < units.length; i++) {
+        if (units[i].mesh) scene.remove(units[i].mesh);
+    }
+    units.length = 0;
+
+    for (let i = 0; i < enemies.length; i++) {
+        if (enemies[i].mesh) scene.remove(enemies[i].mesh);
+    }
+    enemies.length = 0;
+
+    if (typeof spatialGrid !== 'undefined') spatialGrid.clear();
+    if (typeof instancedRenderer !== 'undefined') instancedRenderer.clear();
+    if (typeof simWorld !== 'undefined') simWorld.clear();
+
+    // 2. Сброс снарядов и следов
+    if (typeof clearAllVFX === 'function') clearAllVFX();
+
+    // 3. Восстановление штабов
+    if (typeof playerHQ !== 'undefined' && playerHQ && playerHQ.mesh) {
+        if (!playerHQ.mesh.parent) scene.add(playerHQ.mesh);
+        playerHQ.hp = playerHQ.maxHp;
+        updateHealthBar(playerHQ.healthBar, playerHQ.hp, playerHQ.maxHp);
+    }
+    if (typeof enemyHQ !== 'undefined' && enemyHQ && enemyHQ.mesh) {
+        if (!enemyHQ.mesh.parent) scene.add(enemyHQ.mesh);
+        enemyHQ.hp = enemyHQ.maxHp;
+        updateHealthBar(enemyHQ.healthBar, enemyHQ.hp, enemyHQ.maxHp);
+    }
+
+    // 4. Сброс ресурсов и точек сбора
+    energy = 100;
+    energyAccumulator = 0;
+    if (typeof resourceNodes !== 'undefined') {
+        resourceNodes.forEach(node => {
+            node.owner = 'neutral';
+            node.captureProgress = 0;
+            if (node.crystalMat && node.crystalMat.emissive) {
+                node.crystalMat.emissive.setHex(0xffaa00);
+            }
+        });
+    }
+
+    // 5. Применение выбранной карты
+    if (typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
+        applyMapToGrid(currentMapId);
+    }
+
+    // 6. Сброс волн и статистики матча
+    waveNumber = 0;
+    waveTimer = (typeof getWaveInterval === 'function') ? getWaveInterval() : WAVE_INTERVAL;
+    waveWarningGiven = false;
+
+    if (typeof matchStats !== 'undefined') {
+        matchStats.startTime = performance.now();
+        matchStats.enemiesKilled = 0;
+        matchStats.bossesKilled = 0;
+        matchStats.unitsProduced = 0;
+        matchStats.energyHarvested = 100;
+        matchStats.nodesCaptured = 0;
+    }
+
+    // 7. Создание стартовых отрядов
+    initStartingUnits();
+
+    // 8. Сброс камеры
+    camPivot.set(0, 0, 0);
+    camZoomDist = BASE_CAM_DIST;
+    applyCameraTransform();
+
+    // 9. Состояния матча
+    gameOver = false;
+    isGamePaused = false;
+    gameStarted = true;
+
+    // 10. Скрытие оверлеев
+    const goOverlay = document.getElementById('game-over-overlay');
+    if (goOverlay) goOverlay.style.display = 'none';
+    const pauseOverlay = document.getElementById('pause-overlay');
+    if (pauseOverlay) pauseOverlay.style.display = 'none';
+
+    // 11. Звук и интерфейс
+    if (typeof soundEngine !== 'undefined') {
+        soundEngine.ensureContext();
+        soundEngine.startAmbient();
+        playOrderSound(false);
+    }
+    updateResourceUI();
+    updateWaveUI();
+}
+
+// Возврат в главное меню
+function returnToMainMenu() {
+    isGamePaused = false;
+    gameStarted = false;
+    gameOver = false;
+
+    if (typeof soundEngine !== 'undefined') {
+        soundEngine.stopAmbient();
+    }
+
+    HUD_PANEL_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+
+    const goOverlay = document.getElementById('game-over-overlay');
+    if (goOverlay) goOverlay.style.display = 'none';
+    const pauseOverlay = document.getElementById('pause-overlay');
+    if (pauseOverlay) pauseOverlay.style.display = 'none';
+
+    const menuEl = document.getElementById('main-menu-overlay');
+    if (menuEl) menuEl.style.display = 'flex';
 }
 
 // Тактические всплывающие оповещения (неоновые баннеры)
@@ -81,24 +234,31 @@ function triggerGameOver(playerWon) {
     if (abPanel) abPanel.style.display = 'none';
 
     if (titleEl) {
-        titleEl.textContent = playerWon ? '🏆 ПОБЕДА!' : '💥 ПОРАЖЕНИЕ';
+        titleEl.textContent = playerWon ? (typeof t === 'function' ? t('GAME_OVER_VICTORY') : '🏆 ПОБЕДА!') : (typeof t === 'function' ? t('GAME_OVER_DEFEAT') : '💥 ПОРАЖЕНИЕ');
         titleEl.style.color = playerWon ? '#00ffcc' : '#ff3333';
     }
 
+    const durationSec = Math.max(0, Math.floor((performance.now() - (matchStats.startTime || performance.now())) / 1000));
+    const wavesDefeated = playerWon ? waveNumber : Math.max(0, waveNumber - 1);
+
+    // Запись результатов в профиль
+    if (typeof recordMatchResult === 'function' && typeof matchStats !== 'undefined') {
+        recordMatchResult(playerWon, matchStats, durationSec, wavesDefeated);
+    }
+
     if (statsEl && typeof matchStats !== 'undefined') {
-        const durationSec = Math.max(0, Math.floor((performance.now() - (matchStats.startTime || performance.now())) / 1000));
         const mm = Math.floor(durationSec / 60).toString().padStart(2, '0');
         const ss = (durationSec % 60).toString().padStart(2, '0');
         const timeStr = `${mm}:${ss}`;
 
         statsEl.innerHTML = `
-            <div class="stat-row"><span class="stat-label">⏱️ Время боя:</span><span class="stat-val">${timeStr}</span></div>
-            <div class="stat-row"><span class="stat-label">🌊 Отражено волн:</span><span class="stat-val">${waveNumber}</span></div>
-            <div class="stat-row"><span class="stat-label">💥 Уничтожено врагов:</span><span class="stat-val">${matchStats.enemiesKilled}</span></div>
-            ${matchStats.bossesKilled > 0 ? `<div class="stat-row"><span class="stat-label">👑 Сбито Левиафанов:</span><span class="stat-val" style="color:#ff3366;">${matchStats.bossesKilled}</span></div>` : ''}
-            <div class="stat-row"><span class="stat-label">⚡ Добыто энергии:</span><span class="stat-val">${Math.floor(matchStats.energyHarvested)} ⚡</span></div>
-            <div class="stat-row"><span class="stat-label">🛸 Произведено дронов:</span><span class="stat-val">${matchStats.unitsProduced}</span></div>
-            <div class="stat-row"><span class="stat-label">💎 Захватов точек:</span><span class="stat-val">${matchStats.nodesCaptured}</span></div>
+            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_TIME') : '⏱️ Время боя:'}</span><span class="stat-val">${timeStr}</span></div>
+            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_WAVES_DEFENDED') : '🌊 Отражено волн:'}</span><span class="stat-val" style="color:#00ffcc; font-weight:bold;">${wavesDefeated}</span></div>
+            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_KILLED') : '💥 Уничтожено врагов:'}</span><span class="stat-val">${matchStats.enemiesKilled}</span></div>
+            ${matchStats.bossesKilled > 0 ? `<div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_BOSSES') : '👑 Сбито Левиафанов:'}</span><span class="stat-val" style="color:#ff3366;">${matchStats.bossesKilled}</span></div>` : ''}
+            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_ENERGY') : '⚡ Добыто энергии:'}</span><span class="stat-val">${Math.floor(matchStats.energyHarvested)} ⚡</span></div>
+            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_PRODUCED') : '🛸 Произведено дронов:'}</span><span class="stat-val">${matchStats.unitsProduced}</span></div>
+            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_CAPTURES') : '💎 Захватов точек:'}</span><span class="stat-val">${matchStats.nodesCaptured}</span></div>
         `;
     }
 
@@ -112,6 +272,127 @@ function checkGameOverConditions() {
     } else if (playerHQ.hp <= 0) {
         triggerGameOver(false);
     }
+}
+
+// Модальные окна настроек, рекордов, обучения и лицензий
+function openSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (!modal) return;
+
+    // Синхронизируем значения полей
+    const masterSlider = document.getElementById('slider-master-vol');
+    if (masterSlider) masterSlider.value = Math.round((playerSettings.masterVolume || 1.0) * 100);
+
+    const sfxSlider = document.getElementById('slider-sfx-vol');
+    if (sfxSlider) sfxSlider.value = Math.round((playerSettings.sfxVolume || 1.0) * 100);
+
+    const musicSlider = document.getElementById('slider-music-vol');
+    if (musicSlider) musicSlider.value = Math.round((playerSettings.musicVolume || 1.0) * 100);
+
+    const shadowsSelect = document.getElementById('select-shadows');
+    if (shadowsSelect) shadowsSelect.value = playerSettings.shadows ? 'on' : 'off';
+
+    const langSelect = document.getElementById('select-language');
+    if (langSelect) langSelect.value = currentLanguage;
+
+    modal.style.display = 'flex';
+}
+
+function closeSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) modal.style.display = 'none';
+
+    // Применяем настройки
+    const masterSlider = document.getElementById('slider-master-vol');
+    if (masterSlider && soundEngine && soundEngine.setMasterVolume) {
+        const val = parseFloat(masterSlider.value) / 100;
+        playerSettings.masterVolume = val;
+        soundEngine.setMasterVolume(val);
+    }
+
+    const sfxSlider = document.getElementById('slider-sfx-vol');
+    if (sfxSlider && soundEngine && soundEngine.setSfxVolume) {
+        const val = parseFloat(sfxSlider.value) / 100;
+        playerSettings.sfxVolume = val;
+        soundEngine.setSfxVolume(val);
+    }
+
+    const musicSlider = document.getElementById('slider-music-vol');
+    if (musicSlider && soundEngine && soundEngine.setMusicVolume) {
+        const val = parseFloat(musicSlider.value) / 100;
+        playerSettings.musicVolume = val;
+        soundEngine.setMusicVolume(val);
+    }
+
+    const shadowsSelect = document.getElementById('select-shadows');
+    if (shadowsSelect) {
+        const enabled = shadowsSelect.value === 'on';
+        playerSettings.shadows = enabled;
+        if (typeof setShadowsEnabled === 'function') setShadowsEnabled(enabled);
+    }
+
+    const langSelect = document.getElementById('select-language');
+    if (langSelect && langSelect.value !== currentLanguage) {
+        setLanguage(langSelect.value);
+    }
+
+    if (typeof saveSettingsToStorage === 'function') {
+        saveSettingsToStorage();
+    }
+}
+
+function openRecordsModal() {
+    const modal = document.getElementById('records-modal');
+    if (!modal) return;
+
+    if (typeof loadProfileFromStorage === 'function') loadProfileFromStorage();
+
+    const statsContent = document.getElementById('records-content');
+    if (statsContent) {
+        const fastWinStr = playerProfile.fastestWinSec !== null
+            ? `${Math.floor(playerProfile.fastestWinSec / 60)}:${(playerProfile.fastestWinSec % 60).toString().padStart(2, '0')}`
+            : '—';
+
+        statsContent.innerHTML = `
+            <div class="stat-row"><span class="stat-label">${t('REC_GAMES')}</span><span class="stat-val">${playerProfile.matchesPlayed}</span></div>
+            <div class="stat-row"><span class="stat-label">${t('REC_WINS')}</span><span class="stat-val" style="color:#00ffcc;">${playerProfile.victories}</span></div>
+            <div class="stat-row"><span class="stat-label">${t('REC_LOSSES')}</span><span class="stat-val" style="color:#ff4444;">${playerProfile.defeats}</span></div>
+            <div class="stat-row"><span class="stat-label">${t('REC_BEST_WAVE')}</span><span class="stat-val" style="color:#00ffcc; font-weight:bold;">${playerProfile.bestWave}</span></div>
+            <div class="stat-row"><span class="stat-label">${t('REC_MAX_KILLS')}</span><span class="stat-val">${playerProfile.maxEnemiesKilled}</span></div>
+            <div class="stat-row"><span class="stat-label">${t('REC_FASTEST_WIN')}</span><span class="stat-val">${fastWinStr}</span></div>
+        `;
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeRecordsModal() {
+    const modal = document.getElementById('records-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function showTutorialModal() {
+    const modal = document.getElementById('tutorial-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeTutorialModal() {
+    const modal = document.getElementById('tutorial-modal');
+    if (modal) modal.style.display = 'none';
+    if (typeof playerProfile !== 'undefined') {
+        playerProfile.tutorialCompleted = true;
+        if (typeof saveProfileToStorage === 'function') saveProfileToStorage();
+    }
+}
+
+function openLicensesModal() {
+    const modal = document.getElementById('licenses-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeLicensesModal() {
+    const modal = document.getElementById('licenses-modal');
+    if (modal) modal.style.display = 'none';
 }
 
 // Панель отладки и производительности (Debug Overlay F3)

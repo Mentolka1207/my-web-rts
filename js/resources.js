@@ -182,12 +182,12 @@ function updateResourceNodes(delta, currentTime) {
 
             if (typeof showTacticalAlert === 'function') {
                 if (node.owner === 'player') {
-                    if (typeof matchStats !== 'undefined') matchStats.nodesCaptured++;
-                    showTacticalAlert(`🟢 Точка «${node.name}» под нашим контролем! (+${NODE_ENERGY_BONUS}⚡/сек)`, false);
-                } else if (prevOwner === 'player') {
-                    showTacticalAlert(`⚠️ Внимание: контроль над точкой «${node.name}» потерян!`, true);
-                } else if (node.owner === 'enemy') {
-                    showTacticalAlert(`🔴 Враг захватил точку «${node.name}»!`, true);
+                    if (typeof matchStats !== 'undefined' && (typeof benchmarkActive === 'undefined' || !benchmarkActive)) {
+                        matchStats.nodesCaptured++;
+                    }
+                    showTacticalAlert(typeof t === 'function' ? t('ALERT_NODE_CAPTURED', node.name) : `🟢 Точка «${node.name}» под нашим контролем! (+${NODE_ENERGY_BONUS}⚡/сек)`, false);
+                } else if (prevOwner === 'player' || node.owner === 'enemy') {
+                    showTacticalAlert(typeof t === 'function' ? t('ALERT_NODE_LOST', node.name) : `🔴 Враг захватил точку «${node.name}»!`, true);
                 }
             }
         }

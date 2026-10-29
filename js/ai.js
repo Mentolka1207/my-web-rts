@@ -4,6 +4,13 @@
 
 const WAVE_INTERVAL = 60;
 let waveNumber = 0;
+
+function getWaveInterval() {
+    return (typeof DIFFICULTY_CONFIGS !== 'undefined' && typeof currentDifficulty !== 'undefined' && DIFFICULTY_CONFIGS[currentDifficulty])
+        ? DIFFICULTY_CONFIGS[currentDifficulty].waveInterval
+        : WAVE_INTERVAL;
+}
+
 let waveTimer = WAVE_INTERVAL;
 let waveWarningGiven = false;
 let lastHQAlertTime = 0;
@@ -45,21 +52,21 @@ function spawnWave() {
         waveRoster.push('tank', 'tank');
         for (let i = 0; i < 4; i++) waveRoster.push('scout');
         for (let i = 0; i < 3; i++) waveRoster.push('standard');
-        showTacticalAlert(`⚠️ ВНИМАНИЕ: ВОЛНА ${waveNumber} — ПРИБЛИЖАЕТСЯ ЛЕВИАФАН!`, true);
+        showTacticalAlert(typeof t === 'function' ? t('ALERT_LEVIATHAN', waveNumber) : `⚠️ ВНИМАНИЕ: ВОЛНА ${waveNumber} — ПРИБЛИЖАЕТСЯ ЛЕВИАФАН!`, true);
     } else {
         // Комбинированные тактические волны
         if (waveNumber % 3 === 0) {
-            // Волна «Рой перехватчиков» (Swarm: наскок быстрых разведчиков)
+            // Волна «Рой перехватчиков»
             const swarmCount = Math.min(8, 3 + Math.floor(waveNumber * 0.7));
             for (let i = 0; i < swarmCount; i++) waveRoster.push('scout');
             waveRoster.push('tank');
-            showTacticalAlert(`🌊 Волна ${waveNumber}: РОЙ ПЕРЕХВАТЧИКОВ! Приготовьте плотный строй!`, false);
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_SWARM', waveNumber) : `🌊 Волна ${waveNumber}: РОЙ ПЕРЕХВАТЧИКОВ! Приготовьте плотный строй!`, false);
         } else if (waveNumber % 4 === 0) {
-            // Волна «Осадный таран» (Armored: тяжёлые танки при поддержке дронов)
+            // Волна «Осадный таран»
             const armorTanks = Math.min(4, 2 + Math.floor(waveNumber / 3));
             for (let i = 0; i < armorTanks; i++) waveRoster.push('tank');
             for (let i = 0; i < 4; i++) waveRoster.push('standard');
-            showTacticalAlert(`🌊 Волна ${waveNumber}: ОСАДНЫЙ ТАРАН! Требуется осадный режим или фокус огня!`, false);
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_ARMORED', waveNumber) : `🌊 Волна ${waveNumber}: ОСАДНЫЙ ТАРАН! Требуется осадный режим или фокус огня!`, false);
         } else {
             // Сбалансированная волна
             const standardCount = Math.min(8, 3 + Math.floor(waveNumber * 0.5));
@@ -75,11 +82,7 @@ function spawnWave() {
                 for (let i = 0; i < tankCount; i++) waveRoster.push('tank');
             }
 
-            if (waveNumber >= 5) {
-                showTacticalAlert(`🌊 Волна ${waveNumber}: зафиксированы вражеские Танки и Разведчики!`, false);
-            } else if (waveNumber >= 3) {
-                showTacticalAlert(`🌊 Волна ${waveNumber}: зафиксированы быстрые фланговые Разведчики!`, false);
-            }
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_STANDARD', waveNumber) : `🌊 Надвигается Волна ${waveNumber}! Защищайте периметр базы!`, false);
         }
     }
 
@@ -102,8 +105,13 @@ function spawnWave() {
 }
 
 function updateWaveUI() {
-    if (waveNumberEl) waveNumberEl.textContent = waveNumber;
-    if (waveTimerEl) waveTimerEl.textContent = Math.max(0, Math.ceil(waveTimer));
+    const waveEl = document.getElementById('wave-panel');
+    if (waveEl) {
+        const waveLbl = typeof t === 'function' ? t('WAVE_LABEL') : '🌊 Волна';
+        const nextIn = typeof t === 'function' ? t('WAVE_NEXT_IN') : '— след. через';
+        const sec = typeof t === 'function' ? t('SEC_SHORT') : 'с';
+        waveEl.innerHTML = `${waveLbl} <span id="wave-number">${waveNumber}</span> ${nextIn} <span id="wave-timer">${Math.max(0, Math.ceil(waveTimer))}</span>${sec}`;
+    }
 }
 
 // Ответные действия ИИ: отправка диверсионных отрядов при контроле 3/3 точек
@@ -141,7 +149,7 @@ function checkAIRetaliation(delta) {
                 createEnemy(worldPos.x, worldPos.z, uType, false, targetNode);
             }
 
-            showTacticalAlert(`🚨 ДИВЕРСИЯ: Вражеский отряд направлен на отбитие точки «${targetNode.name}»!`, true);
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_SABOTAGE', targetNode.name) : `🚨 ДИВЕРСИЯ: Вражеский отряд направлен на отбитие точки «${targetNode.name}»!`, true);
         }
     } else {
         if (retaliationCooldown < 10) retaliationCooldown = 10;
@@ -269,7 +277,7 @@ function updateEnemiesAI(currentTime, delta) {
                     fireLaser(pos, hqPos, false);
                     if (currentTime - lastHQAlertTime > 8.0 && typeof showTacticalAlert === 'function') {
                         lastHQAlertTime = currentTime;
-                        showTacticalAlert('🚨 ВНИМАНИЕ: Наш штаб находится под атакой!', true);
+                        showTacticalAlert(typeof t === 'function' ? t('ALERT_HQ_ATTACK') : '⚠️ ВРАГ АТАКУЕТ НАШ ШТАБ!', true);
                     }
                     if (enemy.type === 'boss') {
                         _v2.copy(hqPos);

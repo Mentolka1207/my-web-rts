@@ -149,12 +149,34 @@ class SoundEngine {
         return 1.0 - ((dist - 10) / (maxDist - 10)) * 0.8;
     }
 
+    // Управление раздельной громкостью
+    setMasterVolume(val) {
+        this.masterVolume = Math.max(0, Math.min(1, val));
+        if (this.masterGain && this.ctx && !this.isMuted) {
+            this.masterGain.gain.setTargetAtTime(this.masterVolume * 0.85, this.ctx.currentTime, 0.03);
+        }
+    }
+
+    setSfxVolume(val) {
+        this.sfxVolume = Math.max(0, Math.min(1, val));
+        if (this.sfxGain && this.ctx) {
+            this.sfxGain.gain.setTargetAtTime(this.sfxVolume * 0.8, this.ctx.currentTime, 0.03);
+        }
+    }
+
+    setMusicVolume(val) {
+        this.musicVolume = Math.max(0, Math.min(1, val));
+        if (this.musicGain && this.ctx) {
+            this.musicGain.gain.setTargetAtTime(this.musicVolume * 0.28, this.ctx.currentTime, 0.03);
+        }
+    }
+
     // Включение / выключение звука
     toggleMute() {
         this.ensureContext();
         this.isMuted = !this.isMuted;
         if (this.masterGain && this.ctx) {
-            const target = this.isMuted ? 0 : 0.85;
+            const target = this.isMuted ? 0 : (this.masterVolume !== undefined ? this.masterVolume * 0.85 : 0.85);
             this.masterGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.05);
         }
         this.updateSoundUI();
@@ -165,7 +187,8 @@ class SoundEngine {
     updateSoundUI() {
         const btn = document.getElementById('sound-toggle-btn');
         if (btn) {
-            btn.textContent = this.isMuted ? '🔇 Звук: ВЫКЛ' : '🔊 Звук: ВКЛ';
+            const isRu = (typeof currentLanguage === 'undefined') || currentLanguage === 'ru';
+            btn.textContent = this.isMuted ? (isRu ? '🔇 Звук: ВЫКЛ' : '🔇 Audio: OFF') : (isRu ? '🔊 Звук: ВКЛ' : '🔊 Audio: ON');
             btn.style.borderColor = this.isMuted ? '#ff5555' : '#00ffcc';
             btn.style.color = this.isMuted ? '#ff8888' : '#00ffcc';
             btn.style.boxShadow = this.isMuted ? 'none' : '0 0 10px rgba(0, 255, 204, 0.4)';
@@ -375,6 +398,11 @@ class SoundEngine {
             const gain = this.ctx.createGain();
             osc.type = isAttack ? 'sawtooth' : 'sine';
 
+            osc.connect(gain);
+            gain.connect(this.sfxGain);
+            this._trackVoice(osc);
+            osc.start(t);
+
             if (isAttack) {
                 // Резкий двухтоновый боевой сигнал
                 osc.frequency.setValueAtTime(440, t);
@@ -392,11 +420,6 @@ class SoundEngine {
                 gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
                 osc.stop(t + 0.1);
             }
-
-            osc.connect(gain);
-            gain.connect(this.sfxGain);
-            this._trackVoice(osc);
-            osc.start(t);
         });
     }
 

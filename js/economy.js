@@ -14,13 +14,20 @@ const produceBtnEl = document.getElementById('produce-btn');
 const scoutBtnEl = document.getElementById('scout-btn');
 const tankBtnEl = document.getElementById('tank-btn');
 
+function getBaseIncome() {
+    return (typeof DIFFICULTY_CONFIGS !== 'undefined' && typeof currentDifficulty !== 'undefined' && DIFFICULTY_CONFIGS[currentDifficulty])
+        ? DIFFICULTY_CONFIGS[currentDifficulty].passiveIncome
+        : ENERGY_INCOME_PER_SEC;
+}
+
 function updateResourceUI() {
     if (energyValueEl) energyValueEl.textContent = Math.floor(energy);
 
     const playerControlledNodes = resourceNodes.filter(n => n.owner === 'player').length;
-    const currentIncome = ENERGY_INCOME_PER_SEC + playerControlledNodes * NODE_ENERGY_BONUS;
+    const currentIncome = getBaseIncome() + playerControlledNodes * NODE_ENERGY_BONUS;
 
-    if (energyIncomeBadgeEl) energyIncomeBadgeEl.textContent = `(+${currentIncome}⚡/сек)`;
+    const incomeSuffix = typeof t === 'function' ? t('INCOME_SUFFIX') : '⚡/сек';
+    if (energyIncomeBadgeEl) energyIncomeBadgeEl.textContent = `(+${currentIncome}${incomeSuffix})`;
     if (nodesCountEl) {
         nodesCountEl.textContent = `${playerControlledNodes}/${resourceNodes.length}`;
         nodesCountEl.style.color = playerControlledNodes > 0 ? '#00ffcc' : '#ffaa00';
@@ -28,15 +35,15 @@ function updateResourceUI() {
 
     if (produceBtnEl) {
         produceBtnEl.disabled = energy < DRONE_TYPES.standard.cost;
-        produceBtnEl.textContent = `${DRONE_TYPES.standard.label} (${DRONE_TYPES.standard.cost}⚡)`;
+        produceBtnEl.textContent = typeof t === 'function' ? t('UNIT_DRONE') : `${DRONE_TYPES.standard.label} (${DRONE_TYPES.standard.cost}⚡)`;
     }
     if (scoutBtnEl) {
         scoutBtnEl.disabled = energy < DRONE_TYPES.scout.cost;
-        scoutBtnEl.textContent = `${DRONE_TYPES.scout.label} (${DRONE_TYPES.scout.cost}⚡)`;
+        scoutBtnEl.textContent = typeof t === 'function' ? t('UNIT_SCOUT') : `${DRONE_TYPES.scout.label} (${DRONE_TYPES.scout.cost}⚡)`;
     }
     if (tankBtnEl) {
         tankBtnEl.disabled = energy < DRONE_TYPES.tank.cost;
-        tankBtnEl.textContent = `${DRONE_TYPES.tank.label} (${DRONE_TYPES.tank.cost}⚡)`;
+        tankBtnEl.textContent = typeof t === 'function' ? t('UNIT_TANK') : `${DRONE_TYPES.tank.label} (${DRONE_TYPES.tank.cost}⚡)`;
     }
 }
 
