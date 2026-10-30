@@ -315,13 +315,17 @@ function triggerAbilityForSelected(abilityType) {
 
     if (typeof showTacticalAlert === 'function') {
         if (abilityType === 'overdrive' && activated > 0) {
-            showTacticalAlert(`⚡ ФОРСАЖ: ${activated} Разведч. ускорились (+80%)!`, false);
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_OVERDRIVE', activated) : `⚡ ФОРСАЖ: ${activated} Разведч. ускорились (+80%)!`, false);
         } else if (abilityType === 'siege' && activated > 0) {
-            if (siegedOn > 0 && siegedOff === 0) showTacticalAlert(`⚓ ОСАДА ВКЛЮЧЕНА (${siegedOn} Танков зафиксировано)!`, false);
-            else if (siegedOff > 0 && siegedOn === 0) showTacticalAlert(`🚜 МОБИЛЬНЫЙ РЕЖИМ (${siegedOff} Танков снялись с якоря)!`, false);
-            else showTacticalAlert(`⚓ РЕЖИМ ОСАДЫ ПЕРЕКЛЮЧЁН (${activated} Танков)!`, false);
+            if (siegedOn > 0 && siegedOff === 0) {
+                showTacticalAlert(typeof t === 'function' ? t('ALERT_SIEGE_ON', siegedOn) : `⚓ ОСАДА ВКЛЮЧЕНА (${siegedOn} Танков зафиксировано)!`, false);
+            } else if (siegedOff > 0 && siegedOn === 0) {
+                showTacticalAlert(typeof t === 'function' ? t('ALERT_SIEGE_OFF', siegedOff) : `🚜 МОБИЛЬНЫЙ РЕЖИМ (${siegedOff} Танков снялись с якоря)!`, false);
+            } else {
+                showTacticalAlert(typeof t === 'function' ? t('ALERT_SIEGE_SWITCH', activated) : `⚓ РЕЖИМ ОСАДЫ ПЕРЕКЛЮЧЁН (${activated} Танков)!`, false);
+            }
         } else if (abilityType === 'shield' && activated > 0) {
-            showTacticalAlert(`🛡️ ЭНЕРГОЩИТ активирован (${activated} Дронов)!`, false);
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_SHIELD', activated) : `🛡️ ЭНЕРГОЩИТ активирован (${activated} Дронов)!`, false);
         }
     }
     if (typeof updateAbilityUI === 'function') updateAbilityUI(curTime);

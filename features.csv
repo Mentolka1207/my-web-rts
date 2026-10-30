@@ -3,14 +3,14 @@ feature,area,priority,original,clone,notes
 Старт партии одной кнопкой,shell,must,yes,yes,ui.js; мгновенный запуск выбранной карты и сложности
 Экран победы/поражения со статистикой,shell,must,yes,yes,ui.js; корректный подсчёт отражённых волн; статистика побед и рекордов
 Рестарт партии,shell,must,partial,yes,ui.js: restartMatch() перезапускает партию в 1 клик без перезагрузки страницы
-Пауза,shell,must,no,yes,ui.js / input.js: togglePause(), Esc / P / кнопка в HUD; авто-пауза при потере фокуса
+Пауза,shell,must,no,yes,ui.js / input.js: togglePause(), Esc / P / кнопка в HUD; onVisibilityHidden() авто-пауза по visibilitychange и blur
 Настройки (громкость / графика / язык / управление),shell,must,partial,yes,модальное окно #settings-modal: громкость Master/SFX/Music, тени, язык RU/EN, сложность, карта
 Сохранение настроек и рекордов,shell,should,no,yes,js/storage.js: localStorage для настроек и профиля игрока (матчи, винрейт, рекорды волн и фрагов)
 Экран загрузки,shell,could,no,no,сцена инициализируется мгновенно (Zero-Assets процедурные текстуры без сети)
 Обучение / онбординг,shell,must,partial,yes,#tutorial-modal: 4 интерактивных шага с визуальными подсказками, автопоказ для новичков
 Лицензии сторонних библиотек (three.js MIT),legal,must,no,yes,заголовок MIT в libs/three.min.js + THIRD_PARTY_LICENSES.md + модальное окно #licenses-modal
-Решение по лицензии собственного кода перед продажей,legal,must,no,yes,THIRD_PARTY_LICENSES.md: задокументировано разделение MIT и авторской Zero-Asset архитектуры
-Локализация (минимум EN),shell,must,no,yes,js/i18n.js: полная двуязычность RU/EN для интерфейса, оповещений и кнопок без перезагрузки страницы
+Решение по лицензии собственного кода перед продажей,legal,must,no,partial,THIRD_PARTY_LICENSES.md: разделение Three.js MIT и авторской Zero-Asset архитектуры; репозиторий под MIT
+Локализация (минимум EN),shell,must,no,yes,js/i18n.js: полная двуязычность RU/EN для интерфейса, способностей, тактических оповещений и рекордов
 3D-сцена: изометрическая камера + зум + панорама WASD/MMB/тач,camera,must,yes,yes,scene.js; input.js; точное управление 1:1
 Миникарта с переходом по клику,camera,must,yes,yes,minimap.js: оффскрин-кэширование препятствий, индикаторы кристаллов и баз
 Выделение кликом и рамкой,control,must,yes,yes,input.js: быстрый выбор одиночных юнитов и групповая рамка
@@ -24,7 +24,7 @@ Spatial hash: поиск целей и расталкивание,engine,must,ye
 Детерминированный PRNG,engine,should,partial,yes,prng.js: Mulberry32 с сидом для симуляции
 Симуляция в Web Worker,engine,could,stub,stub,sim_worker.js: прототип SoA; симуляция честно выполняется в главном потоке (30 Гц)
 GPU-инстансинг юнитов и HP-баров,render,must,yes,yes,instancing.js: THREE.InstancedMesh для дронов, снарядов и HP-баров в шейдере
-Объединение статичной геометрии (стены / рельсы / штабы),render,must,no,yes,terrain.js: THREE.InstancedMesh для стен и оголовков; число вызовов отрисовки стен снижено до 2
+Объединение статичной геометрии (стены / рельсы / штабы),render,must,yes,yes,scene.js / terrain.js / models.js / resources.js: mergeBufferGeometries объединяет рельсы, пилоны, маяки, каркасы HQ и кристаллы-спутники; InstancedMesh стен
 Настройка качества (тени / pixel ratio),render,should,no,yes,scene.js: переключение теней в настройках; переход на Three.js r186 PCFShadowMap
 FSM юнитов IDLE/MOVE/CHASE/ATTACK,gameplay,must,yes,yes,main.js: стейт-машина боевого поведения
 Обход углов при погоне (LOS + bypass),gameplay,should,yes,yes,grid.js: проверка видимости Брезенхэмом и огибание углов
@@ -37,10 +37,10 @@ FSM юнитов IDLE/MOVE/CHASE/ATTACK,gameplay,must,yes,yes,main.js: стей�
 Диверсии ИИ при 3/3 точках,gameplay,should,yes,yes,ai.js: отправка штурмовой группы противника на отбитие точки
 Штабы и условия победы/поражения,gameplay,must,yes,yes,ui.js: уничтожение вражеского штаба = победа, потеря своего = поражение
 Выбор сложности,content,must,no,yes,maps.js: Рекрут (Easy), Командир (Normal), Ветеран (Hard) со скейлингом HP, урона и волн
-Несколько карт (карта как данные),content,must,no,yes,maps.js: 3 уникальные карты («Каньон», «Арена», «Лабиринт») с генерацией данных стен
+Несколько карт (карта как данные),content,must,no,yes,js/maps.js: MapDef v2 (чистые данные) — 4 карты со своими базами и спавном, validateMapDef с инвариантами и BFS
 Режим skirmish против ИИ со своей экономикой,content,should,no,no,будущее расширение
 Кампания / миссии,content,could,no,no,будущее расширение
-Рекорды / таблица результатов,content,should,no,yes,#records-modal: сохранение и отображение побед, лучшей волны, фрагов и скорости
+Рекорды / таблица результатов,content,should,no,yes,#records-modal: Storage v2 с валидацией, миграцией v1->v2 и фильтрами рекордов по каждой карте и сложности
 Процедурные текстуры (Canvas PBR),art,must,yes,yes,terrain.js: генерация Albedo, Bump и Roughness на Canvas без внешних файлов
 Процедурные модели юнитов / HQ / кристаллов,art,must,yes,yes,models.js: высокодетализированные процедурные sci-fi модели
 Частицы / вспышки / кратеры,art,should,yes,yes,effects.js / particles.js: пулы вспышек, искр и 60 декалей кратеров
@@ -48,9 +48,9 @@ FSM юнитов IDLE/MOVE/CHASE/ATTACK,gameplay,must,yes,yes,main.js: стей�
 Раздельная громкость музыки / эффектов,audio,should,no,yes,audio.js: раздельные GainNode для Master, SFX и Music с регуляторами в настройках
 Мобильная вёрстка HUD без перекрытий,ux,must,partial,yes,style.css: автосворачивание инструкций на экранах <=768px, адаптивные панели
 HUD-профайлер F3 и бенчмарк,dev,could,yes,yes,benchmark.js / main.js: бенчмарк изолирован от игровой статистики
-Юнит-тесты Vitest + CI,dev,must,yes,yes,112 тестов проходят успешно
-Headless-баланс на реальном коде,dev,should,partial,yes,scripts/headless_wave_test.js: синхронизирован с параметрами config.js и ai.js
-PWA / офлайн-установка,distribution,should,no,yes,manifest.json + sw.js: полная работа офлайн и установка как standalone приложение
+Юнит-тесты Vitest + CI,dev,must,yes,yes,122 теста проходят успешно (grid, flowfield, formations, spatialhash, maps, storage)
+Headless-баланс на реальном коде,dev,should,partial,yes,scripts/headless_wave_test.js: динамическая загрузка констант из config.js
+PWA / офлайн-установка,distribution,should,no,yes,manifest.json + sw.js: полная работа офлайн, прекэш всех 27 скриптов (включая particles.js и sim_worker.js)
 Сборка и минификация,distribution,should,no,no,опциональный билд-шаг для продакшна
 Аналитика без персональных данных,distribution,could,no,no,опционально
 Сетевой мультиплеер,multiplayer,could,no,no,план XL

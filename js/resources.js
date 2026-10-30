@@ -18,6 +18,21 @@ const nodeShardGeo = new THREE.OctahedronGeometry(0.25, 0);
 nodeShardGeo.scale(0.55, 1.25, 0.55);
 const nodeCoreGeo = new THREE.OctahedronGeometry(0.32, 0);
 
+// Предварительно объединенная геометрия орбитальных кристаллов-спутников (3 шарда в 1 геометрии)
+const mergedSatellitesGeo = (() => {
+    const shardAngles = [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3];
+    const dummy = new THREE.Object3D();
+    const radius = 1.15;
+    const items = shardAngles.map((angle, i) => {
+        dummy.position.set(Math.cos(angle) * radius, (i - 1) * 0.18, Math.sin(angle) * radius);
+        dummy.rotation.set(0, angle, 0.2);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        return { geometry: nodeShardGeo, matrix: dummy.matrix.clone() };
+    });
+    return mergeBufferGeometries(items);
+})();
+
 function createResourceNode(col, row, name) {
     const group = new THREE.Group();
     const worldPos = gridToWorld(col, row);
@@ -58,18 +73,11 @@ function createResourceNode(col, row, name) {
     coreMesh.position.y = 1.48;
     group.add(coreMesh);
 
-    // Кластер орбитальных кристаллов-спутников
+    // Кластер орбитальных кристаллов-спутников (объединен в 1 статический меш внутри вращающейся группы)
     const satellitesGroup = new THREE.Group();
     satellitesGroup.position.y = 1.48;
-    const shardAngles = [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3];
-    shardAngles.forEach((angle, i) => {
-        const shard = new THREE.Mesh(nodeShardGeo, crystalMat);
-        const radius = 1.15;
-        shard.position.set(Math.cos(angle) * radius, (i - 1) * 0.18, Math.sin(angle) * radius);
-        shard.rotation.z = 0.2;
-        shard.rotation.y = angle;
-        satellitesGroup.add(shard);
-    });
+    const satellitesMesh = new THREE.Mesh(mergedSatellitesGeo, crystalMat);
+    satellitesGroup.add(satellitesMesh);
     group.add(satellitesGroup);
 
     const light = new THREE.PointLight(0xffaa00, 2.2, 8.5);

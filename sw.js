@@ -2,7 +2,7 @@
 // sw.js — Service Worker для оффлайн-работы и PWA кэширования
 // =============================================================================
 
-const CACHE_NAME = 'minimal-web-rts-v2';
+const CACHE_NAME = 'minimal-web-rts-v0.2.0';
 const STATIC_ASSETS = [
     './',
     './index.html',
@@ -21,11 +21,13 @@ const STATIC_ASSETS = [
     './js/formations.js',
     './js/flowfield.js',
     './js/simulation.js',
+    './js/sim_worker.js',
     './js/scene.js',
     './js/terrain.js',
     './js/healthbar.js',
     './js/models.js',
     './js/instancing.js',
+    './js/particles.js',
     './js/effects.js',
     './js/units.js',
     './js/resources.js',

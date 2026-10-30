@@ -90,17 +90,17 @@ const CELL_SIZE = 2;
 const MAP_WORLD_SIZE = GRID_SIZE * CELL_SIZE;
 
 // База союзников
-const BASE_COL = 3;
-const BASE_ROW = 3;
+let BASE_COL = 3;
+let BASE_ROW = 3;
 
 // Штабы
-const HQ_COL = 1;
-const HQ_ROW = 1;
-const ENEMY_HQ_COL = GRID_SIZE - 2; // 20
-const ENEMY_HQ_ROW = GRID_SIZE - 2; // 20
+let HQ_COL = 1;
+let HQ_ROW = 1;
+let ENEMY_HQ_COL = GRID_SIZE - 2; // 20
+let ENEMY_HQ_ROW = GRID_SIZE - 2; // 20
 
 // Стратегические точки сбора ресурсов (энергетические кристаллы)
-const RESOURCE_NODE_COORDS = [
+let RESOURCE_NODE_COORDS = [
     { col: 16, row: 5,  name: 'Альфа' },
     { col: 11, row: 11, name: 'Центр' },
     { col: 5,  row: 16, name: 'Бета' }

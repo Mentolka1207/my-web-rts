@@ -30,6 +30,24 @@ const TRANSLATIONS = {
         MAP_CANYON: 'Каньон (Классика)',
         MAP_ARENA: 'Арена Бастионов',
         MAP_MAZE: 'Лабиринт Кристаллов',
+        MAP_CROSSROADS: 'Перекрёсток (Тактика)',
+
+        // Ресурсные точки
+        NODE_ALPHA: 'Альфа',
+        NODE_CENTER: 'Центр',
+        NODE_BETA: 'Бета',
+
+        // Оповещения способностей и статусы
+        ALERT_OVERDRIVE: '⚡ ФОРСАЖ: {0} Разведч. ускорились (+80%)!',
+        ALERT_SIEGE_ON: '⚓ ОСАДА ВКЛЮЧЕНА ({0} Танков зафиксировано)!',
+        ALERT_SIEGE_OFF: '🚜 МОБИЛЬНЫЙ РЕЖИМ ({0} Танков снялись с якоря)!',
+        ALERT_SIEGE_SWITCH: '⚓ РЕЖИМ ОСАДЫ ПЕРЕКЛЮЧЁН ({0} Танков)!',
+        ALERT_SHIELD: '🛡️ ЭНЕРГОЩИТ активирован ({0} Дронов)!',
+        ABILITY_READY: 'ГОТОВО',
+        ABILITY_ACTIVE: 'АКТИВНО',
+        ABILITY_CD: 'КД',
+        ABILITY_SIEGE_ON: 'ОСАДА (ВКЛ)',
+        ABILITY_MOBILE: 'МОБИЛЬНЫЙ',
 
         // Кнопки управления вверху
         BTN_HIDE_INSTRUCTIONS: 'Скрыть ▲',
@@ -129,12 +147,18 @@ const TRANSLATIONS = {
 
         // Рекорды
         RECORDS_TITLE: '🏆 РЕКОРДЫ И СТАТИСТИКА',
+        REC_TOTALS: '📊 Общая статистика',
+        REC_BY_MAP: '🗺️ Рекорды по картам',
         REC_GAMES: 'Сыграно матчей:',
         REC_WINS: 'Побед:',
         REC_LOSSES: 'Поражений:',
         REC_BEST_WAVE: 'Рекорд волн:',
         REC_MAX_KILLS: 'Максимум сбитых врагов:',
         REC_FASTEST_WIN: 'Самая быстрая победа:',
+        REC_TOTAL_ENERGY: 'Добыто энергии:',
+        REC_TOTAL_BOSSES: 'Сбито боссов:',
+        REC_FILTER_MAP: 'Карта:',
+        REC_FILTER_DIFF: 'Сложность:',
         REC_EMPTY: 'Пока нет данных. Сыграйте первый матч!',
         BTN_CLOSE: 'Закрыть',
 
@@ -179,6 +203,24 @@ const TRANSLATIONS = {
         MAP_CANYON: 'Canyon (Classic)',
         MAP_ARENA: 'Bastion Arena',
         MAP_MAZE: 'Crystal Maze',
+        MAP_CROSSROADS: 'Crossroads (Tactical)',
+
+        // Resource Nodes
+        NODE_ALPHA: 'Alpha',
+        NODE_CENTER: 'Center',
+        NODE_BETA: 'Beta',
+
+        // Ability Alerts & Statuses
+        ALERT_OVERDRIVE: '⚡ OVERDRIVE: {0} Scouts accelerated (+80%)!',
+        ALERT_SIEGE_ON: '⚓ SIEGE MODE ON ({0} Tanks anchored)!',
+        ALERT_SIEGE_OFF: '🚜 MOBILE MODE ({0} Tanks mobile)!',
+        ALERT_SIEGE_SWITCH: '⚓ SIEGE TOGGLED ({0} Tanks)!',
+        ALERT_SHIELD: '🛡️ ENERGY SHIELD active ({0} Drones)!',
+        ABILITY_READY: 'READY',
+        ABILITY_ACTIVE: 'ACTIVE',
+        ABILITY_CD: 'CD',
+        ABILITY_SIEGE_ON: 'SIEGE (ON)',
+        ABILITY_MOBILE: 'MOBILE',
 
         // Top control buttons
         BTN_HIDE_INSTRUCTIONS: 'Hide ▲',
@@ -278,12 +320,18 @@ const TRANSLATIONS = {
 
         // Records
         RECORDS_TITLE: '🏆 RECORDS & PROFILE',
+        REC_TOTALS: '📊 Total Statistics',
+        REC_BY_MAP: '🗺️ Records by Map',
         REC_GAMES: 'Matches Played:',
         REC_WINS: 'Victories:',
         REC_LOSSES: 'Defeats:',
         REC_BEST_WAVE: 'Best Wave Defeated:',
         REC_MAX_KILLS: 'Max Enemies Destroyed:',
         REC_FASTEST_WIN: 'Fastest Victory:',
+        REC_TOTAL_ENERGY: 'Total energy harvested:',
+        REC_TOTAL_BOSSES: 'Total bosses defeated:',
+        REC_FILTER_MAP: 'Map:',
+        REC_FILTER_DIFF: 'Difficulty:',
         REC_EMPTY: 'No data yet. Play your first match!',
         BTN_CLOSE: 'Close',
 

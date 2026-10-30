@@ -5,18 +5,20 @@
 // Запуск: node scripts/headless_wave_test.js
 // =============================================================================
 
-const DRONE_TYPES = {
-    standard: { hp: 100, speed: 6.0, radius: 0.45, damage: 15, attackCooldown: 1.0, cost: 70 },
-    scout:    { hp: 55,  speed: 12.0, radius: 0.225, damage: 6, attackCooldown: 1.0, cost: 40 },
-    tank:     { hp: 220, speed: 3.0, radius: 0.63, damage: 45, attackCooldown: 1.6, cost: 150 }
-};
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 
-const ENEMY_TYPES = {
-    standard: { hp: 85,  speed: 4.5, radius: 0.45, damage: 12, attackCooldown: 1.1, reward: 10 },
-    scout:    { hp: 50,  speed: 8.5, radius: 0.28, damage: 6, attackCooldown: 0.75, reward: 8 },
-    tank:     { hp: 240, speed: 2.6, radius: 0.65, damage: 35, attackCooldown: 1.8, reward: 25 },
-    boss:     { hp: 600, shield: 400, speed: 1.8, radius: 1.4, damage: 38, attackCooldown: 1.4, reward: 100 }
-};
+const ROOT = path.resolve(__dirname, '..');
+const configCode = fs.readFileSync(path.join(ROOT, 'js', 'config.js'), 'utf8');
+const ctx = vm.createContext({
+    console,
+    THREE: { Vector3: class { constructor() { this.x = 0; this.y = 0; this.z = 0; } } },
+    window: { addEventListener() {} }
+});
+vm.runInContext(configCode, ctx);
+
+const { DRONE_TYPES, ENEMY_TYPES } = vm.runInContext(`({ DRONE_TYPES, ENEMY_TYPES })`, ctx);
 
 function generateWaveRoster(waveNumber) {
     const waveRoster = [];

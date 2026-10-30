@@ -54,6 +54,52 @@ const hqRadarGeo = new THREE.CylinderGeometry(0.55, 0.6, 0.1, 8);
 const hqHoloRingGeo = new THREE.RingGeometry(1.4, 1.6, 24);
 hqHoloRingGeo.rotateX(-Math.PI / 2);
 const hqPylonGeo = new THREE.BoxGeometry(0.4, 1.5, 0.4);
+const hqBeaconTopGeo = new THREE.SphereGeometry(0.35, 12, 12);
+const hqBeaconPylonGeo = new THREE.SphereGeometry(0.12, 8, 8);
+
+// Предварительно объединенная геометрия статического каркаса HQ (шпиль + 4 пилона в 1 геометрии)
+const hqStaticFrameGeo = (() => {
+    const dummy = new THREE.Object3D();
+    const items = [];
+    dummy.position.set(0, 3.8, 0);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(1, 1, 1);
+    dummy.updateMatrix();
+    items.push({ geometry: hqSpireGeo, matrix: dummy.matrix.clone() });
+
+    const pylonOffsets = [
+        [-1.5, -1.5], [1.5, -1.5],
+        [-1.5, 1.5], [1.5, 1.5]
+    ];
+    pylonOffsets.forEach(([px, pz]) => {
+        dummy.position.set(px, 0.75, pz);
+        dummy.updateMatrix();
+        items.push({ geometry: hqPylonGeo, matrix: dummy.matrix.clone() });
+    });
+    return mergeBufferGeometries(items);
+})();
+
+// Предварительно объединенная геометрия статических маяков HQ (верхний маяк + 4 маяка пилонов)
+const hqStaticBeaconsGeo = (() => {
+    const dummy = new THREE.Object3D();
+    const items = [];
+    dummy.position.set(0, 4.8, 0);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(1, 1, 1);
+    dummy.updateMatrix();
+    items.push({ geometry: hqBeaconTopGeo, matrix: dummy.matrix.clone() });
+
+    const pylonOffsets = [
+        [-1.5, -1.5], [1.5, -1.5],
+        [-1.5, 1.5], [1.5, 1.5]
+    ];
+    pylonOffsets.forEach(([px, pz]) => {
+        dummy.position.set(px, 1.55, pz);
+        dummy.updateMatrix();
+        items.push({ geometry: hqBeaconPylonGeo, matrix: dummy.matrix.clone() });
+    });
+    return mergeBufferGeometries(items);
+})();
 
 // --- МАТЕРИАЛЫ ---
 const allyBodyMat = new THREE.MeshStandardMaterial({
@@ -433,11 +479,6 @@ function createHQ(col, row, isPlayer) {
     tower.castShadow = true;
     group.add(tower);
 
-    // Верхний связной шпиль
-    const spire = new THREE.Mesh(hqSpireGeo, frameMat);
-    spire.position.y = 3.8;
-    group.add(spire);
-
     // Вращающийся голографический радар / диск
     const radar = new THREE.Mesh(hqRadarGeo, towerMat);
     radar.position.y = 4.4;
@@ -448,24 +489,14 @@ function createHQ(col, row, isPlayer) {
     holoRing.position.y = 2.4;
     group.add(holoRing);
 
-    // Главный сигнальный маяк
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 12), beaconMat);
-    beacon.position.y = 4.8;
-    group.add(beacon);
+    // Объединенный статический каркас (шпиль + 4 пилона в 1 меш)
+    const staticFrame = new THREE.Mesh(hqStaticFrameGeo, frameMat);
+    staticFrame.castShadow = true;
+    group.add(staticFrame);
 
-    // 4 угловых генераторных пилона
-    const pylonOffsets = [
-        [-1.5, -1.5], [1.5, -1.5],
-        [-1.5, 1.5], [1.5, 1.5]
-    ];
-    pylonOffsets.forEach(([px, pz]) => {
-        const pylon = new THREE.Mesh(hqPylonGeo, frameMat);
-        pylon.position.set(px, 0.75, pz);
-        pylon.castShadow = true;
-        const pBeacon = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), beaconMat);
-        pBeacon.position.set(px, 1.55, pz);
-        group.add(pylon, pBeacon);
-    });
+    // Объединенные статические маяки (верхний маяк + 4 маяка пилонов в 1 меш)
+    const staticBeacons = new THREE.Mesh(hqStaticBeaconsGeo, beaconMat);
+    group.add(staticBeacons);
 
     // Атмосферный свет штаба
     const light = new THREE.PointLight(glowColor, 2.8, 10.0);

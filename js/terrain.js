@@ -382,7 +382,7 @@ const gridHelper = new THREE.GridHelper(MAP_WORLD_SIZE, GRID_SIZE, 0x00ffcc, 0x1
 gridHelper.position.y = 0.015;
 scene.add(gridHelper);
 
-// Энергетический периметр карты (Arena Perimeter Rails & Corner Pylons)
+// Энергетический периметр карты (Arena Perimeter Rails & Corner Pylons) — оптимизированное объединение геометрий
 const perimeterGroup = new THREE.Group();
 const halfSize = MAP_WORLD_SIZE / 2;
 const borderRailMat = new THREE.MeshStandardMaterial({
@@ -395,18 +395,22 @@ const borderRailMat = new THREE.MeshStandardMaterial({
 const railGeoH = new THREE.BoxGeometry(MAP_WORLD_SIZE, 0.22, 0.3);
 const railGeoV = new THREE.BoxGeometry(0.3, 0.22, MAP_WORLD_SIZE);
 
-const railTop = new THREE.Mesh(railGeoH, borderRailMat);
-railTop.position.set(0, 0.11, -halfSize);
-const railBottom = new THREE.Mesh(railGeoH, borderRailMat);
-railBottom.position.set(0, 0.11, halfSize);
-const railLeft = new THREE.Mesh(railGeoV, borderRailMat);
-railLeft.position.set(-halfSize, 0.11, 0);
-const railRight = new THREE.Mesh(railGeoV, borderRailMat);
-railRight.position.set(halfSize, 0.11, 0);
+// Объединение 4 рельсов в 1 статический меш
+const mRailTop = new THREE.Matrix4().makeTranslation(0, 0.11, -halfSize);
+const mRailBottom = new THREE.Matrix4().makeTranslation(0, 0.11, halfSize);
+const mRailLeft = new THREE.Matrix4().makeTranslation(-halfSize, 0.11, 0);
+const mRailRight = new THREE.Matrix4().makeTranslation(halfSize, 0.11, 0);
 
-perimeterGroup.add(railTop, railBottom, railLeft, railRight);
+const mergedRailsGeo = mergeBufferGeometries([
+    { geometry: railGeoH, matrix: mRailTop },
+    { geometry: railGeoH, matrix: mRailBottom },
+    { geometry: railGeoV, matrix: mRailLeft },
+    { geometry: railGeoV, matrix: mRailRight }
+]);
+const borderRailsMesh = new THREE.Mesh(mergedRailsGeo, borderRailMat);
+perimeterGroup.add(borderRailsMesh);
 
-// Угловые голографические пилоны
+// Угловые голографические пилоны — объединение 4 пилонов в 1 меш и 4 маяков в 1 меш
 const pylonGeo = new THREE.CylinderGeometry(0.35, 0.45, 1.2, 8);
 const pylonMat = new THREE.MeshStandardMaterial({
     color: 0x141b2c,
@@ -422,14 +426,23 @@ const cornerCoords = [
     [-halfSize, -halfSize], [halfSize, -halfSize],
     [-halfSize, halfSize],  [halfSize, halfSize]
 ];
-cornerCoords.forEach(([cx, cz]) => {
-    const pylon = new THREE.Mesh(pylonGeo, pylonMat);
-    pylon.position.set(cx, 0.6, cz);
-    const beacon = new THREE.Mesh(pylonBeaconGeo, pylonBeaconMat);
-    beacon.position.set(cx, 1.3, cz);
-    perimeterGroup.add(pylon, beacon);
-});
+
+const mergedPylonsGeo = mergeBufferGeometries(cornerCoords.map(([cx, cz]) => ({
+    geometry: pylonGeo,
+    matrix: new THREE.Matrix4().makeTranslation(cx, 0.6, cz)
+})));
+const pylonsMesh = new THREE.Mesh(mergedPylonsGeo, pylonMat);
+pylonsMesh.castShadow = true;
+
+const mergedBeaconsGeo = mergeBufferGeometries(cornerCoords.map(([cx, cz]) => ({
+    geometry: pylonBeaconGeo,
+    matrix: new THREE.Matrix4().makeTranslation(cx, 1.3, cz)
+})));
+const beaconsMesh = new THREE.Mesh(mergedBeaconsGeo, pylonBeaconMat);
+
+perimeterGroup.add(pylonsMesh, beaconsMesh);
 scene.add(perimeterGroup);
+
 
 // Материалы и геометрия стен-монолитов
 const wallTex = createWallTexture();

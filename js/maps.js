@@ -1,6 +1,6 @@
 // =============================================================================
-// js/maps.js — Карты как данные и пресеты сложности
-// Поддержка тактического выбора арены и баланса сложности
+// js/maps.js — Карты как чистые данные (MapDef v2) и пресеты сложности
+// Поддержка тактического выбора арены, валидация данных и инвариантов
 // =============================================================================
 
 const DIFFICULTY_CONFIGS = {
@@ -35,75 +35,350 @@ let currentMapId = 'canyon';
 
 const MAP_CATALOG = {
     canyon: {
+        schema: 2,
         id: 'canyon',
         nameKey: 'MAP_CANYON',
-        generateGrid: function(gridArray) {
-            // Рассеянные монолиты по сиду
-            if (typeof rtsPRNG !== 'undefined' && rtsPRNG.setSeed) {
-                rtsPRNG.setSeed(4242);
-            }
-            for (let i = 0; i < 25; i++) {
-                const rx = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.int(1, GRID_SIZE - 2) : Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
-                const rz = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.int(1, GRID_SIZE - 2) : Math.floor(Math.random() * (GRID_SIZE - 2)) + 1;
-                if ((rx > 4 || rz > 4) && (rx < GRID_SIZE - 5 || rz < GRID_SIZE - 5) && gridArray[rz][rx] === 0) {
-                    gridArray[rz][rx] = 1;
-                }
-            }
-        }
+        size: 22,
+        rows: [
+            "######################",
+            "##...............#...#",
+            "#....................#",
+            "#............#......##",
+            "#....................#",
+            "#..##.............##.#",
+            "#..........#..#......#",
+            "#.............#......#",
+            "#..................#.#",
+            "#.....#...#..........#",
+            "#...............#....#",
+            "#..................#.#",
+            "#......#.............#",
+            "#.........#....#.....#",
+            "#.#..................#",
+            "#....................#",
+            "#......#.......#.....#",
+            "#....................#",
+            "#..#.................#",
+            "#....................#",
+            "#............#......##",
+            "######################"
+        ],
+        playerHQ:    { col: 1,  row: 1  },
+        enemyHQ:     { col: 20, row: 20 },
+        playerSpawn: { col: 3,  row: 3  },
+        nodes: [
+            { id: 'alpha',  nameKey: 'NODE_ALPHA',  col: 16, row: 5  },
+            { id: 'center', nameKey: 'NODE_CENTER', col: 11, row: 11 },
+            { id: 'beta',   nameKey: 'NODE_BETA',   col: 5,  row: 16 }
+        ],
+        recommended: { difficulty: 'normal' }
     },
 
     arena: {
+        schema: 2,
         id: 'arena',
         nameKey: 'MAP_ARENA',
-        generateGrid: function(gridArray) {
-            // 4 укрепленных угловых бастиона (бункера) с амбразурами
-            const bastions = [
-                { r: 5, c: 5 },
-                { r: 5, c: 15 },
-                { r: 15, c: 5 },
-                { r: 15, c: 15 }
-            ];
-
-            bastions.forEach(b => {
-                for (let dr = 0; dr <= 2; dr++) {
-                    for (let dc = 0; dc <= 2; dc++) {
-                        if (dr === 1 && dc === 1) continue; // внутренний дворик
-                        const r = b.r + dr;
-                        const c = b.c + dc;
-                        if (r > 1 && r < GRID_SIZE - 2 && c > 1 && c < GRID_SIZE - 2) {
-                            gridArray[r][c] = 1;
-                        }
-                    }
-                }
-            });
-
-            // Небольшие тактические щиты в центре
-            gridArray[8][11] = 1;
-            gridArray[13][11] = 1;
-        }
+        size: 22,
+        rows: [
+            "######################",
+            "##...................#",
+            "#....................#",
+            "#....................#",
+            "#....................#",
+            "#....###.............#",
+            "#....#.#.............#",
+            "#....###.......###...#",
+            "#..........#.........#",
+            "#....................#",
+            "#....................#",
+            "#....................#",
+            "#....................#",
+            "#..........#.........#",
+            "#....................#",
+            "#......#.......###...#",
+            "#......#.......#.#...#",
+            "#......#.......###...#",
+            "#....................#",
+            "#....................#",
+            "#...................##",
+            "######################"
+        ],
+        playerHQ:    { col: 1,  row: 1  },
+        enemyHQ:     { col: 20, row: 20 },
+        playerSpawn: { col: 3,  row: 3  },
+        nodes: [
+            { id: 'alpha',  nameKey: 'NODE_ALPHA',  col: 16, row: 5  },
+            { id: 'center', nameKey: 'NODE_CENTER', col: 11, row: 11 },
+            { id: 'beta',   nameKey: 'NODE_BETA',   col: 5,  row: 16 }
+        ],
+        recommended: { difficulty: 'normal' }
     },
 
     maze: {
+        schema: 2,
         id: 'maze',
         nameKey: 'MAP_MAZE',
-        generateGrid: function(gridArray) {
-            // Извилистые коридоры и узкие тактические проходы
-            // Горизонтальные и вертикальные сегменты стен
-            for (let c = 4; c <= 17; c++) {
-                if (c !== 8 && c !== 13) gridArray[7][c] = 1;
+        size: 22,
+        rows: [
+            "######################",
+            "##...................#",
+            "#....................#",
+            "#....................#",
+            "#....................#",
+            "#....................#",
+            "#....................#",
+            "#...####.####.####...#",
+            "#.....#........#.....#",
+            "#.....#........#.....#",
+            "#....................#",
+            "#....................#",
+            "#.....#........#.....#",
+            "#.....#........#.....#",
+            "#...####.####.####...#",
+            "#....................#",
+            "#....................#",
+            "#....................#",
+            "#....................#",
+            "#....................#",
+            "#...................##",
+            "######################"
+        ],
+        playerHQ:    { col: 1,  row: 1  },
+        enemyHQ:     { col: 20, row: 20 },
+        playerSpawn: { col: 3,  row: 3  },
+        nodes: [
+            { id: 'alpha',  nameKey: 'NODE_ALPHA',  col: 16, row: 5  },
+            { id: 'center', nameKey: 'NODE_CENTER', col: 11, row: 11 },
+            { id: 'beta',   nameKey: 'NODE_BETA',   col: 5,  row: 16 }
+        ],
+        recommended: { difficulty: 'hard' }
+    },
+
+    crossroads: {
+        schema: 2,
+        id: 'crossroads',
+        nameKey: 'MAP_CROSSROADS',
+        size: 22,
+        rows: [
+            "######################",
+            "##...................#",
+            "#....................#",
+            "#....................#",
+            "#.........#.#........#",
+            "#....................#",
+            "#.......###.###......#",
+            "#....................#",
+            "#.....#.........#....#",
+            "#.....#.........#....#",
+            "#...#.#.........#.#..#",
+            "#....................#",
+            "#...#.#.........#.#..#",
+            "#.....#.........#....#",
+            "#.....#.........#....#",
+            "#....................#",
+            "#.......###.###......#",
+            "#....................#",
+            "#.........#.#........#",
+            "#....................#",
+            "#...................##",
+            "######################"
+        ],
+        playerHQ:    { col: 1,  row: 1  },
+        enemyHQ:     { col: 20, row: 20 },
+        playerSpawn: { col: 3,  row: 3  },
+        nodes: [
+            { id: 'alpha',  nameKey: 'NODE_ALPHA',  col: 17, row: 4  },
+            { id: 'center', nameKey: 'NODE_CENTER', col: 11, row: 11 },
+            { id: 'beta',   nameKey: 'NODE_BETA',   col: 4,  row: 17 }
+        ],
+        recommended: { difficulty: 'normal' }
+    }
+};
+
+// Для обратной совместимости добавляем generateGrid к пресетам
+Object.values(MAP_CATALOG).forEach(mapDef => {
+    mapDef.generateGrid = function(gridArray) {
+        for (let r = 0; r < mapDef.size; r++) {
+            const rowStr = mapDef.rows[r];
+            for (let c = 0; c < mapDef.size; c++) {
+                gridArray[r][c] = (rowStr && rowStr[c] === '#') ? 1 : 0;
             }
-            for (let c = 4; c <= 17; c++) {
-                if (c !== 8 && c !== 13) gridArray[14][c] = 1;
+        }
+    };
+});
+
+/**
+ * Валидатор контракта и инвариантов карты (MapDef v2)
+ * Проверяет схему данных, границы, чистоту зон вокруг HQ и кристаллов, а также BFS-достижимость
+ * @param {object} def 
+ * @returns {{ok: boolean, errors: string[]}}
+ */
+function validateMapDef(def) {
+    const errors = [];
+    if (!def || typeof def !== 'object') {
+        return { ok: false, errors: ['MapDef must be an object'] };
+    }
+
+    if (def.schema !== 2) {
+        errors.push(`Invalid schema: expected 2, got ${def.schema}`);
+    }
+
+    if (!def.id || typeof def.id !== 'string' || !/^[a-z0-9-]+$/.test(def.id)) {
+        errors.push(`Invalid id: "${def.id}", must match [a-z0-9-]+`);
+    }
+
+    if (!def.nameKey || typeof def.nameKey !== 'string') {
+        errors.push('Missing or invalid nameKey');
+    } else if (typeof TRANSLATIONS !== 'undefined') {
+        if (!TRANSLATIONS.ru || !TRANSLATIONS.ru[def.nameKey]) {
+            errors.push(`nameKey "${def.nameKey}" missing in TRANSLATIONS.ru`);
+        }
+        if (!TRANSLATIONS.en || !TRANSLATIONS.en[def.nameKey]) {
+            errors.push(`nameKey "${def.nameKey}" missing in TRANSLATIONS.en`);
+        }
+    }
+
+    const expectedSize = (typeof GRID_SIZE !== 'undefined') ? GRID_SIZE : 22;
+    if (def.size !== expectedSize) {
+        errors.push(`Invalid size: expected ${expectedSize}, got ${def.size}`);
+    }
+
+    if (!Array.isArray(def.rows) || def.rows.length !== expectedSize) {
+        errors.push(`rows must be an array of length ${expectedSize}`);
+    } else {
+        for (let r = 0; r < expectedSize; r++) {
+            const row = def.rows[r];
+            if (typeof row !== 'string' || row.length !== expectedSize) {
+                errors.push(`Row ${r} must be a string of length ${expectedSize}`);
+                break;
             }
-            for (let r = 8; r <= 13; r++) {
-                if (r !== 10 && r !== 11) {
-                    gridArray[r][6] = 1;
-                    gridArray[r][15] = 1;
-                }
+            if (!/^[#.]+$/.test(row)) {
+                errors.push(`Row ${r} contains invalid characters (only # and . allowed)`);
+                break;
+            }
+        }
+
+        // Периметр карты обязан состоять из стен (#)
+        for (let c = 0; c < expectedSize; c++) {
+            if (def.rows[0][c] !== '#' || def.rows[expectedSize - 1][c] !== '#') {
+                errors.push('Top and bottom borders must be completely filled with walls (#)');
+                break;
+            }
+        }
+        for (let r = 0; r < expectedSize; r++) {
+            if (def.rows[r][0] !== '#' || def.rows[r][expectedSize - 1] !== '#') {
+                errors.push('Left and right borders must be completely filled with walls (#)');
+                break;
             }
         }
     }
-};
+
+    const checkCell = (cell, label) => {
+        if (!cell || typeof cell.col !== 'number' || typeof cell.row !== 'number' ||
+            cell.col <= 0 || cell.col >= expectedSize - 1 ||
+            cell.row <= 0 || cell.row >= expectedSize - 1) {
+            errors.push(`Invalid coordinates for ${label}`);
+            return false;
+        }
+        return true;
+    };
+
+    checkCell(def.playerHQ, 'playerHQ');
+    checkCell(def.enemyHQ, 'enemyHQ');
+    checkCell(def.playerSpawn, 'playerSpawn');
+
+    // Проверка ресурсных точек
+    if (!Array.isArray(def.nodes) || def.nodes.length === 0) {
+        errors.push('nodes must be a non-empty array');
+    } else {
+        const nodeIds = new Set();
+        def.nodes.forEach((n, idx) => {
+            if (!n.id || !/^[a-z0-9-]+$/.test(n.id)) {
+                errors.push(`Node [${idx}] has invalid id`);
+            } else if (nodeIds.has(n.id)) {
+                errors.push(`Duplicate node id: "${n.id}"`);
+            } else {
+                nodeIds.add(n.id);
+            }
+
+            if (!n.nameKey || typeof n.nameKey !== 'string') {
+                errors.push(`Node [${idx}] missing nameKey`);
+            } else if (typeof TRANSLATIONS !== 'undefined') {
+                if (!TRANSLATIONS.ru || !TRANSLATIONS.ru[n.nameKey]) {
+                    errors.push(`Node nameKey "${n.nameKey}" missing in TRANSLATIONS.ru`);
+                }
+                if (!TRANSLATIONS.en || !TRANSLATIONS.en[n.nameKey]) {
+                    errors.push(`Node nameKey "${n.nameKey}" missing in TRANSLATIONS.en`);
+                }
+            }
+            checkCell(n, `node[${idx}]`);
+
+            // Зона 3x3 вокруг кристалла должна быть свободна (.)
+            if (Array.isArray(def.rows) && def.rows.length === expectedSize) {
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const nr = n.row + dr, nc = n.col + dc;
+                        if (nr > 0 && nr < expectedSize - 1 && nc > 0 && nc < expectedSize - 1) {
+                            if (def.rows[nr][nc] !== '.') {
+                                errors.push(`Node "${n.id}" 3x3 zone blocked at (${nc}, ${nr})`);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Проверка связности и достижимости (BFS)
+    if (errors.length === 0) {
+        const visited = Array.from({ length: expectedSize }, () => Array(expectedSize).fill(false));
+        const queue = [{ col: def.playerSpawn.col, row: def.playerSpawn.row }];
+        visited[def.playerSpawn.row][def.playerSpawn.col] = true;
+
+        const targets = new Set();
+        def.nodes.forEach(n => targets.add(`${n.col},${n.row}`));
+
+        const enemyNeighbors = [
+            { col: def.enemyHQ.col - 1, row: def.enemyHQ.row },
+            { col: def.enemyHQ.col, row: def.enemyHQ.row - 1 },
+            { col: def.enemyHQ.col + 1, row: def.enemyHQ.row },
+            { col: def.enemyHQ.col, row: def.enemyHQ.row + 1 }
+        ].filter(pt => pt.col > 0 && pt.col < expectedSize - 1 && pt.row > 0 && pt.row < expectedSize - 1 && def.rows[pt.row][pt.col] === '.');
+
+        let reachedEnemyHQ = false;
+
+        while (queue.length > 0) {
+            const cur = queue.shift();
+            targets.delete(`${cur.col},${cur.row}`);
+            if (enemyNeighbors.some(en => en.col === cur.col && en.row === cur.row)) {
+                reachedEnemyHQ = true;
+            }
+
+            const deltas = [{ col: 1, row: 0 }, { col: -1, row: 0 }, { col: 0, row: 1 }, { col: 0, row: -1 }];
+            for (const d of deltas) {
+                const nc = cur.col + d.col, nr = cur.row + d.row;
+                if (nc > 0 && nc < expectedSize - 1 && nr > 0 && nr < expectedSize - 1) {
+                    if (!visited[nr][nc] && def.rows[nr][nc] === '.') {
+                        visited[nr][nc] = true;
+                        queue.push({ col: nc, row: nr });
+                    }
+                }
+            }
+        }
+
+        if (targets.size > 0) {
+            errors.push(`Unreachable resource nodes from playerSpawn: ${Array.from(targets).join('; ')}`);
+        }
+        if (!reachedEnemyHQ) {
+            errors.push('Enemy HQ is not reachable from playerSpawn');
+        }
+    }
+
+    return {
+        ok: errors.length === 0,
+        errors: errors
+    };
+}
 
 function setDifficulty(diffId, persist = true) {
     if (!DIFFICULTY_CONFIGS[diffId]) diffId = 'normal';
@@ -128,63 +403,77 @@ function selectMap(mapId, persist = true) {
 }
 
 function applyMapToGrid(mapId) {
-    const mapDef = MAP_CATALOG[mapId] || MAP_CATALOG.canyon;
+    const mapDef = (typeof mapId === 'object' && mapId !== null) ? mapId : (MAP_CATALOG[mapId] || MAP_CATALOG.canyon);
 
-    // 1. Очищаем сетку
+    // 1. Устанавливаем координаты баз и спавна из контракта карты
+    if (mapDef.playerHQ) {
+        HQ_COL = mapDef.playerHQ.col;
+        HQ_ROW = mapDef.playerHQ.row;
+    }
+    if (mapDef.enemyHQ) {
+        ENEMY_HQ_COL = mapDef.enemyHQ.col;
+        ENEMY_HQ_ROW = mapDef.enemyHQ.row;
+    }
+    if (mapDef.playerSpawn) {
+        BASE_COL = mapDef.playerSpawn.col;
+        BASE_ROW = mapDef.playerSpawn.row;
+    }
+
+    // Обновляем список координат ресурсных точек
+    if (Array.isArray(mapDef.nodes)) {
+        RESOURCE_NODE_COORDS = mapDef.nodes.map(n => ({
+            col: n.col,
+            row: n.row,
+            name: (typeof t === 'function') ? t(n.nameKey) : (n.name || n.id)
+        }));
+    }
+
+    // 2. Заполняем сетку проходимости напрямую из запечённых строк MapDef
     for (let r = 0; r < GRID_SIZE; r++) {
+        const rowStr = mapDef.rows[r];
         for (let c = 0; c < GRID_SIZE; c++) {
-            grid[r][c] = 0;
+            grid[r][c] = (rowStr && rowStr[c] === '#') ? 1 : 0;
         }
     }
 
-    // 2. Внешние защитные стены
-    for (let i = 0; i < GRID_SIZE; i++) {
-        grid[0][i] = 1;
-        grid[GRID_SIZE - 1][i] = 1;
-        grid[i][0] = 1;
-        grid[i][GRID_SIZE - 1] = 1;
-    }
-
-    // 3. Генерация внутренних препятствий карты
-    mapDef.generateGrid(grid);
-
-    // 4. Очистка зон вокруг ресурсных кристаллов
-    RESOURCE_NODE_COORDS.forEach(pt => {
-        for (let dr = -1; dr <= 1; dr++) {
-            for (let dc = -1; dc <= 1; dc++) {
-                const r = pt.row + dr, c = pt.col + dc;
-                if (r > 0 && r < GRID_SIZE - 1 && c > 0 && c < GRID_SIZE - 1) {
-                    grid[r][c] = 0;
-                }
-            }
-        }
-    });
-
-    // 5. Очистка клеток вокруг штабов
-    for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-            const r1 = HQ_ROW + dr, c1 = HQ_COL + dc;
-            if (r1 > 0 && r1 < GRID_SIZE - 1 && c1 > 0 && c1 < GRID_SIZE - 1) grid[r1][c1] = 0;
-            const r2 = ENEMY_HQ_ROW + dr, c2 = ENEMY_HQ_COL + dc;
-            if (r2 > 0 && r2 < GRID_SIZE - 1 && c2 > 0 && c2 < GRID_SIZE - 1) grid[r2][c2] = 0;
-        }
-    }
-
-    // Сами ячейки штабов непроходимы
+    // Гарантируем непроходимость клеток штабов
     grid[HQ_ROW][HQ_COL] = 1;
     grid[ENEMY_HQ_ROW][ENEMY_HQ_COL] = 1;
 
-    // 6. Перестраиваем Three.js InstancedMesh стены
+    // 3. Синхронизируем 3D-позиции баз и ресурсов в Three.js сцене
+    if (typeof playerHQ !== 'undefined' && playerHQ && playerHQ.mesh && typeof gridToWorld === 'function') {
+        const pPos = gridToWorld(HQ_COL, HQ_ROW);
+        playerHQ.mesh.position.set(pPos.x, 0, pPos.z);
+    }
+    if (typeof enemyHQ !== 'undefined' && enemyHQ && enemyHQ.mesh && typeof gridToWorld === 'function') {
+        const ePos = gridToWorld(ENEMY_HQ_COL, ENEMY_HQ_ROW);
+        enemyHQ.mesh.position.set(ePos.x, 0, ePos.z);
+    }
+    if (typeof resourceNodes !== 'undefined' && Array.isArray(resourceNodes) && typeof gridToWorld === 'function') {
+        mapDef.nodes.forEach((n, idx) => {
+            if (resourceNodes[idx]) {
+                const node = resourceNodes[idx];
+                node.col = n.col;
+                node.row = n.row;
+                const wp = gridToWorld(n.col, n.row);
+                node.pos.set(wp.x, 0, wp.z);
+                node.group.position.set(wp.x, 0, wp.z);
+                node.name = (typeof t === 'function') ? t(n.nameKey) : (n.name || n.id);
+            }
+        });
+    }
+
+    // 4. Перестраиваем Three.js InstancedMesh стен арены
     if (typeof buildInstancedWalls === 'function') {
         buildInstancedWalls();
     }
 
-    // 7. Обновляем оффскрин-кэш миникарты
+    // 5. Обновляем оффскрин-кэш статических препятствий миникарты
     if (typeof initStaticMinimap === 'function') {
         initStaticMinimap();
     }
 
-    // 8. Пересчитываем Flow Fields
+    // 6. Пересчитываем глобальные Flow Fields для союзников и врагов
     if (typeof flowFieldGen !== 'undefined') {
         flowFieldGen.updateTarget(ENEMY_HQ_COL, ENEMY_HQ_ROW);
     }

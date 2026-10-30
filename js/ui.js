@@ -77,6 +77,24 @@ function setGamePaused(paused) {
     }
 }
 
+// Авто-пауза при потере фокуса вкладки или сворачивании окна
+function onVisibilityHidden() {
+    if (typeof gameStarted !== 'undefined' && gameStarted && !gameOver && !isGamePaused) {
+        setGamePaused(true);
+    }
+}
+
+if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) onVisibilityHidden();
+    });
+}
+if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('blur', () => {
+        onVisibilityHidden();
+    });
+}
+
 // Быстрый перезапуск боя без перезагрузки страницы
 function restartMatch() {
     // 1. Очистка всех юнитов с Three.js сцены
@@ -341,28 +359,79 @@ function closeSettingsModal() {
     }
 }
 
+let selectedRecordMap = 'canyon';
+let selectedRecordDiff = 'normal';
+
+function renderRecordsContent() {
+    const statsContent = document.getElementById('records-content');
+    if (!statsContent) return;
+
+    const totals = (typeof playerProfile !== 'undefined' && playerProfile.totals) ? playerProfile.totals : { matchesPlayed: 0, victories: 0, defeats: 0, energyHarvested: 0, bossesKilled: 0 };
+    const records = (typeof playerProfile !== 'undefined' && playerProfile.records) ? playerProfile.records : {};
+    const mapRecords = records[selectedRecordMap] || {};
+    const curRecord = mapRecords[selectedRecordDiff] || { wins: 0, losses: 0, bestWave: 0, maxKills: 0, fastestWinSec: null };
+
+    const fastWinStr = curRecord.fastestWinSec !== null
+        ? `${Math.floor(curRecord.fastestWinSec / 60)}:${(curRecord.fastestWinSec % 60).toString().padStart(2, '0')}`
+        : '—';
+
+    const mapOptions = [
+        { id: 'canyon', label: typeof t === 'function' ? t('MAP_CANYON') : 'Каньон' },
+        { id: 'arena', label: typeof t === 'function' ? t('MAP_ARENA') : 'Арена' },
+        { id: 'maze', label: typeof t === 'function' ? t('MAP_MAZE') : 'Лабиринт' },
+        { id: 'crossroads', label: typeof t === 'function' ? t('MAP_CROSSROADS') : 'Перекрёсток' }
+    ].map(m => `<option value="${m.id}" ${m.id === selectedRecordMap ? 'selected' : ''}>${m.label}</option>`).join('');
+
+    const diffOptions = [
+        { id: 'easy', label: typeof t === 'function' ? t('DIFF_EASY') : 'Легко' },
+        { id: 'normal', label: typeof t === 'function' ? t('DIFF_NORMAL') : 'Норма' },
+        { id: 'hard', label: typeof t === 'function' ? t('DIFF_HARD') : 'Сложно' }
+    ].map(d => `<option value="${d.id}" ${d.id === selectedRecordDiff ? 'selected' : ''}>${d.label}</option>`).join('');
+
+    statsContent.innerHTML = `
+        <div style="font-size: 13px; font-weight: bold; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; text-align: left;">
+            ${typeof t === 'function' ? t('REC_TOTALS') : '📊 Общая статистика'}
+        </div>
+        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_GAMES') : 'Сыграно матчей:'}</span><span class="stat-val">${totals.matchesPlayed}</span></div>
+        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_WINS') : 'Побед:'}</span><span class="stat-val" style="color:#00ffcc;">${totals.victories}</span></div>
+        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_LOSSES') : 'Поражений:'}</span><span class="stat-val" style="color:#ff4444;">${totals.defeats}</span></div>
+        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_TOTAL_ENERGY') : 'Добыто энергии:'}</span><span class="stat-val">${totals.energyHarvested} ⚡</span></div>
+        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_TOTAL_BOSSES') : 'Сбито боссов:'}</span><span class="stat-val" style="color:#ff3366;">${totals.bossesKilled}</span></div>
+
+        <div style="font-size: 13px; font-weight: bold; color: #94a3b8; text-transform: uppercase; margin-top: 14px; margin-bottom: 6px; text-align: left;">
+            ${typeof t === 'function' ? t('REC_BY_MAP') : '🗺️ Рекорды по картам'}
+        </div>
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <select id="records-map-select" class="menu-select" style="flex: 1; padding: 6px; font-size: 12px;" onchange="onRecordFilterChange(this.value, selectedRecordDiff)">
+                ${mapOptions}
+            </select>
+            <select id="records-diff-select" class="menu-select" style="flex: 1; padding: 6px; font-size: 12px;" onchange="onRecordFilterChange(selectedRecordMap, this.value)">
+                ${diffOptions}
+            </select>
+        </div>
+        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_BEST_WAVE') : 'Рекорд волн:'}</span><span class="stat-val" style="color:#00ffcc; font-weight:bold;">${curRecord.bestWave}</span></div>
+        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_MAX_KILLS') : 'Макс. сбитых врагов:'}</span><span class="stat-val">${curRecord.maxKills}</span></div>
+        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_WINS') : 'Побед на карте:'}</span><span class="stat-val" style="color:#00ffcc;">${curRecord.wins}</span></div>
+        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_LOSSES') : 'Поражений на карте:'}</span><span class="stat-val" style="color:#ff4444;">${curRecord.losses}</span></div>
+        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_FASTEST_WIN') : 'Быстрейшая победа:'}</span><span class="stat-val">${fastWinStr}</span></div>
+    `;
+}
+
+function onRecordFilterChange(mapId, diffId) {
+    selectedRecordMap = mapId;
+    selectedRecordDiff = diffId;
+    renderRecordsContent();
+}
+
 function openRecordsModal() {
     const modal = document.getElementById('records-modal');
     if (!modal) return;
 
     if (typeof loadProfileFromStorage === 'function') loadProfileFromStorage();
+    if (typeof currentMapId !== 'undefined' && VALID_MAP_IDS.includes(currentMapId)) selectedRecordMap = currentMapId;
+    if (typeof currentDifficulty !== 'undefined' && VALID_DIFFICULTIES.includes(currentDifficulty)) selectedRecordDiff = currentDifficulty;
 
-    const statsContent = document.getElementById('records-content');
-    if (statsContent) {
-        const fastWinStr = playerProfile.fastestWinSec !== null
-            ? `${Math.floor(playerProfile.fastestWinSec / 60)}:${(playerProfile.fastestWinSec % 60).toString().padStart(2, '0')}`
-            : '—';
-
-        statsContent.innerHTML = `
-            <div class="stat-row"><span class="stat-label">${t('REC_GAMES')}</span><span class="stat-val">${playerProfile.matchesPlayed}</span></div>
-            <div class="stat-row"><span class="stat-label">${t('REC_WINS')}</span><span class="stat-val" style="color:#00ffcc;">${playerProfile.victories}</span></div>
-            <div class="stat-row"><span class="stat-label">${t('REC_LOSSES')}</span><span class="stat-val" style="color:#ff4444;">${playerProfile.defeats}</span></div>
-            <div class="stat-row"><span class="stat-label">${t('REC_BEST_WAVE')}</span><span class="stat-val" style="color:#00ffcc; font-weight:bold;">${playerProfile.bestWave}</span></div>
-            <div class="stat-row"><span class="stat-label">${t('REC_MAX_KILLS')}</span><span class="stat-val">${playerProfile.maxEnemiesKilled}</span></div>
-            <div class="stat-row"><span class="stat-label">${t('REC_FASTEST_WIN')}</span><span class="stat-val">${fastWinStr}</span></div>
-        `;
-    }
-
+    renderRecordsContent();
     modal.style.display = 'flex';
 }
 
@@ -601,7 +670,8 @@ function updateAbilityUI(currentTime) {
             if (anyActive) {
                 const maxActiveTime = Math.max(...scouts.map(u => u.abilityTimer));
                 btnOverdrive.className = 'ability-btn active';
-                statusOverdrive.textContent = `АКТИВНО (${Math.max(0, maxActiveTime).toFixed(1)}с)`;
+                const actLabel = typeof t === 'function' ? t('ABILITY_ACTIVE') : 'АКТИВНО';
+                statusOverdrive.textContent = `${actLabel} (${Math.max(0, maxActiveTime).toFixed(1)}s)`;
             } else {
                 let minCdRem = 0;
                 for (let i = 0; i < scouts.length; i++) {
@@ -610,10 +680,10 @@ function updateAbilityUI(currentTime) {
                 }
                 if (minCdRem > 0.1) {
                     btnOverdrive.className = 'ability-btn cooldown';
-                    statusOverdrive.textContent = `${minCdRem.toFixed(1)}с`;
+                    statusOverdrive.textContent = `${minCdRem.toFixed(1)}s`;
                 } else {
                     btnOverdrive.className = 'ability-btn ready';
-                    statusOverdrive.textContent = 'ГОТОВО';
+                    statusOverdrive.textContent = typeof t === 'function' ? t('ABILITY_READY') : 'ГОТОВО';
                 }
             }
         }
@@ -637,13 +707,14 @@ function updateAbilityUI(currentTime) {
 
             if (minCdRem > 0.1) {
                 btnSiege.className = anySieged ? 'ability-btn active cooldown' : 'ability-btn cooldown';
-                statusSiege.textContent = `КД (${minCdRem.toFixed(1)}с)`;
+                const cdLabel = typeof t === 'function' ? t('ABILITY_CD') : 'КД';
+                statusSiege.textContent = `${cdLabel} (${minCdRem.toFixed(1)}s)`;
             } else if (anySieged) {
                 btnSiege.className = 'ability-btn active';
-                statusSiege.textContent = 'ОСАДА (ВКЛ)';
+                statusSiege.textContent = typeof t === 'function' ? t('ABILITY_SIEGE_ON') : 'ОСАДА (ВКЛ)';
             } else {
                 btnSiege.className = 'ability-btn ready';
-                statusSiege.textContent = 'МОБИЛЬНЫЙ';
+                statusSiege.textContent = typeof t === 'function' ? t('ABILITY_MOBILE') : 'МОБИЛЬНЫЙ';
             }
         }
     }
@@ -661,7 +732,8 @@ function updateAbilityUI(currentTime) {
             if (anyShield) {
                 const maxShieldTime = Math.max(...drones.map(u => u.shieldTimer));
                 btnShield.className = 'ability-btn active';
-                statusShield.textContent = `ЩИТ (${Math.max(0, maxShieldTime).toFixed(1)}с)`;
+                const shieldLabel = typeof t === 'function' ? t('ALERT_SHIELD', '').replace(/[()!0-9\s]/g, '') : 'ЩИТ';
+                statusShield.textContent = `${shieldLabel || 'SHIELD'} (${Math.max(0, maxShieldTime).toFixed(1)}s)`;
             } else {
                 let minCdRem = 0;
                 for (let i = 0; i < drones.length; i++) {
@@ -670,10 +742,10 @@ function updateAbilityUI(currentTime) {
                 }
                 if (minCdRem > 0.1) {
                     btnShield.className = 'ability-btn cooldown';
-                    statusShield.textContent = `${minCdRem.toFixed(1)}с`;
+                    statusShield.textContent = `${minCdRem.toFixed(1)}s`;
                 } else {
                     btnShield.className = 'ability-btn ready';
-                    statusShield.textContent = 'ГОТОВО';
+                    statusShield.textContent = typeof t === 'function' ? t('ABILITY_READY') : 'ГОТОВО';
                 }
             }
         }

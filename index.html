@@ -7,16 +7,19 @@
     <title>Minimal Web RTS: Neo-Drone Swarm &amp; Patrolling AI</title>
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
-    <link rel="manifest" href="manifest.json">
+    <script>
+        // Подключение PWA Manifest только при запуске через HTTP/HTTPS (исключает CORS ошибки при открытии по file:///)
+        if (window.location.protocol.startsWith('http')) {
+            const manifestLink = document.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = 'manifest.json';
+            document.head.appendChild(manifestLink);
+        }
+    </script>
     <link rel="stylesheet" href="style.css">
     <!-- Three.js (автономная локальная библиотека r186 / v0.186.1) -->
     <script src="libs/three.min.js"></script>
-    <script>
-        if (typeof THREE === 'undefined') {
-            console.warn('Локальный libs/three.min.js не найден, загрузка резервной копии Three.js...');
-            document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"><\/script>');
-        }
-    </script>
+
 </head>
 
 <body>
@@ -31,6 +34,7 @@
                     <option value="canyon" data-i18n="MAP_CANYON">Каньон (Классика)</option>
                     <option value="arena" data-i18n="MAP_ARENA">Арена Бастионов</option>
                     <option value="maze" data-i18n="MAP_MAZE">Лабиринт Кристаллов</option>
+                    <option value="crossroads" data-i18n="MAP_CROSSROADS">Перекрёсток (Тактика)</option>
                 </select>
             </div>
             <div class="menu-config-item">
