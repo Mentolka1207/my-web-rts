@@ -1,0 +1,34 @@
+  ok    17.45:1  text               on surface          
+  ok    17.59:1  text               on surface-dock     
+  ok    16.65:1  text               on surface-control  
+  ok    18.53:1  text               on surface-sunken   
+  ok    18.36:1  text               on surface-dev      
+  ok    15.51:1  text-body          on surface-raised   
+  ok    12.37:1  text-secondary     on surface-inset    
+  ok     6.81:1  text-muted         on surface          
+  ok     7.46:1  text-muted         on surface-raised   
+  ok     7.16:1  text-muted         on surface-dev      
+  ok     7.42:1  text-muted         on scrim-strong     
+  ok    13.44:1  accent             on surface          
+  ok    14.73:1  accent             on surface-raised   
+  ok    12.82:1  accent             on surface-control  
+  ok    14.14:1  accent             on surface-dev      
+  ok    14.65:1  accent             on scrim-strong     
+  ok    13.92:1  accent             on scrim            
+  ok    16.18:1  on-accent          on accent           
+  ok     4.95:1  on-action          on action           
+  ok     6.93:1  on-action-primary  on action-primary   
+  ok     7.77:1  info               on surface-control  
+  ok     9.14:1  warning            on surface          
+  ok     8.72:1  warning            on surface-control  
+  ok     5.12:1  danger             on surface          
+  ok     5.61:1  danger             on surface-raised   
+  ok     5.41:1  danger             on surface-danger   
+  ok     5.39:1  danger             on surface-dev      
+  ok    13.92:1  success            on scrim            
+  ok     3.25:1  border-input       on surface-raised   ui
+  ok     3.14:1  border-input       on surface-sunken   ui
+  ok    13.44:1  focus              on surface          ui
+  ok    14.73:1  focus              on surface-raised   ui
+  ok    14.65:1  focus              on scrim-strong     ui
+  33 пар, провалов AA: 0

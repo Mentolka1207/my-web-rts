@@ -9,7 +9,7 @@ let isDragging = false;
 const DRAG_THRESHOLD = 6;
 const selectionBoxEl = document.getElementById('selection-box');
 const raycaster = new THREE.Raycaster();
-const UI_SELECTOR = '#instructions, #resource-panel, #minimap-wrap, #wave-panel, #tactical-alert, #main-menu-overlay, #game-over-overlay, #touch-mode-panel, #ability-panel, #debug-overlay, #pause-overlay, #settings-modal, #records-modal, #tutorial-modal, #licenses-modal, #hud-pause-btn';
+const UI_SELECTOR = '#instructions, #resource-panel, #minimap-wrap, #wave-panel, #tactical-alert, #main-menu-overlay, #game-over-overlay, #touch-mode-panel, #ability-panel, #debug-overlay, #pause-overlay, #settings-modal, #records-modal, #tutorial-modal, #licenses-modal, #hud-pause-btn, #sys-error-overlay, #debug-overlay, #perf-panel';
 
 // --- Состояние перемещения колёсиком мыши (MMB Drag) ---
 let isMiddlePanning = false;
@@ -34,18 +34,17 @@ let twoFingerStartPivot = new THREE.Vector3();
 // Переключатель режима сенсора
 function toggleTouchMode() {
     currentTouchMode = (currentTouchMode === 'pan') ? 'select' : 'pan';
+    refreshTouchModeButton();
+}
+
+// Кнопка режима касания: «нажата» = режим рамки
+function refreshTouchModeButton() {
     const btn = document.getElementById('touch-mode-btn');
-    if (btn) {
-        if (currentTouchMode === 'pan') {
-            btn.textContent = typeof t === 'function' ? t('TOUCH_PAN') : '🖐 Карта (Сенсор)';
-            btn.style.borderColor = '#00ffcc';
-            btn.style.color = '#00ffcc';
-        } else {
-            btn.textContent = typeof t === 'function' ? t('TOUCH_SELECT') : '⬚ Рамка (Выбор)';
-            btn.style.borderColor = '#ffaa00';
-            btn.style.color = '#ffaa00';
-        }
-    }
+    if (!btn) return;
+    const select = currentTouchMode === 'select';
+    btn.textContent = typeof t === 'function' ? t(select ? 'TOUCH_SELECT' : 'TOUCH_PAN') : (select ? '⬚ Рамка (Выбор)' : '🖐 Карта (Сенсор)');
+    btn.setAttribute('aria-pressed', select ? 'true' : 'false');
+    btn.classList.toggle('is-warning', select);
 }
 
 function updateMouseNDC(clientX, clientY) {

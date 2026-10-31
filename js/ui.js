@@ -7,6 +7,101 @@ let gameOver = false;
 let isGamePaused = false;
 const HUD_PANEL_IDS = ['instructions', 'resource-panel', 'wave-panel', 'minimap-wrap', 'touch-mode-panel', 'hud-pause-btn'];
 
+// =============================================================================
+// Система модальных окон: стек, перевод фокуса, ловушка Tab, Esc, возврат фокуса.
+// Пока открыто любое окно, симуляция стоит (isSimulationPaused), а игровые
+// горячие клавиши не срабатывают (обработчик ниже гасит keydown в фазе захвата).
+// =============================================================================
+const MODAL_CLOSERS = {
+    'settings-modal': () => closeSettingsModal(),
+    'records-modal': () => closeRecordsModal(),
+    'tutorial-modal': () => closeTutorialModal(),
+    'licenses-modal': () => closeLicensesModal(),
+    'pause-overlay': () => setGamePaused(false),
+    'game-over-overlay': null // итог боя не закрывается по Esc: только кнопками
+};
+const modalStack = []; // [{ id, returnFocus }]
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function isElementShown(el) {
+    return !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+}
+
+function getFocusable(container) {
+    return Array.from(container.querySelectorAll(FOCUSABLE)).filter(isElementShown);
+}
+
+function showModal(id, displayValue = 'flex', focusSelector = null) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const already = modalStack.findIndex(m => m.id === id);
+    if (already !== -1) modalStack.splice(already, 1);
+    const active = document.activeElement;
+    modalStack.push({ id, returnFocus: (active && active !== document.body) ? active : null });
+    el.style.display = displayValue;
+    const target = (focusSelector && el.querySelector(focusSelector)) || getFocusable(el)[0];
+    if (target) target.focus({ preventScroll: true });
+}
+
+function hideModal(id, restoreFocus = true) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+    const idx = modalStack.findIndex(m => m.id === id);
+    if (idx === -1) return;
+    const [entry] = modalStack.splice(idx, 1);
+    if (restoreFocus && entry.returnFocus && isElementShown(entry.returnFocus)) {
+        entry.returnFocus.focus({ preventScroll: true });
+    }
+}
+
+// Закрыть все окна без возврата фокуса (рестарт, выход в меню)
+function hideAllModals() {
+    while (modalStack.length) hideModal(modalStack[modalStack.length - 1].id, false);
+}
+
+function topModalId() {
+    return modalStack.length ? modalStack[modalStack.length - 1].id : null;
+}
+
+function isAnyModalOpen() {
+    return modalStack.length > 0;
+}
+
+// Симуляция стоит на паузе и при открытом окне (например, обучение в начале первого матча)
+function isSimulationPaused() {
+    return isGamePaused || modalStack.length > 0;
+}
+
+if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('keydown', (e) => {
+        const id = topModalId();
+        if (!id) return;
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        if (e.key === 'Escape' || (id === 'pause-overlay' && e.code === 'KeyP')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const close = MODAL_CLOSERS[id];
+            if (close) close();
+            return;
+        }
+
+        if (e.key === 'Tab') {
+            const items = getFocusable(el);
+            if (items.length === 0) { e.preventDefault(); return; }
+            const first = items[0], last = items[items.length - 1];
+            if (e.shiftKey && (document.activeElement === first || !el.contains(document.activeElement))) {
+                e.preventDefault(); last.focus();
+            } else if (!e.shiftKey && (document.activeElement === last || !el.contains(document.activeElement))) {
+                e.preventDefault(); first.focus();
+            }
+        }
+        // Остальные клавиши не уходят в игру (WASD, Q/E/R, F3, ` и т. д.)
+        e.stopPropagation();
+    }, true);
+}
+
 function startGame() {
     const menuEl = document.getElementById('main-menu-overlay');
     if (menuEl) menuEl.style.display = 'none';
@@ -14,6 +109,11 @@ function startGame() {
         const el = document.getElementById(id);
         if (el) el.style.display = '';
     });
+    // На узком экране и на таче инструкции свёрнуты, чтобы не закрывать поле
+    setInstructionsExpanded(!isCompactViewport());
+    // Фокус уходит с исчезнувшей кнопки «Играть» на первую кнопку HUD
+    const hudFirst = document.getElementById('instructions-toggle');
+    if (hudFirst) hudFirst.focus({ preventScroll: true });
 
     // Применяем выбранную карту при старте матча
     if (typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
@@ -47,13 +147,48 @@ function exitGame() {
     }, 300);
 }
 
-function toggleInstructions() {
+// Подпись кнопки с иконкой: меняем только текст .btn-label, иконку не трогаем
+function setButtonLabel(btn, icon, label) {
+    if (!btn) return;
+    const iconEl = btn.querySelector('.btn-icon');
+    const labelEl = btn.querySelector('.btn-label');
+    if (iconEl && icon !== null) iconEl.textContent = icon;
+    if (labelEl) labelEl.textContent = label;
+    else btn.textContent = label;
+}
+
+// Узкий экран или тач: инструкции по умолчанию свёрнуты, чтобы не закрывать поле
+function isCompactViewport() {
+    return typeof window !== 'undefined' && window.matchMedia &&
+        window.matchMedia('(max-width: 768px), (pointer: coarse)').matches;
+}
+
+function setInstructionsExpanded(expanded) {
     const content = document.getElementById('instructions-content');
     const btn = document.getElementById('instructions-toggle');
     if (!content || !btn) return;
-    const isHidden = content.style.display === 'none';
-    content.style.display = isHidden ? 'block' : 'none';
-    btn.textContent = isHidden ? (typeof t === 'function' ? t('BTN_HIDE_INSTRUCTIONS') : 'Скрыть ▲') : (typeof t === 'function' ? t('BTN_SHOW_INSTRUCTIONS') : 'Управление ▼');
+    content.style.display = expanded ? '' : 'none';
+    btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    setButtonLabel(btn, '☰', typeof t === 'function' ? t(expanded ? 'BTN_HIDE' : 'BTN_SHOW') : (expanded ? 'Скрыть' : 'Управление'));
+}
+
+function toggleInstructions() {
+    const btn = document.getElementById('instructions-toggle');
+    if (!btn) return;
+    setInstructionsExpanded(btn.getAttribute('aria-expanded') !== 'true');
+}
+
+// Тексты кнопок, которые зависят от состояния; вызывается и при смене языка
+function refreshStatefulLabels() {
+    const toggle = document.getElementById('instructions-toggle');
+    if (toggle) setInstructionsExpanded(toggle.getAttribute('aria-expanded') === 'true');
+    const pauseBtn = document.getElementById('hud-pause-btn');
+    if (pauseBtn) setButtonLabel(pauseBtn, isGamePaused ? '▶' : '⏸️', typeof t === 'function' ? t(isGamePaused ? 'RESUME_LABEL' : 'PAUSE_LABEL') : 'Пауза');
+    if (typeof refreshTouchModeButton === 'function') refreshTouchModeButton();
+    if (typeof refreshProfilerToggles === 'function') refreshProfilerToggles();
+    if (typeof updateBenchmarkUI === 'function') updateBenchmarkUI();
+    if (typeof updateFormationUI === 'function') updateFormationUI();
+    if (debugOverlayVisible) refreshAssetSizes();
 }
 
 // Управление паузой
@@ -64,17 +199,16 @@ function togglePause() {
 
 function setGamePaused(paused) {
     if (!gameStarted || gameOver) return;
+    if (paused === isGamePaused) return;
     isGamePaused = paused;
 
-    const pauseOverlay = document.getElementById('pause-overlay');
-    if (pauseOverlay) {
-        pauseOverlay.style.display = isGamePaused ? 'flex' : 'none';
+    if (isGamePaused) showModal('pause-overlay');
+    else {
+        // Окна поверх паузы (настройки) закрываются вместе с ней
+        while (topModalId() && topModalId() !== 'pause-overlay') hideModal(topModalId(), false);
+        hideModal('pause-overlay');
     }
-
-    const pauseBtn = document.getElementById('hud-pause-btn');
-    if (pauseBtn) {
-        pauseBtn.textContent = isGamePaused ? '▶' : '⏸️';
-    }
+    refreshStatefulLabels();
 }
 
 // Авто-пауза при потере фокуса вкладки или сворачивании окна
@@ -172,11 +306,11 @@ function restartMatch() {
     isGamePaused = false;
     gameStarted = true;
 
-    // 10. Скрытие оверлеев
-    const goOverlay = document.getElementById('game-over-overlay');
-    if (goOverlay) goOverlay.style.display = 'none';
-    const pauseOverlay = document.getElementById('pause-overlay');
-    if (pauseOverlay) pauseOverlay.style.display = 'none';
+    // 10. Скрытие оверлеев и окон
+    hideAllModals();
+    refreshStatefulLabels();
+    const hudFirst = document.getElementById('instructions-toggle');
+    if (hudFirst) hudFirst.focus({ preventScroll: true });
 
     // 11. Звук и интерфейс
     if (typeof soundEngine !== 'undefined') {
@@ -203,13 +337,15 @@ function returnToMainMenu() {
         if (el) el.style.display = 'none';
     });
 
-    const goOverlay = document.getElementById('game-over-overlay');
-    if (goOverlay) goOverlay.style.display = 'none';
-    const pauseOverlay = document.getElementById('pause-overlay');
-    if (pauseOverlay) pauseOverlay.style.display = 'none';
+    hideAllModals();
+    const abPanel = document.getElementById('ability-panel');
+    if (abPanel) abPanel.style.display = 'none';
+    refreshStatefulLabels();
 
     const menuEl = document.getElementById('main-menu-overlay');
     if (menuEl) menuEl.style.display = 'flex';
+    const playBtn = document.getElementById('play-btn');
+    if (playBtn) playBtn.focus({ preventScroll: true });
 }
 
 // Тактические всплывающие оповещения (неоновые баннеры)
@@ -218,12 +354,12 @@ function showTacticalAlert(text, isDanger = false) {
     if (typeof playAlertSound === 'function') playAlertSound(isDanger);
     const el = document.getElementById('tactical-alert');
     if (!el) return;
+    // Тревога читается экранным диктором сразу, обычное сообщение — в паузе между репликами
+    el.setAttribute('aria-live', isDanger ? 'assertive' : 'polite');
+    el.classList.toggle('is-danger', !!isDanger);
     el.textContent = text;
     el.style.display = 'block';
     el.style.opacity = '1';
-    el.style.borderColor = isDanger ? '#ff3333' : '#00ffcc';
-    el.style.color = isDanger ? '#ff4444' : '#00ffcc';
-    el.style.boxShadow = isDanger ? '0 0 30px rgba(255, 51, 51, 0.7)' : '0 0 25px rgba(0, 255, 204, 0.5)';
 
     clearTimeout(alertTimeout);
     alertTimeout = setTimeout(() => {
@@ -253,7 +389,7 @@ function triggerGameOver(playerWon) {
 
     if (titleEl) {
         titleEl.textContent = playerWon ? (typeof t === 'function' ? t('GAME_OVER_VICTORY') : '🏆 ПОБЕДА!') : (typeof t === 'function' ? t('GAME_OVER_DEFEAT') : '💥 ПОРАЖЕНИЕ');
-        titleEl.style.color = playerWon ? '#00ffcc' : '#ff3333';
+        titleEl.classList.toggle('is-defeat', !playerWon);
     }
 
     const durationSec = Math.max(0, Math.floor((performance.now() - (matchStats.startTime || performance.now())) / 1000));
@@ -267,20 +403,26 @@ function triggerGameOver(playerWon) {
     if (statsEl && typeof matchStats !== 'undefined') {
         const mm = Math.floor(durationSec / 60).toString().padStart(2, '0');
         const ss = (durationSec % 60).toString().padStart(2, '0');
-        const timeStr = `${mm}:${ss}`;
-
-        statsEl.innerHTML = `
-            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_TIME') : '⏱️ Время боя:'}</span><span class="stat-val">${timeStr}</span></div>
-            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_WAVES_DEFENDED') : '🌊 Отражено волн:'}</span><span class="stat-val" style="color:#00ffcc; font-weight:bold;">${wavesDefeated}</span></div>
-            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_KILLED') : '💥 Уничтожено врагов:'}</span><span class="stat-val">${matchStats.enemiesKilled}</span></div>
-            ${matchStats.bossesKilled > 0 ? `<div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_BOSSES') : '👑 Сбито Левиафанов:'}</span><span class="stat-val" style="color:#ff3366;">${matchStats.bossesKilled}</span></div>` : ''}
-            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_ENERGY') : '⚡ Добыто энергии:'}</span><span class="stat-val">${Math.floor(matchStats.energyHarvested)} ⚡</span></div>
-            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_PRODUCED') : '🛸 Произведено дронов:'}</span><span class="stat-val">${matchStats.unitsProduced}</span></div>
-            <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('STAT_CAPTURES') : '💎 Захватов точек:'}</span><span class="stat-val">${matchStats.nodesCaptured}</span></div>
-        `;
+        const rows = [
+            ['STAT_TIME', `${mm}:${ss}`],
+            ['STAT_WAVES_DEFENDED', wavesDefeated],
+            ['STAT_KILLED', matchStats.enemiesKilled],
+            matchStats.bossesKilled > 0 ? ['STAT_BOSSES', matchStats.bossesKilled, 'is-neg'] : null,
+            ['STAT_ENERGY', `${Math.floor(matchStats.energyHarvested)} ⚡`],
+            ['STAT_PRODUCED', matchStats.unitsProduced],
+            ['STAT_CAPTURES', matchStats.nodesCaptured]
+        ];
+        statsEl.innerHTML = renderStatList(rows, typeof t === 'function' ? t('STATS_TITLE') : 'Итоги боя');
     }
 
-    if (overlayEl) overlayEl.style.display = 'flex';
+    showModal('game-over-overlay', 'flex', '#game-over-restart-btn');
+}
+
+// Список «метка — значение» как <dl>; значения — числа или короткие строки из кода, не ввод пользователя
+function renderStatList(rows, ariaLabel) {
+    const items = rows.filter(Boolean).map(([key, value, cls]) =>
+        `<dt>${typeof t === 'function' ? t(key) : key}</dt><dd${cls ? ` class="${cls}"` : ''}>${value}</dd>`).join('');
+    return `<dl class="stat-list"${ariaLabel ? ` aria-label="${ariaLabel}"` : ''}>${items}</dl>`;
 }
 
 function checkGameOverConditions() {
@@ -313,12 +455,24 @@ function openSettingsModal() {
     const langSelect = document.getElementById('select-language');
     if (langSelect) langSelect.value = currentLanguage;
 
-    modal.style.display = 'flex';
+    ['slider-master-vol', 'slider-sfx-vol', 'slider-music-vol'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) syncVolumeOutput(input, input.id.replace('slider-', 'val-'));
+    });
+
+    showModal('settings-modal');
+}
+
+// Значение ползунка: видимое «80%» и озвучиваемое aria-valuetext
+function syncVolumeOutput(input, outputId) {
+    const text = `${input.value}%`;
+    const out = document.getElementById(outputId);
+    if (out) out.textContent = text;
+    input.setAttribute('aria-valuetext', text);
 }
 
 function closeSettingsModal() {
-    const modal = document.getElementById('settings-modal');
-    if (modal) modal.style.display = 'none';
+    hideModal('settings-modal');
 
     // Применяем настройки
     const masterSlider = document.getElementById('slider-master-vol');
@@ -388,33 +542,41 @@ function renderRecordsContent() {
         { id: 'hard', label: typeof t === 'function' ? t('DIFF_HARD') : 'Сложно' }
     ].map(d => `<option value="${d.id}" ${d.id === selectedRecordDiff ? 'selected' : ''}>${d.label}</option>`).join('');
 
+    const tr = (k, fb) => (typeof t === 'function' ? t(k) : fb);
+    const focusedId = document.activeElement ? document.activeElement.id : null;
     statsContent.innerHTML = `
-        <div style="font-size: 13px; font-weight: bold; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; text-align: left;">
-            ${typeof t === 'function' ? t('REC_TOTALS') : '📊 Общая статистика'}
+        <h3 class="section-label">${tr('REC_TOTALS', '📊 Общая статистика')}</h3>
+        ${renderStatList([
+            ['REC_GAMES', totals.matchesPlayed, 'is-plain'],
+            ['REC_WINS', totals.victories],
+            ['REC_LOSSES', totals.defeats, 'is-neg'],
+            ['REC_TOTAL_ENERGY', `${totals.energyHarvested} ⚡`, 'is-plain'],
+            ['REC_TOTAL_BOSSES', totals.bossesKilled, 'is-neg']
+        ])}
+        <h3 class="section-label">${tr('REC_BY_MAP', '🗺️ Рекорды по картам')}</h3>
+        <div class="records-filters">
+            <div class="field">
+                <label for="records-map-select">${tr('REC_FILTER_MAP', 'Карта:')}</label>
+                <select id="records-map-select" class="menu-select" onchange="onRecordFilterChange(this.value, selectedRecordDiff)">${mapOptions}</select>
+            </div>
+            <div class="field">
+                <label for="records-diff-select">${tr('REC_FILTER_DIFF', 'Сложность:')}</label>
+                <select id="records-diff-select" class="menu-select" onchange="onRecordFilterChange(selectedRecordMap, this.value)">${diffOptions}</select>
+            </div>
         </div>
-        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_GAMES') : 'Сыграно матчей:'}</span><span class="stat-val">${totals.matchesPlayed}</span></div>
-        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_WINS') : 'Побед:'}</span><span class="stat-val" style="color:#00ffcc;">${totals.victories}</span></div>
-        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_LOSSES') : 'Поражений:'}</span><span class="stat-val" style="color:#ff4444;">${totals.defeats}</span></div>
-        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_TOTAL_ENERGY') : 'Добыто энергии:'}</span><span class="stat-val">${totals.energyHarvested} ⚡</span></div>
-        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_TOTAL_BOSSES') : 'Сбито боссов:'}</span><span class="stat-val" style="color:#ff3366;">${totals.bossesKilled}</span></div>
-
-        <div style="font-size: 13px; font-weight: bold; color: #94a3b8; text-transform: uppercase; margin-top: 14px; margin-bottom: 6px; text-align: left;">
-            ${typeof t === 'function' ? t('REC_BY_MAP') : '🗺️ Рекорды по картам'}
-        </div>
-        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <select id="records-map-select" class="menu-select" style="flex: 1; padding: 6px; font-size: 12px;" onchange="onRecordFilterChange(this.value, selectedRecordDiff)">
-                ${mapOptions}
-            </select>
-            <select id="records-diff-select" class="menu-select" style="flex: 1; padding: 6px; font-size: 12px;" onchange="onRecordFilterChange(selectedRecordMap, this.value)">
-                ${diffOptions}
-            </select>
-        </div>
-        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_BEST_WAVE') : 'Рекорд волн:'}</span><span class="stat-val" style="color:#00ffcc; font-weight:bold;">${curRecord.bestWave}</span></div>
-        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_MAX_KILLS') : 'Макс. сбитых врагов:'}</span><span class="stat-val">${curRecord.maxKills}</span></div>
-        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_WINS') : 'Побед на карте:'}</span><span class="stat-val" style="color:#00ffcc;">${curRecord.wins}</span></div>
-        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_LOSSES') : 'Поражений на карте:'}</span><span class="stat-val" style="color:#ff4444;">${curRecord.losses}</span></div>
-        <div class="stat-row"><span class="stat-label">${typeof t === 'function' ? t('REC_FASTEST_WIN') : 'Быстрейшая победа:'}</span><span class="stat-val">${fastWinStr}</span></div>
+        ${renderStatList([
+            ['REC_BEST_WAVE', curRecord.bestWave],
+            ['REC_MAX_KILLS', curRecord.maxKills, 'is-plain'],
+            ['REC_WINS', curRecord.wins],
+            ['REC_LOSSES', curRecord.losses, 'is-neg'],
+            ['REC_FASTEST_WIN', fastWinStr, 'is-plain']
+        ])}
     `;
+    // Перерисовка не должна выбивать фокус из фильтра, которым пользуется игрок
+    if (focusedId) {
+        const again = document.getElementById(focusedId);
+        if (again) again.focus({ preventScroll: true });
+    }
 }
 
 function onRecordFilterChange(mapId, diffId) {
@@ -432,22 +594,19 @@ function openRecordsModal() {
     if (typeof currentDifficulty !== 'undefined' && VALID_DIFFICULTIES.includes(currentDifficulty)) selectedRecordDiff = currentDifficulty;
 
     renderRecordsContent();
-    modal.style.display = 'flex';
+    showModal('records-modal');
 }
 
 function closeRecordsModal() {
-    const modal = document.getElementById('records-modal');
-    if (modal) modal.style.display = 'none';
+    hideModal('records-modal');
 }
 
 function showTutorialModal() {
-    const modal = document.getElementById('tutorial-modal');
-    if (modal) modal.style.display = 'flex';
+    showModal('tutorial-modal');
 }
 
 function closeTutorialModal() {
-    const modal = document.getElementById('tutorial-modal');
-    if (modal) modal.style.display = 'none';
+    hideModal('tutorial-modal');
     if (typeof playerProfile !== 'undefined') {
         playerProfile.tutorialCompleted = true;
         if (typeof saveProfileToStorage === 'function') saveProfileToStorage();
@@ -455,13 +614,11 @@ function closeTutorialModal() {
 }
 
 function openLicensesModal() {
-    const modal = document.getElementById('licenses-modal');
-    if (modal) modal.style.display = 'flex';
+    showModal('licenses-modal');
 }
 
 function closeLicensesModal() {
-    const modal = document.getElementById('licenses-modal');
-    if (modal) modal.style.display = 'none';
+    hideModal('licenses-modal');
 }
 
 // Панель отладки и производительности (Debug Overlay F3)
@@ -474,6 +631,71 @@ function toggleDebugOverlay() {
     debugOverlayVisible = !debugOverlayVisible;
     const dbgEl = document.getElementById('debug-overlay');
     if (dbgEl) dbgEl.style.display = debugOverlayVisible ? 'block' : 'none';
+    if (debugOverlayVisible) {
+        refreshProfilerToggles();
+        refreshAssetSizes();
+    }
+}
+
+// Уровень FPS → класс значения (цвет задаёт CSS)
+function setLevelClass(el, level) {
+    if (!el) return;
+    el.classList.toggle('is-good', level === 'good');
+    el.classList.toggle('is-warn', level === 'warn');
+    el.classList.toggle('is-bad', level === 'bad');
+}
+
+function fpsLevel(fps) {
+    return fps >= 50 ? 'good' : (fps >= 30 ? 'warn' : 'bad');
+}
+
+function formatKB(bytes) {
+    return `${Math.round(bytes / 1024).toLocaleString()} KB`;
+}
+
+// Реальный вес загруженных файлов из Resource Timing API.
+// Под file:// браузер не сообщает размеры (0) — тогда честно пишем «н/д».
+function refreshAssetSizes() {
+    const codeEl = document.getElementById('dbg-code-size');
+    const threeEl = document.getElementById('dbg-three-size');
+    if (!codeEl || !threeEl || typeof performance === 'undefined' || !performance.getEntriesByType) return;
+    const na = typeof t === 'function' ? t('DBG_NA') : 'н/д';
+    let code = 0, three = 0, unmeasured = 0, measuredJs = 0;
+    performance.getEntriesByType('resource').forEach(r => {
+        const size = r.decodedBodySize || 0;
+        if (/\.(js|css)(\?|$)/.test(r.name)) { if (size === 0) unmeasured++; else measuredJs++; }
+        if (/three(\.min)?\.js(\?|$)/.test(r.name)) three += size;
+        else if (/\.(js|css)(\?|$)/.test(r.name)) code += size;
+    });
+    const nav = performance.getEntriesByType('navigation')[0];
+    if (nav && nav.decodedBodySize) code += nav.decodedBodySize;
+    // Частичная сумма (например, только index.html под file://) хуже, чем «н/д»
+    codeEl.textContent = (measuredJs > 0 && unmeasured === 0) ? formatKB(code) : na;
+    threeEl.textContent = three > 0 ? formatKB(three) : na;
+}
+
+// Подписи переключателей профайлера (зависят от режима и языка)
+function refreshProfilerToggles() {
+    const tr = (k, fb) => (typeof t === 'function' ? t(k) : fb);
+    const collBtn = document.getElementById('dbg-collision-btn');
+    if (collBtn && typeof spatialGrid !== 'undefined') {
+        const naive = spatialGrid.collisionMode === 'naive';
+        collBtn.textContent = tr(naive ? 'DBG_COLL_NAIVE' : 'DBG_COLL_SPATIAL', '');
+        collBtn.title = tr(naive ? 'DBG_COLL_NAIVE_TIP' : 'DBG_COLL_SPATIAL_TIP', '');
+        collBtn.className = 'dbg-toggle-btn ' + (naive ? 'naive' : 'spatial');
+        collBtn.setAttribute('aria-pressed', naive ? 'false' : 'true');
+    }
+    const instBtn = document.getElementById('dbg-instancing-btn');
+    if (instBtn && typeof instancedRenderer !== 'undefined') {
+        const on = !!instancedRenderer.enabled;
+        instBtn.textContent = tr(on ? 'DBG_INST_ON' : 'DBG_INST_OFF', '');
+        instBtn.title = tr(on ? 'DBG_INST_ON_TIP' : 'DBG_INST_OFF_TIP', '');
+        instBtn.className = 'dbg-toggle-btn ' + (on ? 'instanced' : 'individual');
+        instBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    // Симуляция всегда идёт в главном потоке; воркер (js/sim_worker.js) — прототип, шаг в нём не вызывается
+    const simModeEl = document.getElementById('dbg-sim-mode');
+    if (simModeEl) simModeEl.textContent = tr('DBG_SIM_MAIN', 'главный поток');
 }
 
 window.addEventListener('keydown', (e) => {
@@ -519,13 +741,13 @@ function updateDebugOverlay(delta) {
 
     if (fpsEl) {
         fpsEl.textContent = currentFPS;
-        fpsEl.style.color = currentFPS >= 50 ? '#00ffcc' : (currentFPS >= 30 ? '#ffaa00' : '#ff4444');
+        setLevelClass(fpsEl, fpsLevel(currentFPS));
     }
     if (ftEl) ftEl.textContent = (delta * 1000).toFixed(1) + ' ms';
     if (tickEl && typeof engineProfiler !== 'undefined') {
         tickEl.textContent = (engineProfiler.totalTickTime || 0).toFixed(2) + ' ms';
     }
-    if (uEl) uEl.textContent = `${units.length} / ${enemies.length} (всего ${units.length + enemies.length})`;
+    if (uEl) uEl.textContent = typeof t === 'function' ? t('UNITS_TOTAL', units.length, enemies.length, units.length + enemies.length) : `${units.length} / ${enemies.length}`;
     if (selEl) selEl.textContent = units.filter(u => u.selected && u.hp > 0).length;
     if (dcEl && typeof renderer !== 'undefined' && renderer.info) dcEl.textContent = renderer.info.render.calls;
     if (triEl && typeof renderer !== 'undefined' && renderer.info) triEl.textContent = renderer.info.render.triangles.toLocaleString();
@@ -535,25 +757,15 @@ function updateDebugOverlay(delta) {
         if (spEl) spEl.textContent = (engineProfiler.spatialTime || 0).toFixed(2) + ' ms';
         if (fsmEl) fsmEl.textContent = (engineProfiler.fsmTime || 0).toFixed(2) + ' ms';
         if (sndEl) sndEl.textContent = (engineProfiler.audioTime || 0).toFixed(2) + ' ms';
-        if (sndVoicesEl) sndVoicesEl.textContent = `${engineProfiler.audioVoices} акт. / ${engineProfiler.soundEvents} соб.`;
+        if (sndVoicesEl) sndVoicesEl.textContent = typeof t === 'function' ? t('DBG_VOICES', engineProfiler.audioVoices, engineProfiler.soundEvents) : `${engineProfiler.audioVoices} / ${engineProfiler.soundEvents}`;
         if (rndEl) rndEl.textContent = (engineProfiler.renderTime || 0).toFixed(2) + ' ms';
         if (pairsEl) {
             const numPairs = (typeof spatialGrid !== 'undefined') ? (spatialGrid.lastPairsTested || spatialGrid.pairsTested || 0) : 0;
             pairsEl.textContent = numPairs.toLocaleString();
-            pairsEl.style.color = (typeof spatialGrid !== 'undefined' && spatialGrid.collisionMode === 'naive') ? '#ffaa00' : '#38bdf8';
+            setLevelClass(pairsEl, (typeof spatialGrid !== 'undefined' && spatialGrid.collisionMode === 'naive') ? 'warn' : null);
         }
     }
 
-    const simModeEl = document.getElementById('dbg-sim-mode');
-    if (simModeEl && typeof simWorkerManager !== 'undefined') {
-        if (simWorkerManager.isWorkerActive) {
-            simModeEl.textContent = 'Web Worker (Multi-thread)';
-            simModeEl.style.color = '#00ffcc';
-        } else {
-            simModeEl.textContent = 'SoA Typed Arrays (Main)';
-            simModeEl.style.color = '#38bdf8';
-        }
-    }
 }
 
 // Компактная панель FPS / времени кадра / активных юнитов (клавиша ` / ~)
@@ -614,10 +826,10 @@ function updatePerfPanel(timestamp) {
     const uEl = document.getElementById('perf-units');
     if (fpsEl) {
         fpsEl.textContent = fps;
-        fpsEl.style.color = fps >= 50 ? '#00ffcc' : (fps >= 30 ? '#ffaa00' : '#ff4444');
+        setLevelClass(fpsEl, fpsLevel(fps));
     }
     if (ftEl) ftEl.textContent = `${avgMs.toFixed(1)} / ${perfWorstFrame.toFixed(1)} ms`;
-    if (uEl) uEl.textContent = `${alliesAlive} / ${enemiesAlive} (всего ${alliesAlive + enemiesAlive})`;
+    if (uEl) uEl.textContent = typeof t === 'function' ? t('UNITS_TOTAL', alliesAlive, enemiesAlive, alliesAlive + enemiesAlive) : `${alliesAlive} / ${enemiesAlive}`;
 
     perfFrames = 0;
     perfWorstFrame = 0;

@@ -12,10 +12,8 @@ function updateFormationUI() {
 
     const updateBtn = (btn, active) => {
         if (!btn) return;
-        btn.style.background = active ? '#00ffcc' : '#0077ff';
-        btn.style.color = active ? '#000000' : '#ffffff';
-        btn.style.borderColor = active ? '#00ffcc' : '#00a2ff';
-        btn.style.boxShadow = active ? '0 0 10px rgba(0, 255, 204, 0.6)' : 'none';
+        btn.setAttribute('aria-checked', active ? 'true' : 'false');
+        btn.tabIndex = active ? 0 : -1; // radiogroup: в группу попадаем Tab, по пунктам ходим стрелками
     };
 
     updateBtn(lineBtn, currentFormation === 'line');
@@ -29,8 +27,28 @@ function setFormation(type) {
     if (typeof playSelectSound === 'function') playSelectSound();
 }
 
+// Радиогруппа построений: стрелки переключают пункт и не двигают камеру
+function onFormationGroupKeydown(e) {
+    const keys = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+    if (!(e.key in keys)) return;
+    const order = ['line', 'wedge', 'circle'];
+    const idx = (order.indexOf(currentFormation) + keys[e.key] + order.length) % order.length;
+    e.preventDefault();
+    e.stopPropagation();
+    setFormation(order[idx]);
+    const btn = document.getElementById(`formation-${order[idx]}-btn`);
+    if (btn) btn.focus();
+}
+
 // Первичная инициализация подсветки кнопки построения
 if (typeof document !== 'undefined') {
+    const bindGroup = () => {
+        if (typeof document.querySelector !== 'function') return; // тестовая заглушка DOM
+        const group = document.querySelector('.formation-row[role="radiogroup"]');
+        if (group) group.addEventListener('keydown', onFormationGroupKeydown);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindGroup);
+    else bindGroup();
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', updateFormationUI);
     } else {

@@ -30,7 +30,7 @@ function updateResourceUI() {
     if (energyIncomeBadgeEl) energyIncomeBadgeEl.textContent = `(+${currentIncome}${incomeSuffix})`;
     if (nodesCountEl) {
         nodesCountEl.textContent = `${playerControlledNodes}/${resourceNodes.length}`;
-        nodesCountEl.style.color = playerControlledNodes > 0 ? '#00ffcc' : '#ffaa00';
+        nodesCountEl.classList.toggle('is-active', playerControlledNodes > 0);
     }
 
     if (produceBtnEl) {

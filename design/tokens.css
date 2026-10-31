@@ -1,0 +1,144 @@
+/* =============================================================================
+   design/tokens.css — дизайн-токены Minimal Web RTS
+   СГЕНЕРИРОВАНО design/build_tokens.py, руками не править.
+   Подключать ПЕРВЫМ, до style.css. Компоненты используют только var(--…).
+   ============================================================================= */
+:root {
+    color-scheme: dark;
+
+    /* Цвета: сплошные роли */
+    --color-bg: #0b0d19;
+    --color-surface-sunken: #0d1322;
+    --color-text: #ffffff;
+    --color-text-body: #e2e8f0;
+    --color-text-secondary: #cbd5e1;
+    --color-text-muted: #94a3b8;
+    --color-accent: #00ffcc;
+    --color-on-accent: #000000;
+    --color-action: #006be6;
+    --color-action-border: #00a2ff;
+    --color-on-action: #ffffff;
+    --color-action-primary: #00a2ff;
+    --color-on-action-primary: #04101f;
+    --color-info: #38bdf8;
+    --color-success: #00ffcc;
+    --color-warning: #ffaa00;
+    --color-danger: #ff4444;
+    --color-focus: #00ffcc;
+
+    /* Стекло: реальные rgba (контраст проверен по итоговому цвету, см. tokens.json) */
+    --color-surface: rgba(11, 13, 25, 0.9);
+    --color-surface-dock: rgba(10, 15, 28, 0.92);
+    --color-surface-control: rgba(22, 30, 52, 0.85);
+    --color-scrim: rgba(4, 7, 15, 0.88);
+    --color-scrim-strong: rgba(5, 6, 12, 0.92);
+    --color-surface-raised: rgba(10, 15, 28, 0.96);
+    --color-surface-inset: rgba(15, 23, 42, 0.65);
+    --color-surface-danger: rgba(22, 10, 18, 0.94);
+    --color-surface-dev: rgba(8, 13, 24, 0.94);
+    --color-border: rgba(0, 255, 204, 0.2);
+    --color-border-strong: rgba(0, 255, 204, 0.4);
+    --color-accent-tint: rgba(0, 255, 204, 0.15);
+    --color-info-tint: rgba(0, 212, 255, 0.3);
+    --color-danger-tint: rgba(255, 68, 68, 0.16);
+    --color-warning-edge: rgba(255, 170, 0, 0.5);
+
+    /* Шрифт */
+    --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: ui-monospace, 'Cascadia Mono', Consolas, 'SF Mono', Menlo, 'Courier New', monospace;
+    --text-2xs: 11px;  --leading-2xs: 14px;  --weight-2xs: 600;
+    --text-xs: 12px;  --leading-xs: 16px;  --weight-xs: 400;
+    --text-sm: 13px;  --leading-sm: 18px;  --weight-sm: 400;
+    --text-md: 14px;  --leading-md: 20px;  --weight-md: 400;
+    --text-base: 16px;  --leading-base: 24px;  --weight-base: 400;
+    --text-lg: 18px;  --leading-lg: 24px;  --weight-lg: 700;
+    --text-xl: 24px;  --leading-xl: 30px;  --weight-xl: 700;
+    --text-display: 40px;  --leading-display: 44px;  --weight-display: 700;
+
+    /* Отступы: --space-N = N-й шаг шкалы */
+    --space-0: 0px;
+    --space-1: 2px;
+    --space-2: 4px;
+    --space-3: 6px;
+    --space-4: 8px;
+    --space-5: 12px;
+    --space-6: 16px;
+    --space-7: 20px;
+    --space-8: 24px;
+    --space-9: 32px;
+
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+
+    --shadow-panel: 0 4px 25px rgba(0, 0, 0, 0.7);
+    --shadow-modal: 0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 255, 204, 0.2);
+    --shadow-glow-accent: 0 0 10px rgba(0, 255, 204, 0.5);
+    --shadow-glow-accent-strong: 0 0 18px rgba(0, 255, 204, 0.7);
+    --shadow-glow-action: 0 0 15px rgba(0, 162, 255, 0.4);
+    --shadow-glow-warning: 0 0 14px rgba(255, 170, 0, 0.5);
+    --shadow-glow-danger: 0 0 30px rgba(255, 68, 68, 0.6);
+
+    --blur-glass: 12px;
+
+    --motion-base: 200ms;
+    --motion-slow: 400ms;
+    --motion-ease: ease;
+    --motion-pulse: 1200ms;
+    --motion-alert-hold: 4500ms;
+
+    --z-scene: 1;
+    --z-selection: 5;
+    --z-hud: 10;
+    --z-alert: 15;
+    --z-dock: 25;
+    --z-dev: 50;
+    --z-game-over: 100;
+    --z-menu: 110;
+    --z-modal: 120;
+
+    --hud-inset: 10px;
+    --menu-width: 380px;
+    --modal-width: 480px;
+    --target-min: 24px;
+    --target-touch: 44px;
+    --control-sm: 32px;
+    --control-md: 36px;
+    --control-ability: 40px;
+    --ability-min-w: 112px;
+    --ability-min-w-compact: 96px;
+    --instructions-max-w: 560px;
+    --resource-w: 230px;
+    --dev-panel-w: 290px;
+    --minimap-size: 170px;
+    --minimap-size-compact: 133px;
+    --stats-min-w: 320px;
+    --menu-config-w: 440px;
+    --tutorial-width: 640px;
+    --error-width: 640px;
+    --pre-max-h: 200px;
+    --dev-panel-min-h: 200px;
+    --hud-top-reserve: 220px;
+    --hud-reserve: 460px;
+    --tracking: 0.5px;
+    --tracking-wide: 0.6px;
+    --tracking-title: 1px;
+    --lift: -2px;
+}
+
+/* Брейкпоинты нельзя хранить в custom properties — используйте эти media-запросы:
+   compact: @media (max-width: 768px), (pointer: coarse)
+   coarse:  @media (pointer: coarse) */
+
+/* Базовые правила системы (не компоненты) */
+button, select, input { font: inherit; }   /* было: кнопки и селекты рисовались Arial */
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 1ms !important;
+    }
+}

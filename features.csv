@@ -1,57 +1,62 @@
 feature,area,priority,original,clone,notes
-Главное меню (Играть / Настройки / Обучение / Рекорды / Лицензии / GitHub),shell,must,yes,yes,index.html:22-55; полнофункциональное меню с выбором карты и сложности
+Главное меню (Играть / Настройки / Обучение / Рекорды / Лицензии / GitHub),shell,must,yes,yes,index.html S01: выбор карты и сложности с подписями <label for>; фокус на «Играть» при возврате в меню; сборка 2026-10-31
 Старт партии одной кнопкой,shell,must,yes,yes,ui.js; мгновенный запуск выбранной карты и сложности
 Экран победы/поражения со статистикой,shell,must,yes,yes,ui.js; корректный подсчёт отражённых волн; статистика побед и рекордов
 Рестарт партии,shell,must,partial,yes,ui.js: restartMatch() перезапускает партию в 1 клик без перезагрузки страницы
-Пауза,shell,must,no,yes,ui.js / input.js: togglePause(), Esc / P / кнопка в HUD; onVisibilityHidden() авто-пауза по visibilitychange и blur
-Настройки (громкость / графика / язык / управление),shell,must,partial,yes,модальное окно #settings-modal: громкость Master/SFX/Music, тени, язык RU/EN, сложность, карта
-Сохранение настроек и рекордов,shell,should,no,yes,js/storage.js: localStorage для настроек и профиля игрока (матчи, винрейт, рекорды волн и фрагов)
+Пауза,shell,must,no,yes,"ui.js: togglePause / setGamePaused — окно паузы через showModal (фокус на «Продолжить», Esc/P снимают паузу); авто-пауза по visibilitychange и blur"
+Настройки (громкость / графика / язык / управление),shell,must,partial,yes,"#settings-modal: громкость Master/SFX/Music с <label> и aria-valuetext, тени, язык RU/EN; открывается из меню и из паузы, Esc закрывает с сохранением"
+Сохранение настроек и рекордов,shell,should,no,yes,"js/storage.js: localStorage для настроек и профиля игрока (матчи, винрейт, рекорды волн и фрагов)"
 Экран загрузки,shell,could,no,no,сцена инициализируется мгновенно (Zero-Assets процедурные текстуры без сети)
-Обучение / онбординг,shell,must,partial,yes,#tutorial-modal: 4 интерактивных шага с визуальными подсказками, автопоказ для новичков
+Обучение / онбординг,shell,must,partial,yes,"#tutorial-modal: 3 шага (ol), автопоказ в первом матче; пока окно открыто, симуляция стоит (isSimulationPaused)"
 Лицензии сторонних библиотек (three.js MIT),legal,must,no,yes,заголовок MIT в libs/three.min.js + THIRD_PARTY_LICENSES.md + модальное окно #licenses-modal
 Решение по лицензии собственного кода перед продажей,legal,must,no,partial,THIRD_PARTY_LICENSES.md: разделение Three.js MIT и авторской Zero-Asset архитектуры; репозиторий под MIT
-Локализация (минимум EN),shell,must,no,yes,js/i18n.js: полная двуязычность RU/EN для интерфейса, способностей, тактических оповещений и рекордов
+Локализация (минимум EN),shell,must,no,yes,"js/i18n.js: 206 ключей RU = EN; аудит 2026-10-31 в EN-режиме — 0 строк кириллицы на 23 состояниях экранов (было 23 строки: панель управления, ресурсы, способности, профайлер, экран ошибки)"
 3D-сцена: изометрическая камера + зум + панорама WASD/MMB/тач,camera,must,yes,yes,scene.js; input.js; точное управление 1:1
-Миникарта с переходом по клику,camera,must,yes,yes,minimap.js: оффскрин-кэширование препятствий, индикаторы кристаллов и баз
+Миникарта с переходом по клику,camera,must,yes,yes,"minimap.js: оффскрин-кэширование препятствий, индикаторы кристаллов и баз"
 Выделение кликом и рамкой,control,must,yes,yes,input.js: быстрый выбор одиночных юнитов и групповая рамка
-Приказ движения / фокус-атаки ПКМ,control,must,yes,yes,input.js: движение по земле, фокус-атака врагов и баз
+Приказ движения / фокус-атаки ПКМ,control,must,yes,yes,"input.js: движение по земле, фокус-атака врагов и баз"
 Тач-режимы Карта/Рамка + pinch-zoom,control,must,yes,yes,input.js: адаптивное управление для мобильных браузеров
 Формации Шеренга / Клин / Кольцо,control,should,yes,yes,formations.js; ориентация по вектору движения группы
 Flow field поиск пути (BFS),engine,must,yes,yes,flowfield.js: двойное поле потоков (союзники и враги); тесты пройдены
-Spatial hash: поиск целей и расталкивание,engine,must,yes,yes,spatialhash.js: O(1) поиск врагов, O(N) разделение без аллокаций
+Spatial hash: поиск целей и расталкивание,engine,must,yes,yes,"spatialhash.js: O(1) поиск врагов, O(N) разделение без аллокаций"
 Коллизии со стенами / штабами / кристаллами,engine,must,yes,yes,main.js: отталкивание от препятствий и границ арены
 Фиксированный шаг 30 Гц,engine,must,yes,yes,main.js: детерминированный шаг 1/30 с с защитой от накопления лагов (спираль смерти)
 Детерминированный PRNG,engine,should,partial,yes,prng.js: Mulberry32 с сидом для симуляции
 Симуляция в Web Worker,engine,could,stub,stub,sim_worker.js: прототип SoA; симуляция честно выполняется в главном потоке (30 Гц)
-GPU-инстансинг юнитов и HP-баров,render,must,yes,yes,instancing.js: THREE.InstancedMesh для дронов, снарядов и HP-баров в шейдере
-Объединение статичной геометрии (стены / рельсы / штабы),render,must,yes,yes,scene.js / terrain.js / models.js / resources.js: mergeBufferGeometries объединяет рельсы, пилоны, маяки, каркасы HQ и кристаллы-спутники; InstancedMesh стен
+GPU-инстансинг юнитов и HP-баров,render,must,yes,yes,"instancing.js: THREE.InstancedMesh для дронов, снарядов и HP-баров в шейдере"
+Объединение статичной геометрии (стены / рельсы / штабы),render,must,yes,yes,"scene.js / terrain.js / models.js / resources.js: mergeBufferGeometries объединяет рельсы, пилоны, маяки, каркасы HQ и кристаллы-спутники; InstancedMesh стен"
 Настройка качества (тени / pixel ratio),render,should,no,yes,scene.js: переключение теней в настройках; переход на Three.js r186 PCFShadowMap
 FSM юнитов IDLE/MOVE/CHASE/ATTACK,gameplay,must,yes,yes,main.js: стейт-машина боевого поведения
 Обход углов при погоне (LOS + bypass),gameplay,should,yes,yes,grid.js: проверка видимости Брезенхэмом и огибание углов
-3 класса союзников с ценой,gameplay,must,yes,yes,config.js / economy.js: Дрон (70⚡), Разведчик (40⚡), Танк (150⚡)
+3 класса союзников с ценой,gameplay,must,yes,yes,"config.js / economy.js: Дрон (70⚡), Разведчик (40⚡), Танк (150⚡)"
 Способности: щит / форсаж / осада со сплэшем,gameplay,must,yes,yes,units.js / main.js: активные способности на Q/E/R с кулдаунами
 Энергия: пассивный доход + точки + награды,gameplay,must,yes,yes,economy.js: баланс с учётом захвата точек и выбранной сложности
-Захват 3 кристаллов,gameplay,must,yes,yes,resources.js: энергостанции «Альфа», «Центр», «Бета» с динамическим прогрессом
+Захват 3 кристаллов,gameplay,must,yes,yes,"resources.js: энергостанции «Альфа», «Центр», «Бета» с динамическим прогрессом"
 Волны каждые 60 с с эволюцией состава,gameplay,must,yes,yes,ai.js: Штурмовики -> Разведчики -> Танки -> Босс
-Босс Левиафан со щитом и залпом,gameplay,should,yes,yes,config.js / ai.js: 600 HP + 400 щит, тройной залп, награда +100⚡
+Босс Левиафан со щитом и залпом,gameplay,should,yes,yes,"config.js / ai.js: 600 HP + 400 щит, тройной залп, награда +100⚡"
 Диверсии ИИ при 3/3 точках,gameplay,should,yes,yes,ai.js: отправка штурмовой группы противника на отбитие точки
-Штабы и условия победы/поражения,gameplay,must,yes,yes,ui.js: уничтожение вражеского штаба = победа, потеря своего = поражение
-Выбор сложности,content,must,no,yes,maps.js: Рекрут (Easy), Командир (Normal), Ветеран (Hard) со скейлингом HP, урона и волн
-Несколько карт (карта как данные),content,must,no,yes,js/maps.js: MapDef v2 (чистые данные) — 4 карты со своими базами и спавном, validateMapDef с инвариантами и BFS
+Штабы и условия победы/поражения,gameplay,must,yes,yes,"ui.js: уничтожение вражеского штаба = победа, потеря своего = поражение"
+Выбор сложности,content,must,no,yes,"maps.js: Рекрут (Easy), Командир (Normal), Ветеран (Hard) со скейлингом HP, урона и волн"
+Несколько карт (карта как данные),content,must,no,partial,"js/maps.js: MapDef v2 + validateMapDef; 4 карты различаются стенами, но playerHQ/enemyHQ/playerSpawn одинаковы на всех (maps.js:66-68, 106-108, 146-148, 186-188)"
 Режим skirmish против ИИ со своей экономикой,content,should,no,no,будущее расширение
 Кампания / миссии,content,could,no,no,будущее расширение
-Рекорды / таблица результатов,content,should,no,yes,#records-modal: Storage v2 с валидацией, миграцией v1->v2 и фильтрами рекордов по каждой карте и сложности
-Процедурные текстуры (Canvas PBR),art,must,yes,yes,terrain.js: генерация Albedo, Bump и Roughness на Canvas без внешних файлов
+Рекорды / таблица результатов,content,should,no,yes,"#records-modal: Storage v2 с валидацией, миграцией v1->v2 и фильтрами рекордов по каждой карте и сложности"
+Процедурные текстуры (Canvas PBR),art,must,yes,yes,"terrain.js: генерация Albedo, Bump и Roughness на Canvas без внешних файлов"
 Процедурные модели юнитов / HQ / кристаллов,art,must,yes,yes,models.js: высокодетализированные процедурные sci-fi модели
-Частицы / вспышки / кратеры,art,should,yes,yes,effects.js / particles.js: пулы вспышек, искр и 60 декалей кратеров
+Частицы / вспышки / кратеры,art,should,yes,yes,"effects.js / particles.js: пулы вспышек, искр и 60 декалей кратеров"
 Процедурный звук и эмбиент,audio,must,yes,yes,audio.js: Web Audio API; исправлена ошибка InvalidStateError в playOrder
-Раздельная громкость музыки / эффектов,audio,should,no,yes,audio.js: раздельные GainNode для Master, SFX и Music с регуляторами в настройках
-Мобильная вёрстка HUD без перекрытий,ux,must,partial,yes,style.css: автосворачивание инструкций на экранах <=768px, адаптивные панели
-HUD-профайлер F3 и бенчмарк,dev,could,yes,yes,benchmark.js / main.js: бенчмарк изолирован от игровой статистики
-Юнит-тесты Vitest + CI,dev,must,yes,yes,122 теста проходят успешно (grid, flowfield, formations, spatialhash, maps, storage)
-Headless-баланс на реальном коде,dev,should,partial,yes,scripts/headless_wave_test.js: динамическая загрузка констант из config.js
-PWA / офлайн-установка,distribution,should,no,yes,manifest.json + sw.js: полная работа офлайн, прекэш всех 27 скриптов (включая particles.js и sim_worker.js)
+Раздельная громкость музыки / эффектов,audio,should,no,yes,"audio.js: раздельные GainNode для Master, SFX и Music с регуляторами в настройках"
+Мобильная вёрстка HUD без перекрытий,ux,must,partial,yes,"style.css: HUD собран в ряды #hud-top / #hud-bottom; инструкции свёрнуты на compact и раскрываются поверх поля; аудит 390×844 и 1440×900: 0 перекрытий, 0 целей < 44px на тач"
+HUD-профайлер F3 и бенчмарк,dev,could,yes,yes,"S03: подписи через i18n, цвета классами; размер кода и Three.js — из Resource Timing (под file:// «н/д»); «симуляция: главный поток» (воркер не вызывается); бенчмарк изолирован от статистики"
+Юнит-тесты Vitest + CI,dev,must,yes,yes,"136 тестов в 8 файлах; новый tests/ui-contracts.test.js: стили только на токенах, прекэш SW, версия кэша = package.json, ключи i18n"
+Headless-баланс на реальном коде,dev,should,partial,partial,"scripts/headless_wave_test.js берёт DRONE_TYPES/ENEMY_TYPES из config.js, но состав волн — своя копия (строка 23); результат 12/15 волн и на 36e225f, и после сборки"
+PWA / офлайн-установка,distribution,should,no,yes,"manifest.json + sw.js v0.3.0: прекэш всех скриптов и стилей (вкл. design/tokens.css), сверка с index.html в тестах"
 Сборка и минификация,distribution,should,no,no,опциональный билд-шаг для продакшна
 Аналитика без персональных данных,distribution,could,no,no,опционально
 Сетевой мультиплеер,multiplayer,could,no,no,план XL
 Ассеты / механики чужих RTS,ip,skip,no,no,100% авторский и процедурный код
+Дизайн-система на токенах,ux,must,no,yes,design/build_tokens.py → tokens.css; style.css без сырых цветов и px (тест); стенд design/index.html
+Контраст текста WCAG AA,ux,must,partial,yes,"33 пары ≥ AA с учётом стекла над сценой; исправлены белый на #0077ff (4.13), на #00a2ff (2.76), #64748b (3.86)"
+"Клавиатура: меню, окна, пауза, итог боя",ux,must,no,yes,"видимый фокус, ловушка Tab и Esc в окнах, возврат фокуса; e2e-проверка 17/17 шагов; бой требует мыши или касания"
+Экранные дикторы: роли и подписи,ux,should,no,yes,"role=dialog/alertdialog, live-регион оповещений, aria-pressed/aria-checked, подписи полей; axe WCAG 2.2 AA: 0 нарушений, кроме meta-viewport"
+Экран системной ошибки (S06),dev,should,partial,yes,"config.js: текст ошибки вставляется как текст (раньше innerHTML), фокус на «Закрыть», Esc, i18n"

@@ -2,10 +2,11 @@
 // sw.js — Service Worker для оффлайн-работы и PWA кэширования
 // =============================================================================
 
-const CACHE_NAME = 'minimal-web-rts-v0.2.0';
+const CACHE_NAME = 'minimal-web-rts-v0.3.0'; // = версия package.json (проверяет tests/ui-contracts.test.js)
 const STATIC_ASSETS = [
     './',
     './index.html',
+    './design/tokens.css',
     './style.css',
     './manifest.json',
     './libs/three.min.js',

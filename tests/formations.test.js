@@ -137,10 +137,15 @@ describe('getFormationOffsets: общие свойства', () => {
 });
 
 describe('setFormation / updateFormationUI', () => {
+    // Минимальная заглушка кнопки: атрибуты + tabIndex (цвет задаёт CSS по aria-checked)
+    const makeBtn = () => {
+        const attrs = {};
+        return { style: {}, tabIndex: 0, setAttribute: (k, v) => { attrs[k] = String(v); }, getAttribute: k => attrs[k] ?? null };
+    };
     const makeButtons = () => ({
-        'formation-line-btn': { style: {} },
-        'formation-wedge-btn': { style: {} },
-        'formation-circle-btn': { style: {} }
+        'formation-line-btn': makeBtn(),
+        'formation-wedge-btn': makeBtn(),
+        'formation-circle-btn': makeBtn()
     });
 
     it('по умолчанию выбрана шеренга', () => {
@@ -161,11 +166,15 @@ describe('setFormation / updateFormationUI', () => {
 
         game.setFormation('wedge');
 
-        expect(buttons['formation-wedge-btn'].style.background).toBe('#00ffcc');
-        expect(buttons['formation-wedge-btn'].style.color).toBe('#000000');
-        expect(buttons['formation-line-btn'].style.background).toBe('#0077ff');
-        expect(buttons['formation-line-btn'].style.boxShadow).toBe('none');
-        expect(buttons['formation-circle-btn'].style.background).toBe('#0077ff');
+        expect(buttons['formation-wedge-btn'].getAttribute('aria-checked')).toBe('true');
+        expect(buttons['formation-line-btn'].getAttribute('aria-checked')).toBe('false');
+        expect(buttons['formation-circle-btn'].getAttribute('aria-checked')).toBe('false');
+        // радиогруппа: Tab попадает только на выбранный пункт
+        expect(buttons['formation-wedge-btn'].tabIndex).toBe(0);
+        expect(buttons['formation-line-btn'].tabIndex).toBe(-1);
+        expect(buttons['formation-circle-btn'].tabIndex).toBe(-1);
+        // inline-цветов больше нет: оформление только из style.css
+        expect(buttons['formation-wedge-btn'].style).toEqual({});
     });
 
     it('не падает, если кнопок нет в разметке', () => {

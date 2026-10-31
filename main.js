@@ -482,10 +482,11 @@ function animate(timestamp) {
         simAccumulator += rawDelta;
         let maxSimulationTicks = 4;
         while (simAccumulator >= FIXED_TIMESTEP && maxSimulationTicks > 0) {
-            if (gameStarted && !gameOver && (typeof isGamePaused === 'undefined' || !isGamePaused)) {
+            const simPaused = (typeof isSimulationPaused === 'function') ? isSimulationPaused() : (typeof isGamePaused !== 'undefined' && isGamePaused);
+            if (gameStarted && !gameOver && !simPaused) {
                 stepSimulation(FIXED_TIMESTEP, simElapsedTime);
             }
-            if (typeof isGamePaused === 'undefined' || !isGamePaused) {
+            if (!simPaused) {
                 simElapsedTime += FIXED_TIMESTEP;
                 simTickCount++;
             }
@@ -569,4 +570,4 @@ function animate(timestamp) {
 }
 
 // Старт игрового цикла
-animate();
+animate();

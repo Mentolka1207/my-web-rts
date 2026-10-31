@@ -276,24 +276,13 @@ function toggleCollisionMode() {
     const isCurrentSpatial = (spatialGrid.collisionMode === 'spatial');
     spatialGrid.collisionMode = isCurrentSpatial ? 'naive' : 'spatial';
 
-    const btn = document.getElementById('dbg-collision-btn');
-    if (btn) {
-        if (spatialGrid.collisionMode === 'spatial') {
-            btn.textContent = '⬡ Spatial Grid O(N)';
-            btn.className = 'dbg-toggle-btn spatial';
-            btn.title = 'Оптимальный алгоритм O(N) на базе хеш-сетки';
-        } else {
-            btn.textContent = '⚠️ Naive Brute O(N²)';
-            btn.className = 'dbg-toggle-btn naive';
-            btn.title = 'Наивный квадратичный перебор всех пар (резкое падение FPS)';
-        }
-    }
+    if (typeof refreshProfilerToggles === 'function') refreshProfilerToggles();
 
     if (typeof showTacticalAlert === 'function') {
         if (spatialGrid.collisionMode === 'naive') {
-            showTacticalAlert('⚠️ РЕЖИМ КОЛЛИЗИЙ: O(N²) Наивный перебор! Ожидается сильная просадка FPS.', true);
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_COLL_NAIVE') : 'O(N²)', true);
         } else {
-            showTacticalAlert('⬡ РЕЖИМ КОЛЛИЗИЙ: O(N) Spatial Hashing активирован.', false);
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_COLL_SPATIAL') : 'O(N)', false);
         }
     }
 }
@@ -303,25 +292,11 @@ function toggleInstancingMode() {
     if (typeof instancedRenderer === 'undefined') return;
 
     instancedRenderer.enabled = !instancedRenderer.enabled;
-    const btn = document.getElementById('dbg-instancing-btn');
-
-    if (btn) {
-        if (instancedRenderer.enabled) {
-            btn.textContent = '⚡ GPU Instancing: ВКЛ (~16 calls)';
-            btn.className = 'dbg-toggle-btn instanced';
-            btn.title = 'Отрисовка всех юнитов и полосок HP через единые InstancedMesh';
-        } else {
-            btn.textContent = '🐌 Individual Meshes: ВЫКЛ (12k calls)';
-            btn.className = 'dbg-toggle-btn individual';
-            btn.title = 'Индивидуальные меши для каждого юнита (просадка по Draw Calls)';
-        }
-    }
+    if (typeof refreshProfilerToggles === 'function') refreshProfilerToggles();
 
     if (typeof showTacticalAlert === 'function') {
         showTacticalAlert(
-            instancedRenderer.enabled
-                ? '⚡ GPU Instancing включён! Draw calls сокращены до минимума (~16).'
-                : '🐌 Индивидуальные меши включены (резкий рост Draw Calls и падение FPS).',
+            typeof t === 'function' ? t(instancedRenderer.enabled ? 'ALERT_INST_ON' : 'ALERT_INST_OFF') : '',
             false
         );
     }
@@ -331,15 +306,12 @@ function updateBenchmarkUI() {
     const statusEl = document.getElementById('dbg-bench-status');
     const stopBtn = document.getElementById('dbg-bench-stop-btn');
     if (statusEl) {
-        if (benchmarkActive) {
-            statusEl.textContent = `АКТИВЕН (${benchmarkTargetCount} юн.)`;
-            statusEl.style.color = '#ff9900';
-        } else {
-            statusEl.textContent = 'ВЫКЛ';
-            statusEl.style.color = '#94a3b8';
-        }
+        statusEl.textContent = typeof t === 'function'
+            ? (benchmarkActive ? t('DBG_BENCH_ON', benchmarkTargetCount) : t('DBG_BENCH_OFF'))
+            : (benchmarkActive ? String(benchmarkTargetCount) : '—');
+        statusEl.classList.toggle('is-warn', !!benchmarkActive);
     }
     if (stopBtn) {
-        stopBtn.style.display = benchmarkActive ? 'inline-block' : 'none';
+        stopBtn.style.display = benchmarkActive ? '' : 'none';
     }
 }

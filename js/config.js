@@ -5,29 +5,56 @@
 // --- 0. ВСТРОЕННЫЙ ДЕБАГГЕР ОШИБОК ---
 function showSystemError(err, sourceInfo) {
     if (document.getElementById('sys-error-overlay')) return;
+    const tr = (key, fallback, ...args) => (typeof t === 'function' ? t(key, ...args) : fallback);
+
+    // Оформление — в style.css (#sys-error-overlay). Текст ошибки и стек вставляются как текст,
+    // а не как HTML: в сообщении могут быть угловые скобки и разметка.
     const errEl = document.createElement('div');
     errEl.id = 'sys-error-overlay';
-    errEl.style.position = 'fixed';
-    errEl.style.top = '50%';
-    errEl.style.left = '50%';
-    errEl.style.transform = 'translate(-50%, -50%)';
-    errEl.style.background = 'rgba(220, 38, 38, 0.95)';
-    errEl.style.color = 'white';
-    errEl.style.padding = '24px';
-    errEl.style.borderRadius = '12px';
-    errEl.style.zIndex = '99999';
-    errEl.style.fontFamily = 'monospace';
-    errEl.style.fontSize = '14px';
-    errEl.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
-    errEl.style.maxWidth = '80vw';
-    errEl.style.whiteSpace = 'pre-wrap';
+    errEl.setAttribute('role', 'alertdialog');
+    errEl.setAttribute('aria-modal', 'true');
+    errEl.setAttribute('aria-labelledby', 'sys-error-title');
+    errEl.setAttribute('aria-describedby', 'sys-error-message');
 
-    const errMessage = (err && err.message) || String(err) || 'Неизвестная ошибка';
-    const stack = (err && err.stack) ? `<br><br><pre style="font-size:11px;overflow:auto;max-height:200px;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;">${err.stack}</pre>` : '';
-    const src = sourceInfo ? `<br><br><span style="color: #fecaca;">Источник: ${sourceInfo}</span>` : '';
+    const title = document.createElement('h2');
+    title.id = 'sys-error-title';
+    title.textContent = tr('ERR_TITLE', '🚨 Сбой в коде игры');
 
-    errEl.innerHTML = `<strong>🚨 Системный сбой JS-кода:</strong><br><br>${errMessage}${stack}${src}<br><br><button onclick="this.parentElement.remove()" style="padding:6px 16px;background:#fff;color:#c00;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Закрыть</button>`;
+    const message = document.createElement('p');
+    message.id = 'sys-error-message';
+    message.textContent = (err && err.message) || String(err) || tr('ERR_UNKNOWN', 'Неизвестная ошибка');
+    errEl.append(title, message);
+
+    if (err && err.stack) {
+        const pre = document.createElement('pre');
+        pre.tabIndex = 0; // прокручиваемая область должна быть доступна с клавиатуры
+        pre.textContent = err.stack;
+        errEl.appendChild(pre);
+    }
+    if (sourceInfo) {
+        const src = document.createElement('p');
+        src.className = 'sys-error-source';
+        src.textContent = tr('ERR_SOURCE', 'Где: ' + sourceInfo, sourceInfo);
+        errEl.appendChild(src);
+    }
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'btn-danger';
+    closeBtn.textContent = tr('BTN_CLOSE', 'Закрыть');
+    const previousFocus = document.activeElement;
+    const close = () => {
+        errEl.remove();
+        if (previousFocus && previousFocus.focus) previousFocus.focus({ preventScroll: true });
+    };
+    closeBtn.addEventListener('click', close);
+    errEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    });
+    errEl.appendChild(closeBtn);
+
     document.body.appendChild(errEl);
+    closeBtn.focus({ preventScroll: true });
 }
 
 window.addEventListener('error', function(e) {

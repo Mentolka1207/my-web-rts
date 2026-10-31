@@ -187,11 +187,11 @@ class SoundEngine {
     updateSoundUI() {
         const btn = document.getElementById('sound-toggle-btn');
         if (btn) {
-            const isRu = (typeof currentLanguage === 'undefined') || currentLanguage === 'ru';
-            btn.textContent = this.isMuted ? (isRu ? '🔇 Звук: ВЫКЛ' : '🔇 Audio: OFF') : (isRu ? '🔊 Звук: ВКЛ' : '🔊 Audio: ON');
-            btn.style.borderColor = this.isMuted ? '#ff5555' : '#00ffcc';
-            btn.style.color = this.isMuted ? '#ff8888' : '#00ffcc';
-            btn.style.boxShadow = this.isMuted ? 'none' : '0 0 10px rgba(0, 255, 204, 0.4)';
+            const label = typeof t === 'function' ? t(this.isMuted ? 'SOUND_LABEL_OFF' : 'SOUND_LABEL_ON') : (this.isMuted ? 'Звук: выкл' : 'Звук: вкл');
+            if (typeof setButtonLabel === 'function') setButtonLabel(btn, this.isMuted ? '🔇' : '🔊', label);
+            else btn.textContent = label;
+            btn.setAttribute('aria-pressed', this.isMuted ? 'false' : 'true');
+            btn.classList.toggle('is-off', this.isMuted);
         }
     }
 
