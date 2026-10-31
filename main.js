@@ -570,4 +570,4 @@ function animate(timestamp) {
 }
 
 // Старт игрового цикла
-animate();
+animate();
