@@ -63,15 +63,15 @@ let benchmarkTargetCount = 0;
 // Очистка всех текущих юнитов с Three.js сцены (Zero-Memory Leak)
 function clearAllUnitsForBenchmark() {
     for (let i = 0; i < units.length; i++) {
-        if (units[i].mesh) {
-            scene.remove(units[i].mesh);
+        if (units[i].mesh && units[i].mesh.parent) {
+            units[i].mesh.parent.remove(units[i].mesh);
         }
     }
     units.length = 0;
 
     for (let i = 0; i < enemies.length; i++) {
-        if (enemies[i].mesh) {
-            scene.remove(enemies[i].mesh);
+        if (enemies[i].mesh && enemies[i].mesh.parent) {
+            enemies[i].mesh.parent.remove(enemies[i].mesh);
         }
     }
     enemies.length = 0;
@@ -90,150 +90,185 @@ function clearAllUnitsForBenchmark() {
     }
 }
 
-// Запуск стресс-теста на N юнитов
-function runBenchmark(count) {
+// Запуск стресс-теста на N юнитов (или allyCount vs enemyCount: 2000×2000, 5000×5000)
+function runBenchmark(countOrAllies, maybeEnemies) {
     if (!gameStarted) {
         if (typeof startGame === 'function') startGame();
     }
 
     benchmarkActive = true;
-    benchmarkTargetCount = count;
+    let allyCount, enemyCount;
+    if (typeof maybeEnemies === 'number') {
+        allyCount = countOrAllies;
+        enemyCount = maybeEnemies;
+    } else {
+        const total = countOrAllies || 500;
+        const half = Math.floor(total / 2);
+        allyCount = half;
+        enemyCount = total - half;
+    }
+    const totalCount = allyCount + enemyCount;
+    benchmarkTargetCount = totalCount;
     clearAllUnitsForBenchmark();
 
     // Временно приостанавливаем волны, чтобы они не мешали чистоте эксперимента
     waveTimer = 99999;
 
-    const halfCount = Math.floor(count / 2);
-    const allyCount = halfCount;
-    const enemyCount = count - halfCount;
+    // Динамический сбор проходимых клеток квадрантов для спавна
+    // Союзники: Северо-Запад карты
+    const allyMaxC = Math.max(7, Math.min(GRID_SIZE - 4, Math.floor(GRID_SIZE * 0.45)));
+    const allyMaxR = Math.max(7, Math.min(GRID_SIZE - 4, Math.floor(GRID_SIZE * 0.45)));
+    const allyCells = [];
+    for (let r = 2; r <= allyMaxR; r++) {
+        for (let c = 2; c <= allyMaxC; c++) {
+            if (grid[r] && grid[r][c] === 0) {
+                allyCells.push({ col: c, row: r });
+            }
+        }
+    }
+    if (allyCells.length === 0) allyCells.push({ col: HQ_COL || 4, row: HQ_ROW || 4 });
 
-    // Сетка размещения союзников (Северо-Запад карты, col: 2..7, row: 2..7)
-    // Размещение в несколько эшелонов с плотным заполнением для штурма узких проходов
-    const allyCols = [2, 3, 4, 5, 6, 7];
-    const allyRows = [2, 3, 4, 5, 6, 7];
-    let spawnedAllies = 0;
+    // Враги: Юго-Восток карты
+    const enemyMinC = Math.max(2, Math.floor(GRID_SIZE * 0.55));
+    const enemyMinR = Math.max(2, Math.floor(GRID_SIZE * 0.55));
+    const enemyCells = [];
+    for (let r = enemyMinR; r < GRID_SIZE - 2; r++) {
+        for (let c = enemyMinC; c < GRID_SIZE - 2; c++) {
+            if (grid[r] && grid[r][c] === 0) {
+                enemyCells.push({ col: c, row: r });
+            }
+        }
+    }
+    if (enemyCells.length === 0) enemyCells.push({ col: ENEMY_HQ_COL || (GRID_SIZE - 5), row: ENEMY_HQ_ROW || (GRID_SIZE - 5) });
 
     const unitTypes = ['standard', 'standard', 'scout', 'standard', 'tank'];
+    const enemyTargetPos = gridToWorld(ENEMY_HQ_COL, ENEMY_HQ_ROW);
+    const allyTargetPos = gridToWorld(HQ_COL, HQ_ROW);
 
+    let spawnedAllies = 0;
     while (spawnedAllies < allyCount) {
-        for (let rIdx = 0; rIdx < allyRows.length && spawnedAllies < allyCount; rIdx++) {
-            for (let cIdx = 0; cIdx < allyCols.length && spawnedAllies < allyCount; cIdx++) {
-                const c = allyCols[cIdx];
-                const r = allyRows[rIdx];
-                if (grid[r][c] === 1) continue;
+        const cell = allyCells[spawnedAllies % allyCells.length];
+        const basePos = gridToWorld(cell.col, cell.row);
+        const subSlot = Math.floor(spawnedAllies / allyCells.length);
+        const angle = (spawnedAllies * 2.39996) % (Math.PI * 2);
+        const radius = Math.min(0.42, 0.08 * Math.sqrt(subSlot + 1));
+        const offsetX = Math.cos(angle) * radius;
+        const offsetZ = Math.sin(angle) * radius;
 
-                const basePos = gridToWorld(c, r);
-                // Микро-смещение внутри клетки при спавне сотен юнитов
-                const subSlot = Math.floor(spawnedAllies / (allyCols.length * allyRows.length));
-                const offsetX = ((subSlot % 4) - 1.5) * 0.35;
-                const offsetZ = (Math.floor(subSlot / 4) - 1.5) * 0.35;
-
-                const uType = unitTypes[spawnedAllies % unitTypes.length];
-                const stats = DRONE_TYPES[uType];
-                const mesh = createDroneUnit(true, uType);
-                mesh.scale.setScalar(stats.scale);
-                mesh.position.set(basePos.x + offsetX, 0.75, basePos.z + offsetZ);
-                const hpBar = attachHealthBar(mesh, true, 0.7 * stats.scale);
-
-                let simId = -1;
-                if (typeof simWorld !== 'undefined') {
-                    const typeNum = (uType === 'standard') ? 0 : (uType === 'scout' ? 1 : (uType === 'tank' ? 2 : 3));
-                    simId = simWorld.spawn(0, typeNum, basePos.x + offsetX, basePos.z + offsetZ, stats.hp, stats.hp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
-                }
-
-                units.push({
-                    mesh: mesh,
-                    simId: simId,
-                    type: uType,
-                    selected: false,
-                    state: States.MOVE,
-                    personalTarget: new THREE.Vector3(12, 0.75, 12), // Направление на вражескую половину через центр
-                    targetEnemy: null,
-                    hp: stats.hp,
-                    maxHp: stats.hp,
-                    speed: stats.speed,
-                    radius: stats.radius,
-                    visionRange: stats.visionRange,
-                    attackRange: stats.attackRange,
-                    attackCooldown: stats.attackCooldown,
-                    damage: stats.damage,
-                    lastAttackTime: 0,
-                    healthBar: hpBar,
-                    velocity: new THREE.Vector3(),
-                    abilityActive: false,
-                    abilityTimer: 0,
-                    lastAbilityTime: -99,
-                    isSieged: false,
-                    lastSiegeSwitch: -99,
-                    shield: 0,
-                    maxShield: 50,
-                    shieldTimer: 0
-                });
-
-                spawnedAllies++;
-            }
+        const uType = unitTypes[spawnedAllies % unitTypes.length];
+        const stats = DRONE_TYPES[uType];
+        const isMassSwarm = totalCount >= 1000 && typeof instancedRenderer !== 'undefined' && instancedRenderer.enabled;
+        let mesh, hpBar;
+        if (isMassSwarm) {
+            mesh = new THREE.Object3D();
+            mesh.scale.setScalar(stats.scale);
+            mesh.position.set(basePos.x + offsetX, 0.75, basePos.z + offsetZ);
+            mesh.userData = { velocity: new THREE.Vector3() };
+            hpBar = null;
+        } else {
+            mesh = createDroneUnit(true, uType);
+            mesh.scale.setScalar(stats.scale);
+            mesh.position.set(basePos.x + offsetX, 0.75, basePos.z + offsetZ);
+            hpBar = attachHealthBar(mesh, true, 0.7 * stats.scale);
         }
+
+        let simId = -1;
+        if (typeof simWorld !== 'undefined') {
+            const typeNum = (uType === 'standard') ? 0 : (uType === 'scout' ? 1 : (uType === 'tank' ? 2 : 3));
+            simId = simWorld.spawn(0, typeNum, basePos.x + offsetX, basePos.z + offsetZ, stats.hp, stats.hp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
+        }
+
+        units.push({
+            mesh: mesh,
+            simId: simId,
+            type: uType,
+            selected: false,
+            state: States.MOVE,
+            personalTarget: new THREE.Vector3(enemyTargetPos.x, 0.75, enemyTargetPos.z),
+            targetEnemy: null,
+            hp: stats.hp,
+            maxHp: stats.hp,
+            speed: stats.speed,
+            radius: stats.radius,
+            visionRange: stats.visionRange,
+            attackRange: stats.attackRange,
+            attackCooldown: stats.attackCooldown,
+            damage: stats.damage,
+            lastAttackTime: 0,
+            healthBar: hpBar,
+            velocity: new THREE.Vector3(),
+            abilityActive: false,
+            abilityTimer: 0,
+            lastAbilityTime: -99,
+            isSieged: false,
+            lastSiegeSwitch: -99,
+            shield: 0,
+            maxShield: 50,
+            shieldTimer: 0
+        });
+
+        spawnedAllies++;
     }
 
-    // Сетка размещения врагов (Юго-Восток карты, col: 14..19, row: 14..19)
-    const enemyCols = [14, 15, 16, 17, 18, 19];
-    const enemyRows = [14, 15, 16, 17, 18, 19];
     let spawnedEnemies = 0;
     const enemyTypes = ['standard', 'standard', 'scout', 'tank'];
-
     while (spawnedEnemies < enemyCount) {
-        for (let rIdx = 0; rIdx < enemyRows.length && spawnedEnemies < enemyCount; rIdx++) {
-            for (let cIdx = 0; cIdx < enemyCols.length && spawnedEnemies < enemyCount; cIdx++) {
-                const c = enemyCols[cIdx];
-                const r = enemyRows[rIdx];
-                if (grid[r][c] === 1) continue;
+        const cell = enemyCells[spawnedEnemies % enemyCells.length];
+        const basePos = gridToWorld(cell.col, cell.row);
+        const subSlot = Math.floor(spawnedEnemies / enemyCells.length);
+        const angle = (spawnedEnemies * 2.39996) % (Math.PI * 2);
+        const radius = Math.min(0.42, 0.08 * Math.sqrt(subSlot + 1));
+        const offsetX = Math.cos(angle) * radius;
+        const offsetZ = Math.sin(angle) * radius;
 
-                const basePos = gridToWorld(c, r);
-                const subSlot = Math.floor(spawnedEnemies / (enemyCols.length * enemyRows.length));
-                const offsetX = ((subSlot % 4) - 1.5) * 0.35;
-                const offsetZ = (Math.floor(subSlot / 4) - 1.5) * 0.35;
-
-                const eType = enemyTypes[spawnedEnemies % enemyTypes.length];
-                const stats = ENEMY_TYPES[eType] || ENEMY_TYPES.standard;
-                const mesh = createDroneUnit(false, eType);
-                mesh.scale.setScalar(stats.scale);
-                mesh.position.set(basePos.x + offsetX, 0.75, basePos.z + offsetZ);
-                const hpBar = attachHealthBar(mesh, false, 0.7 * stats.scale);
-
-                let simId = -1;
-                if (typeof simWorld !== 'undefined') {
-                    const typeNum = (eType === 'standard') ? 0 : (eType === 'scout' ? 1 : (eType === 'tank' ? 2 : 3));
-                    simId = simWorld.spawn(1, typeNum, basePos.x + offsetX, basePos.z + offsetZ, stats.hp, stats.hp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
-                }
-
-                enemies.push({
-                    mesh: mesh,
-                    simId: simId,
-                    type: eType,
-                    state: States.MOVE,
-                    targetAlly: null,
-                    personalTarget: new THREE.Vector3(-12, 0.75, -12), // Направление на союзную базу через узкие коридоры
-                    hp: stats.hp,
-                    maxHp: stats.hp,
-                    speed: stats.speed,
-                    radius: stats.radius,
-                    visionRange: stats.visionRange,
-                    attackRange: stats.attackRange,
-                    attackCooldown: stats.attackCooldown,
-                    damage: stats.damage,
-                    lastAttackTime: 0,
-                    healthBar: hpBar,
-                    velocity: new THREE.Vector3(),
-                    isWaveUnit: true,
-                    sabotageNode: null
-                });
-
-                spawnedEnemies++;
-            }
+        const eType = enemyTypes[spawnedEnemies % enemyTypes.length];
+        const stats = ENEMY_TYPES[eType] || ENEMY_TYPES.standard;
+        const isMassSwarm = totalCount >= 1000 && typeof instancedRenderer !== 'undefined' && instancedRenderer.enabled;
+        let mesh, hpBar;
+        if (isMassSwarm) {
+            mesh = new THREE.Object3D();
+            mesh.scale.setScalar(stats.scale);
+            mesh.position.set(basePos.x + offsetX, 0.75, basePos.z + offsetZ);
+            mesh.userData = { velocity: new THREE.Vector3() };
+            hpBar = null;
+        } else {
+            mesh = createDroneUnit(false, eType);
+            mesh.scale.setScalar(stats.scale);
+            mesh.position.set(basePos.x + offsetX, 0.75, basePos.z + offsetZ);
+            hpBar = attachHealthBar(mesh, false, 0.7 * stats.scale);
         }
+
+        let simId = -1;
+        if (typeof simWorld !== 'undefined') {
+            const typeNum = (eType === 'standard') ? 0 : (eType === 'scout' ? 1 : (eType === 'tank' ? 2 : 3));
+            simId = simWorld.spawn(1, typeNum, basePos.x + offsetX, basePos.z + offsetZ, stats.hp, stats.hp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
+        }
+
+        enemies.push({
+            mesh: mesh,
+            simId: simId,
+            type: eType,
+            state: States.MOVE,
+            targetAlly: null,
+            personalTarget: new THREE.Vector3(allyTargetPos.x, 0.75, allyTargetPos.z),
+            hp: stats.hp,
+            maxHp: stats.hp,
+            speed: stats.speed,
+            radius: stats.radius,
+            visionRange: stats.visionRange,
+            attackRange: stats.attackRange,
+            attackCooldown: stats.attackCooldown,
+            damage: stats.damage,
+            lastAttackTime: 0,
+            healthBar: hpBar,
+            velocity: new THREE.Vector3(),
+            isWaveUnit: true,
+            sabotageNode: null
+        });
+
+        spawnedEnemies++;
     }
 
-    // Обновляем векторные поля: союзники идут на вражеский штаб, враги — на штаб игрока через узкие проходы
     if (typeof flowFieldGen !== 'undefined') {
         flowFieldGen.updateTarget(ENEMY_HQ_COL, ENEMY_HQ_ROW);
     }
@@ -242,7 +277,7 @@ function runBenchmark(count) {
     }
 
     if (typeof showTacticalAlert === 'function') {
-        showTacticalAlert(`🚀 СТРЕСС-ТЕСТ: Запущено ${count} юнитов в узкие проходы карты!`, false);
+        showTacticalAlert(`🚀 СТРЕСС-ТЕСТ: Запущено ${allyCount} vs ${enemyCount} (${totalCount} всего)!`, false);
     }
 
     updateBenchmarkUI();

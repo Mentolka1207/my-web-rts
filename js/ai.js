@@ -194,7 +194,7 @@ function updateEnemiesAI(currentTime, delta) {
                                 if (targets.length >= 3) break;
                             }
                         }
-                        if (targets.length < 3 && playerHQ.hp > 0 && pos.distanceTo(playerHQ.mesh.position) <= enemy.attackRange + playerHQ.radius) {
+                        if (targets.length < 3 && playerHQ && playerHQ.mesh && playerHQ.hp > 0 && pos.distanceTo(playerHQ.mesh.position) <= enemy.attackRange + playerHQ.radius) {
                             targets.push(playerHQ);
                         }
                         if (targets.length <= 1) {
@@ -257,7 +257,7 @@ function updateEnemiesAI(currentTime, delta) {
                     enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
                 }
             }
-        } else if (enemy.isWaveUnit) {
+        } else if (enemy.isWaveUnit && playerHQ && playerHQ.mesh && playerHQ.hp > 0) {
             // Штурм штаба игрока
             enemy.roamTarget = null;
             const hqPos = playerHQ.mesh.position;

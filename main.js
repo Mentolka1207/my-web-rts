@@ -23,7 +23,7 @@ if (typeof instancedRenderer !== 'undefined') {
     instancedRenderer.init(scene);
 }
 if (typeof simWorkerManager !== 'undefined') {
-    simWorkerManager.init();
+    simWorkerManager.init(grid, MAP_WORLD_SIZE, CELL_SIZE);
 }
 
 // Создание начальных отрядов
@@ -90,24 +90,52 @@ function stepSimulation(delta, currentTime) {
     checkAIRetaliation(delta);
 
     // 5. Полоски здоровья штабов
-    if (playerHQ.hp > 0) updateHealthBar(playerHQ.healthBar, playerHQ.hp, playerHQ.maxHp);
-    if (enemyHQ.hp > 0) updateHealthBar(enemyHQ.healthBar, enemyHQ.hp, enemyHQ.maxHp);
+    if (playerHQ && playerHQ.healthBar && playerHQ.hp > 0) updateHealthBar(playerHQ.healthBar, playerHQ.hp, playerHQ.maxHp);
+    if (enemyHQ && enemyHQ.healthBar && enemyHQ.hp > 0) updateHealthBar(enemyHQ.healthBar, enemyHQ.hp, enemyHQ.maxHp);
 
-    // 5.5. Обновление пространственного хеша для O(1) поиска целей и коллизий
-    const spatialT0 = performance.now();
-    spatialGrid.clear();
-    for (let i = 0; i < units.length; i++) {
-        if (units[i].hp > 0) spatialGrid.insert(units[i], false);
-    }
-    for (let i = 0; i < enemies.length; i++) {
-        if (enemies[i].hp > 0) spatialGrid.insert(enemies[i], true);
-    }
-    let spatialTimeAcc = performance.now() - spatialT0;
+    const totalSimUnits = units.length + enemies.length;
+    const useSimWorker = (typeof simWorkerPool !== 'undefined' && simWorkerPool.enabled && (simWorkerPool.isMultiThreaded || totalSimUnits >= 80));
+    let spatialTimeAcc = 0;
 
-    // 6. FSM логика союзных юнитов игрока
-    const fsmT0 = performance.now();
-    for (let i = 0; i < units.length; i++) {
-        const unit = units[i];
+    if (useSimWorker) {
+        const hqData = {
+            playerX: (playerHQ && playerHQ.mesh) ? playerHQ.mesh.position.x : 0,
+            playerZ: (playerHQ && playerHQ.mesh) ? playerHQ.mesh.position.z : 0,
+            playerHp: playerHQ ? playerHQ.hp : 0,
+            enemyX: (enemyHQ && enemyHQ.mesh) ? enemyHQ.mesh.position.x : 0,
+            enemyZ: (enemyHQ && enemyHQ.mesh) ? enemyHQ.mesh.position.z : 0,
+            enemyHp: enemyHQ ? enemyHQ.hp : 0
+        };
+
+        if (simWorkerPool.isMultiThreaded) {
+            if (!simWorkerPool.isBusy) {
+                simWorkerPool.dispatchParallel(units, enemies, delta, currentTime, hqData);
+            }
+        } else {
+            simWorkerPool.stepSync(units, enemies, delta, currentTime, grid, MAP_WORLD_SIZE, CELL_SIZE, hqData);
+        }
+
+        if (typeof engineProfiler !== 'undefined') {
+            engineProfiler.fsmTime = simWorkerPool.lastStepDuration;
+            engineProfiler.spatialTime = 0;
+            engineProfiler.pairsTested = simWorkerPool.activeUnits.length * 9;
+        }
+    } else {
+        // 5.5. Обновление пространственного хеша для O(1) поиска целей и коллизий
+        const spatialT0 = performance.now();
+        spatialGrid.clear();
+        for (let i = 0; i < units.length; i++) {
+            if (units[i].hp > 0) spatialGrid.insert(units[i], false);
+        }
+        for (let i = 0; i < enemies.length; i++) {
+            if (enemies[i].hp > 0) spatialGrid.insert(enemies[i], true);
+        }
+        spatialTimeAcc = performance.now() - spatialT0;
+
+        // 6. FSM логика союзных юнитов игрока
+        const fsmT0 = performance.now();
+        for (let i = 0; i < units.length; i++) {
+            const unit = units[i];
         if (unit.hp <= 0) continue;
         const pos = unit.mesh.position;
 
@@ -281,9 +309,21 @@ function stepSimulation(delta, currentTime) {
     // 7. FSM логика врагов и Босса
     updateEnemiesAI(currentTime, delta);
 
+    if (typeof engineProfiler !== 'undefined') {
+        engineProfiler.fsmTime = performance.now() - fsmT0;
+    }
+    }
+
     // 8. Визуальные эффекты дронов (пропеллеры, сопла, пульсация)
-    for (let i = 0; i < units.length; i++) updateUnitVisuals(units[i], currentTime, delta);
-    for (let i = 0; i < enemies.length; i++) updateUnitVisuals(enemies[i], currentTime, delta);
+    const isInstanced = (typeof instancedRenderer !== 'undefined' && instancedRenderer.enabled);
+    if (!isInstanced || totalSimUnits < 500) {
+        for (let i = 0; i < units.length; i++) updateUnitVisuals(units[i], currentTime, delta);
+        for (let i = 0; i < enemies.length; i++) updateUnitVisuals(enemies[i], currentTime, delta);
+    } else {
+        for (let i = 0; i < enemies.length; i++) {
+            if (enemies[i].type === 'boss') updateUnitVisuals(enemies[i], currentTime, delta);
+        }
+    }
 
     // 9. Гибель и удаление уничтоженных юнитов
     for (let i = units.length - 1; i >= 0; i--) {
@@ -298,7 +338,7 @@ function stepSimulation(delta, currentTime) {
                 if (u.mesh.userData.shieldMesh && u.mesh.userData.shieldMesh.material) u.mesh.userData.shieldMesh.material.dispose();
                 if (u.mesh.userData.siegeMesh && u.mesh.userData.siegeMesh.material) u.mesh.userData.siegeMesh.material.dispose();
             }
-            scene.remove(u.mesh);
+            if (u.mesh.parent) u.mesh.parent.remove(u.mesh);
             units.splice(i, 1);
         }
     }
@@ -315,7 +355,7 @@ function stepSimulation(delta, currentTime) {
             if (e.mesh.userData && e.mesh.userData.shieldMesh && e.mesh.userData.shieldMesh.material) {
                 e.mesh.userData.shieldMesh.material.dispose();
             }
-            scene.remove(e.mesh);
+            if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
             enemies.splice(i, 1);
             const reward = e.reward || ENEMY_KILL_REWARD;
             energy += reward;
@@ -331,10 +371,6 @@ function stepSimulation(delta, currentTime) {
         }
     }
 
-    // Фиксация времени FSM и способностей
-    if (typeof engineProfiler !== 'undefined') {
-        engineProfiler.fsmTime = performance.now() - fsmT0;
-    }
 
     // Проверка победы или поражения
     checkGameOverConditions();
@@ -389,10 +425,17 @@ function stepSimulation(delta, currentTime) {
 
                     if (isHQCell) {
                         const hqObj = (nr === HQ_ROW) ? playerHQ : enemyHQ;
-                        const hqCenter = hqObj.mesh.position;
-                        const hw = 1.8; // База штаба 3.6 x 3.6
-                        minX = hqCenter.x - hw; maxX = hqCenter.x + hw;
-                        minZ = hqCenter.z - hw; maxZ = hqCenter.z + hw;
+                        if (hqObj && hqObj.mesh) {
+                            const hqCenter = hqObj.mesh.position;
+                            const hw = 1.8; // База штаба 3.6 x 3.6
+                            minX = hqCenter.x - hw; maxX = hqCenter.x + hw;
+                            minZ = hqCenter.z - hw; maxZ = hqCenter.z + hw;
+                        } else {
+                            const wallPos = gridToWorld(nc, nr);
+                            const hw = 1.8;
+                            minX = wallPos.x - hw; maxX = wallPos.x + hw;
+                            minZ = wallPos.z - hw; maxZ = wallPos.z + hw;
+                        }
                     } else {
                         const wallPos = gridToWorld(nc, nr);
                         const hw = 0.98; // Монолит 1.96 x 1.96
@@ -431,27 +474,23 @@ function stepSimulation(delta, currentTime) {
         }
     }
 
-    // Двухэтапная релаксация: расталкивание юнитов + твердые препятствия
-    const sepT0 = performance.now();
-    _allActiveUnits.length = 0;
-    for (let i = 0; i < units.length; i++) if (units[i].hp > 0) _allActiveUnits.push(units[i]);
-    for (let i = 0; i < enemies.length; i++) if (enemies[i].hp > 0) _allActiveUnits.push(enemies[i]);
+    // 10. Высокопроизводительное пространственное расталкивание юнитов и коллизии с препятствиями
+    if (!useSimWorker) {
+        const sepT0 = performance.now();
+        _allActiveUnits.length = 0;
+        for (let i = 0; i < units.length; i++) if (units[i].hp > 0) _allActiveUnits.push(units[i]);
+        for (let i = 0; i < enemies.length; i++) if (enemies[i].hp > 0) _allActiveUnits.push(enemies[i]);
 
-    spatialGrid.resolveSeparation(_allActiveUnits);
-    for (let i = 0; i < totalUnits; i++) {
-        const u = i < numAllies ? units[i] : enemies[i - numAllies];
-        if (u.hp > 0) resolveUnitEnvironmentCollisions(u);
-    }
-    spatialGrid.resolveSeparation(_allActiveUnits);
-    for (let i = 0; i < totalUnits; i++) {
-        const u = i < numAllies ? units[i] : enemies[i - numAllies];
-        if (u.hp > 0) resolveUnitEnvironmentCollisions(u);
-    }
-    spatialTimeAcc += (performance.now() - sepT0);
+        spatialGrid.resolveSeparation(_allActiveUnits);
+        for (let i = 0; i < _allActiveUnits.length; i++) {
+            resolveUnitEnvironmentCollisions(_allActiveUnits[i]);
+        }
+        spatialTimeAcc += (performance.now() - sepT0);
 
-    if (typeof engineProfiler !== 'undefined') {
-        engineProfiler.spatialTime = spatialTimeAcc;
-        engineProfiler.pairsTested = spatialGrid.pairsTested;
+        if (typeof engineProfiler !== 'undefined') {
+            engineProfiler.spatialTime = spatialTimeAcc;
+            engineProfiler.pairsTested = spatialGrid.pairsTested;
+        }
     }
 }
 
@@ -464,8 +503,8 @@ function animate(timestamp) {
             soundEngine.resetTickStats();
         }
         if (rtsTimer) rtsTimer.update(timestamp);
-        const rawDelta = Math.min(rtsTimer ? rtsTimer.getDelta() : rtsClock.getDelta(), 0.15);
-        const currentTime = rtsTimer ? rtsTimer.getElapsed() : rtsClock.elapsedTime;
+        const rawDelta = Math.min(rtsTimer ? rtsTimer.getDelta() : (rtsClock ? rtsClock.getDelta() : 0.016), 0.15);
+        const currentTime = rtsTimer ? rtsTimer.getElapsed() : (rtsClock ? rtsClock.elapsedTime : (performance.now() * 0.001));
 
         // Обновление позиции камеры по WASD / Стрелкам (привязано к кадру)
         updateCamera(rawDelta);

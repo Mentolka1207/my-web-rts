@@ -238,7 +238,9 @@ function validateMapDef(def) {
         }
     }
 
-    const expectedSize = (typeof GRID_SIZE !== 'undefined') ? GRID_SIZE : 22;
+    const expectedSize = (typeof def.size === 'number' && [22, 64, 128, 256].includes(def.size))
+        ? def.size
+        : ((typeof GRID_SIZE !== 'undefined') ? GRID_SIZE : 22);
     if (def.size !== expectedSize) {
         errors.push(`Invalid size: expected ${expectedSize}, got ${def.size}`);
     }
@@ -402,8 +404,310 @@ function selectMap(mapId, persist = true) {
     if (selectEl) selectEl.value = mapId;
 }
 
+let currentMapSize = null;
+let currentMapSeed = Math.floor(Math.random() * 900000) + 100000;
+let isCustomSeed = false;
+
+function getMapSeed() {
+    return currentMapSeed;
+}
+
+function setMapSeed(newSeed, rerender = true) {
+    if (typeof newSeed === 'string') {
+        const trimmed = newSeed.trim();
+        const parsed = parseInt(trimmed, 10);
+        if (!isNaN(parsed) && String(parsed) === trimmed) {
+            currentMapSeed = parsed;
+        } else if (trimmed.length > 0) {
+            let h = 0;
+            for (let i = 0; i < trimmed.length; i++) {
+                h = (Math.imul(31, h) + trimmed.charCodeAt(i)) | 0;
+            }
+            currentMapSeed = Math.abs(h);
+        }
+    } else if (typeof newSeed === 'number' && !isNaN(newSeed)) {
+        currentMapSeed = Math.floor(newSeed);
+    }
+    isCustomSeed = true;
+    syncSeedUI();
+    if (rerender && typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
+        applyMapToGrid(currentMapId);
+    }
+}
+
+function rerollMapSeed(rerender = true) {
+    currentMapSeed = Math.floor(Math.random() * 900000) + 100000;
+    isCustomSeed = false;
+    syncSeedUI();
+    if (rerender && typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
+        applyMapToGrid(currentMapId);
+    }
+    return currentMapSeed;
+}
+
+function syncSeedUI() {
+    if (typeof document === 'undefined') return;
+    const input = document.getElementById('map-seed-input');
+    if (input && document.activeElement !== input) {
+        input.value = String(currentMapSeed);
+    }
+}
+
+/**
+ * Конфигурации процедурных биомов для генерации препятствий через шум Перлина
+ */
+const PERLIN_BIOME_CONFIGS = {
+    canyon: {
+        id: 'canyon',
+        generator: (perlin, u, v, N) => {
+            const mainAxis = (u + v) * 0.7071;
+            const crossAxis = (u - v) * 0.7071;
+            const n = perlin.fbm2D(mainAxis * 2.8, crossAxis * 9.5, { octaves: 2, scale: 1.0 });
+            return Math.abs(n) > 0.35;
+        }
+    },
+    arena: {
+        id: 'arena',
+        generator: (perlin, u, v, N) => {
+            const n = perlin.fbm2D(u * 5.2, v * 5.2, { octaves: 2, scale: 1.0 });
+            return n > 0.36;
+        }
+    },
+    maze: {
+        id: 'maze',
+        generator: (perlin, u, v, N) => {
+            const n = perlin.fbm2D(u * 8.5, v * 8.5, { octaves: 3, scale: 1.0 });
+            return Math.abs(n) < 0.085;
+        }
+    },
+    crossroads: {
+        id: 'crossroads',
+        generator: (perlin, u, v, N) => {
+            const centerDistH = Math.abs(v - 0.5) * N;
+            const centerDistV = Math.abs(u - 0.5) * N;
+            if (centerDistH <= 2.2 || centerDistV <= 2.2) return false;
+            const n = perlin.fbm2D(u * 6.0, v * 6.0, { octaves: 2, scale: 1.0 });
+            return n > 0.28;
+        }
+    }
+};
+
+function setMapSize(sizeId, persist = true) {
+    if (typeof MAP_SIZE_CONFIGS === 'undefined' || !MAP_SIZE_CONFIGS[sizeId]) sizeId = '256';
+    currentMapSize = sizeId;
+    if (persist && typeof playerSettings !== 'undefined') {
+        playerSettings.mapSize = sizeId;
+        if (typeof saveSettingsToStorage === 'function') saveSettingsToStorage();
+    }
+    const selectEl = document.getElementById('map-size-select');
+    if (selectEl) selectEl.value = sizeId;
+
+    if (typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
+        applyMapToGrid(currentMapId);
+    }
+}
+
+/**
+ * Создаёт масштабированную версию базовой карты MapDef под целевой размер сетки (64x64 для 256, 128x128 для 512, 256x256 для 1024)
+ * Генерирует ландшафт по алгоритму Шума Перлина (Perlin Noise FBM) с учётом биома карты.
+ * Гарантирует:
+ * - Стенной периметр по краям (#)
+ * - Чистые зоны вокруг баз (радиус 4) и кристаллов (3x3)
+ * - 100% BFS-достижимость всех ресурсных точек и вражеского штаба (с авто-пробитием коридоров)
+ */
+function buildScaledMap(baseMapDef, sizeId, seed = currentMapSeed) {
+    const sizeConfig = (typeof MAP_SIZE_CONFIGS !== 'undefined' && MAP_SIZE_CONFIGS[sizeId])
+        ? MAP_SIZE_CONFIGS[sizeId]
+        : (typeof MAP_SIZE_CONFIGS !== 'undefined' ? MAP_SIZE_CONFIGS['256'] : { gridSize: 64, worldSize: 256, cellSize: 4 });
+
+    const N = sizeConfig.gridSize;
+    const baseSize = baseMapDef.size;
+    const activeSeed = (typeof seed !== 'undefined' && seed !== null) ? seed : currentMapSeed;
+
+    const playerHQ = { col: 2, row: 2 };
+    const playerSpawn = { col: 4, row: 4 };
+    const enemyHQ = { col: N - 3, row: N - 3 };
+
+    const nodes = [
+        { id: 'alpha',  nameKey: 'NODE_ALPHA',  col: Math.round(N * 0.75), row: Math.round(N * 0.25) },
+        { id: 'center', nameKey: 'NODE_CENTER', col: Math.floor(N * 0.5),  row: Math.floor(N * 0.5) },
+        { id: 'beta',   nameKey: 'NODE_BETA',   col: Math.round(N * 0.25), row: Math.round(N * 0.75) }
+    ];
+
+    if (Array.isArray(sizeConfig.extraNodes)) {
+        sizeConfig.extraNodes.forEach(extra => {
+            nodes.push({
+                id: extra.id,
+                nameKey: extra.nameKey,
+                col: Math.round(N * extra.u),
+                row: Math.round(N * extra.v)
+            });
+        });
+    }
+
+    const grid2D = Array.from({ length: N }, () => Array(N).fill('.'));
+
+    for (let i = 0; i < N; i++) {
+        grid2D[0][i] = '#';
+        grid2D[N - 1][i] = '#';
+        grid2D[i][0] = '#';
+        grid2D[i][N - 1] = '#';
+    }
+
+    // Процедурная генерация препятствий по алгоритму шума Перлина
+    const biome = PERLIN_BIOME_CONFIGS[baseMapDef.id] || PERLIN_BIOME_CONFIGS.canyon;
+    const pNoise = (typeof PerlinNoise !== 'undefined') ? new PerlinNoise(activeSeed) : null;
+
+    if (pNoise && typeof biome.generator === 'function') {
+        for (let r = 1; r < N - 1; r++) {
+            const v = r / N;
+            for (let c = 1; c < N - 1; c++) {
+                const u = c / N;
+                if (biome.generator(pNoise, u, v, N)) {
+                    grid2D[r][c] = '#';
+                }
+            }
+        }
+    } else {
+        // Резервный фолбэк: интерполяция строк базовой карты
+        for (let r = 1; r < N - 1; r++) {
+            const v = (r - 1) / (N - 3);
+            const baseR = Math.min(baseSize - 2, Math.max(1, 1 + Math.round(v * (baseSize - 3))));
+            const rowStr = baseMapDef.rows[baseR];
+
+            for (let c = 1; c < N - 1; c++) {
+                const u = (c - 1) / (N - 3);
+                const baseC = Math.min(baseSize - 2, Math.max(1, 1 + Math.round(u * (baseSize - 3))));
+                if (rowStr && rowStr[baseC] === '#') {
+                    grid2D[r][c] = '#';
+                }
+            }
+        }
+    }
+
+    // Очистка зон вокруг штабов
+    for (let dr = -4; dr <= 4; dr++) {
+        for (let dc = -4; dc <= 4; dc++) {
+            if (dr * dr + dc * dc <= 18) {
+                const pr = playerHQ.row + dr, pc = playerHQ.col + dc;
+                if (pr > 0 && pr < N - 1 && pc > 0 && pc < N - 1) grid2D[pr][pc] = '.';
+                const er = enemyHQ.row + dr, ec = enemyHQ.col + dc;
+                if (er > 0 && er < N - 1 && ec > 0 && ec < N - 1) grid2D[er][ec] = '.';
+            }
+        }
+    }
+
+    // Очистка зоны вокруг спавна
+    for (let dr = -2; dr <= 2; dr++) {
+        for (let dc = -2; dc <= 2; dc++) {
+            const sr = playerSpawn.row + dr, sc = playerSpawn.col + dc;
+            if (sr > 0 && sr < N - 1 && sc > 0 && sc < N - 1) grid2D[sr][sc] = '.';
+        }
+    }
+
+    // Очистка 3x3 зон вокруг кристаллов
+    nodes.forEach(n => {
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                const nr = n.row + dr, nc = n.col + dc;
+                if (nr > 0 && nr < N - 1 && nc > 0 && nc < N - 1) grid2D[nr][nc] = '.';
+            }
+        }
+    });
+
+    // Функция пробития 2-клеточного коридора между точками (на случай блокировки)
+    function carveCorridor(x0, y0, x1, y1) {
+        const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 2;
+        if (steps === 0) return;
+        for (let s = 0; s <= steps; s++) {
+            const t = s / steps;
+            const cx = Math.round(x0 + (x1 - x0) * t);
+            const cy = Math.round(y0 + (y1 - y0) * t);
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const nx = cx + dx, ny = cy + dy;
+                    if (nx > 0 && nx < N - 1 && ny > 0 && ny < N - 1) {
+                        grid2D[ny][nx] = '.';
+                    }
+                }
+            }
+        }
+    }
+
+    // Проверка связности (BFS)
+    const visited = new Uint8Array(N * N);
+    const queue = new Int32Array(N * N);
+    let head = 0, tail = 0;
+
+    const startIdx = playerSpawn.row * N + playerSpawn.col;
+    visited[startIdx] = 1;
+    queue[tail++] = startIdx;
+
+    while (head < tail) {
+        const cur = queue[head++];
+        const cc = cur % N;
+        const cr = (cur / N) | 0;
+
+        if (cc > 1 && !visited[cur - 1] && grid2D[cr][cc - 1] === '.') { visited[cur - 1] = 1; queue[tail++] = cur - 1; }
+        if (cc < N - 2 && !visited[cur + 1] && grid2D[cr][cc + 1] === '.') { visited[cur + 1] = 1; queue[tail++] = cur + 1; }
+        if (cr > 1 && !visited[cur - N] && grid2D[cr - 1][cc] === '.') { visited[cur - N] = 1; queue[tail++] = cur - N; }
+        if (cr < N - 2 && !visited[cur + N] && grid2D[cr + 1][cc] === '.') { visited[cur + N] = 1; queue[tail++] = cur + N; }
+    }
+
+    nodes.forEach(n => {
+        if (!visited[n.row * N + n.col]) {
+            carveCorridor(playerSpawn.col, playerSpawn.row, n.col, n.row);
+        }
+    });
+
+    const enemyNear = [
+        { col: enemyHQ.col - 1, row: enemyHQ.row },
+        { col: enemyHQ.col, row: enemyHQ.row - 1 }
+    ];
+    const canReachEnemy = enemyNear.some(p => visited[p.row * N + p.col]);
+    if (!canReachEnemy) {
+        carveCorridor(playerSpawn.col, playerSpawn.row, enemyHQ.col - 1, enemyHQ.row - 1);
+    }
+
+    // Повторно очищаем 3x3 зону кристаллов после пробития коридоров
+    nodes.forEach(n => {
+        for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+                const nr = n.row + dr, nc = n.col + dc;
+                if (nr > 0 && nr < N - 1 && nc > 0 && nc < N - 1) grid2D[nr][nc] = '.';
+            }
+        }
+    });
+
+    return {
+        schema: 2,
+        id: `${baseMapDef.id}-${sizeId}`,
+        nameKey: baseMapDef.nameKey,
+        size: N,
+        rows: grid2D.map(r => r.join('')),
+        playerHQ,
+        enemyHQ,
+        playerSpawn,
+        nodes,
+        seed: activeSeed,
+        recommended: baseMapDef.recommended || { difficulty: 'normal' }
+    };
+}
+
 function applyMapToGrid(mapId) {
-    const mapDef = (typeof mapId === 'object' && mapId !== null) ? mapId : (MAP_CATALOG[mapId] || MAP_CATALOG.canyon);
+    const rawDef = (typeof mapId === 'object' && mapId !== null) ? mapId : (MAP_CATALOG[mapId] || MAP_CATALOG.canyon);
+
+    // Если активен размер карты (256, 512, 1024), строим масштабированную версию
+    let mapDef = rawDef;
+    let sizeConfig = null;
+    if (typeof currentMapSize !== 'undefined' && typeof MAP_SIZE_CONFIGS !== 'undefined' && MAP_SIZE_CONFIGS[currentMapSize]) {
+        sizeConfig = MAP_SIZE_CONFIGS[currentMapSize];
+        GRID_SIZE = sizeConfig.gridSize;
+        CELL_SIZE = sizeConfig.cellSize;
+        MAP_WORLD_SIZE = sizeConfig.worldSize;
+        mapDef = buildScaledMap(rawDef, currentMapSize, currentMapSeed);
+    }
+    syncSeedUI();
 
     // 1. Устанавливаем координаты баз и спавна из контракта карты
     if (mapDef.playerHQ) {
@@ -424,8 +728,16 @@ function applyMapToGrid(mapId) {
         RESOURCE_NODE_COORDS = mapDef.nodes.map(n => ({
             col: n.col,
             row: n.row,
-            name: (typeof t === 'function') ? t(n.nameKey) : (n.name || n.id)
+            name: (typeof t === 'function' && n.nameKey) ? t(n.nameKey) : (n.name || n.id)
         }));
+    }
+
+    // 1.5. Синхронизируем размер массива grid
+    if (typeof grid !== 'undefined' && Array.isArray(grid)) {
+        grid.length = 0;
+        for (let r = 0; r < GRID_SIZE; r++) {
+            grid.push(new Array(GRID_SIZE).fill(0));
+        }
     }
 
     // 2. Заполняем сетку проходимости напрямую из запечённых строк MapDef
@@ -440,7 +752,26 @@ function applyMapToGrid(mapId) {
     grid[HQ_ROW][HQ_COL] = 1;
     grid[ENEMY_HQ_ROW][ENEMY_HQ_COL] = 1;
 
-    // 3. Синхронизируем 3D-позиции баз и ресурсов в Three.js сцене
+    // 2.5. Ресайз SpatialGrid и Flow Fields под новый размер
+    if (typeof spatialGrid !== 'undefined' && spatialGrid && typeof spatialGrid.resize === 'function') {
+        spatialGrid.resize(MAP_WORLD_SIZE, 4.0);
+    }
+    if (typeof flowFieldGen !== 'undefined' && flowFieldGen && typeof flowFieldGen.resize === 'function') {
+        flowFieldGen.resize(GRID_SIZE, GRID_SIZE, CELL_SIZE);
+    }
+    if (typeof enemyFlowFieldGen !== 'undefined' && enemyFlowFieldGen && typeof enemyFlowFieldGen.resize === 'function') {
+        enemyFlowFieldGen.resize(GRID_SIZE, GRID_SIZE, CELL_SIZE);
+    }
+
+    // 3. Синхронизируем Three.js камеру, свет, туман, землю и периметр
+    if (typeof updateCameraAndSceneForMapSize === 'function' && sizeConfig) {
+        updateCameraAndSceneForMapSize(sizeConfig);
+    }
+    if (typeof updateTerrainForMapSize === 'function') {
+        updateTerrainForMapSize(MAP_WORLD_SIZE, GRID_SIZE, CELL_SIZE);
+    }
+
+    // 3.5. Синхронизируем 3D-позиции баз и ресурсов в Three.js сцене
     if (typeof playerHQ !== 'undefined' && playerHQ && playerHQ.mesh && typeof gridToWorld === 'function') {
         const pPos = gridToWorld(HQ_COL, HQ_ROW);
         playerHQ.mesh.position.set(pPos.x, 0, pPos.z);
@@ -449,7 +780,9 @@ function applyMapToGrid(mapId) {
         const ePos = gridToWorld(ENEMY_HQ_COL, ENEMY_HQ_ROW);
         enemyHQ.mesh.position.set(ePos.x, 0, ePos.z);
     }
-    if (typeof resourceNodes !== 'undefined' && Array.isArray(resourceNodes) && typeof gridToWorld === 'function') {
+    if (typeof syncResourceNodes === 'function') {
+        syncResourceNodes(mapDef.nodes);
+    } else if (typeof resourceNodes !== 'undefined' && Array.isArray(resourceNodes) && typeof gridToWorld === 'function') {
         mapDef.nodes.forEach((n, idx) => {
             if (resourceNodes[idx]) {
                 const node = resourceNodes[idx];
@@ -458,7 +791,7 @@ function applyMapToGrid(mapId) {
                 const wp = gridToWorld(n.col, n.row);
                 node.pos.set(wp.x, 0, wp.z);
                 node.group.position.set(wp.x, 0, wp.z);
-                node.name = (typeof t === 'function') ? t(n.nameKey) : (n.name || n.id);
+                node.name = (typeof t === 'function' && n.nameKey) ? t(n.nameKey) : (n.name || n.id);
             }
         });
     }

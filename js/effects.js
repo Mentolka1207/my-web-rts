@@ -321,3 +321,34 @@ function spawnScorch(position) {
         scene.remove(old);
     }
 }
+
+// Полная очистка всех визуальных эффектов (декали, частицы, лазеры, вспышки, маркеры)
+function clearAllVFX() {
+    for (let i = 0; i < MAX_LASERS; i++) {
+        laserData[i].active = false;
+        laserData[i].life = 0;
+        laserMeshes[i].visible = false;
+    }
+    for (let i = 0; i < MAX_FLASHES; i++) {
+        flashData[i].active = false;
+        flashData[i].elapsed = 0;
+        flashSprites[i].visible = false;
+    }
+    for (let i = 0; i < MAX_ORDER_MARKERS; i++) {
+        orderMarkers[i].active = false;
+        orderMarkers[i].elapsed = 0;
+        orderMarkers[i].mesh.visible = false;
+    }
+    for (let i = 0; i < MAX_TRAIL_PARTICLES; i++) {
+        trailParticles[i].active = false;
+        trailParticles[i].age = 0;
+        trailParticles[i].mesh.visible = false;
+    }
+    if (typeof particleSystem !== 'undefined' && particleSystem.clear) {
+        particleSystem.clear();
+    }
+    while (scorches.length > 0) {
+        const decal = scorches.pop();
+        if (decal && decal.parent) scene.remove(decal);
+    }
+}

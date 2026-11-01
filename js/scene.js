@@ -7,19 +7,50 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x090c16);
 scene.fog = new THREE.Fog(0x090c16, 65, 125);
 
-const camera = new THREE.PerspectiveCamera(45, (typeof window !== 'undefined' && window.innerWidth ? window.innerWidth / window.innerHeight : 1), 1, 1000);
+const camera = new THREE.PerspectiveCamera(45, (typeof window !== 'undefined' && window.innerWidth ? window.innerWidth / window.innerHeight : 1), 1, 3500);
 const camDir = new THREE.Vector3(0, 42, 32).normalize();
-const BASE_CAM_DIST = Math.hypot(42, 32);
+let BASE_CAM_DIST = Math.hypot(42, 32);
 let camPivot = new THREE.Vector3(0, 0, 0);
 let camZoomDist = BASE_CAM_DIST;
-const MIN_ZOOM_DIST = camZoomDist * 0.45;
-const MAX_ZOOM_DIST = camZoomDist * 1.9;
+let MIN_ZOOM_DIST = camZoomDist * 0.45;
+let MAX_ZOOM_DIST = camZoomDist * 1.9;
 
 function applyCameraTransform() {
     camera.position.copy(camPivot).addScaledVector(camDir, camZoomDist);
     camera.lookAt(camPivot.x, 0, camPivot.z);
 }
 applyCameraTransform();
+
+// Динамическая адаптация камеры, тумана и освещения под размер карты (256, 512, 1024)
+function updateCameraAndSceneForMapSize(sizeConfig) {
+    if (!sizeConfig) return;
+    BASE_CAM_DIST = sizeConfig.baseCamDist || Math.hypot(42, 32);
+    MIN_ZOOM_DIST = sizeConfig.minCameraDist || (BASE_CAM_DIST * 0.45);
+    MAX_ZOOM_DIST = sizeConfig.maxCameraDist || (BASE_CAM_DIST * 2.2);
+    camZoomDist = THREE.MathUtils.clamp(camZoomDist, MIN_ZOOM_DIST, MAX_ZOOM_DIST);
+    applyCameraTransform();
+
+    if (scene.fog) {
+        scene.fog.near = sizeConfig.fogNear || 65;
+        scene.fog.far = sizeConfig.fogFar || 125;
+    }
+
+    const ws = sizeConfig.worldSize || 44;
+    if (typeof dirLight !== 'undefined' && dirLight) {
+        dirLight.position.set(ws * 0.4, Math.max(64, ws * 0.6), ws * 0.35);
+        if (dirLight.shadow && dirLight.shadow.camera) {
+            dirLight.shadow.camera.left = -ws * 0.6;
+            dirLight.shadow.camera.right = ws * 0.6;
+            dirLight.shadow.camera.top = ws * 0.6;
+            dirLight.shadow.camera.bottom = -ws * 0.6;
+            dirLight.shadow.camera.far = Math.max(135, ws * 3.0);
+            dirLight.shadow.camera.updateProjectionMatrix();
+        }
+    }
+    if (typeof rimLight !== 'undefined' && rimLight) {
+        rimLight.position.set(-ws * 0.5, Math.max(26, ws * 0.4), -ws * 0.4);
+    }
+}
 
 const renderer = container ? new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }) : null;
 if (renderer) {

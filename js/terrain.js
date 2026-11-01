@@ -378,13 +378,12 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // Высокотехнологичная тактическая сетка
-const gridHelper = new THREE.GridHelper(MAP_WORLD_SIZE, GRID_SIZE, 0x00ffcc, 0x19243c);
+let gridHelper = new THREE.GridHelper(MAP_WORLD_SIZE, GRID_SIZE, 0x00ffcc, 0x19243c);
 gridHelper.position.y = 0.015;
 scene.add(gridHelper);
 
 // Энергетический периметр карты (Arena Perimeter Rails & Corner Pylons) — оптимизированное объединение геометрий
 const perimeterGroup = new THREE.Group();
-const halfSize = MAP_WORLD_SIZE / 2;
 const borderRailMat = new THREE.MeshStandardMaterial({
     color: 0x0f1524,
     roughness: 0.3,
@@ -392,26 +391,6 @@ const borderRailMat = new THREE.MeshStandardMaterial({
     emissive: 0x00ffcc,
     emissiveIntensity: 0.35
 });
-const railGeoH = new THREE.BoxGeometry(MAP_WORLD_SIZE, 0.22, 0.3);
-const railGeoV = new THREE.BoxGeometry(0.3, 0.22, MAP_WORLD_SIZE);
-
-// Объединение 4 рельсов в 1 статический меш
-const mRailTop = new THREE.Matrix4().makeTranslation(0, 0.11, -halfSize);
-const mRailBottom = new THREE.Matrix4().makeTranslation(0, 0.11, halfSize);
-const mRailLeft = new THREE.Matrix4().makeTranslation(-halfSize, 0.11, 0);
-const mRailRight = new THREE.Matrix4().makeTranslation(halfSize, 0.11, 0);
-
-const mergedRailsGeo = mergeBufferGeometries([
-    { geometry: railGeoH, matrix: mRailTop },
-    { geometry: railGeoH, matrix: mRailBottom },
-    { geometry: railGeoV, matrix: mRailLeft },
-    { geometry: railGeoV, matrix: mRailRight }
-]);
-const borderRailsMesh = new THREE.Mesh(mergedRailsGeo, borderRailMat);
-perimeterGroup.add(borderRailsMesh);
-
-// Угловые голографические пилоны — объединение 4 пилонов в 1 меш и 4 маяков в 1 меш
-const pylonGeo = new THREE.CylinderGeometry(0.35, 0.45, 1.2, 8);
 const pylonMat = new THREE.MeshStandardMaterial({
     color: 0x141b2c,
     roughness: 0.2,
@@ -419,37 +398,67 @@ const pylonMat = new THREE.MeshStandardMaterial({
     emissive: 0x00ffcc,
     emissiveIntensity: 0.6
 });
-const pylonBeaconGeo = new THREE.SphereGeometry(0.18, 8, 8);
 const pylonBeaconMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
 
-const cornerCoords = [
-    [-halfSize, -halfSize], [halfSize, -halfSize],
-    [-halfSize, halfSize],  [halfSize, halfSize]
-];
+function rebuildPerimeter(worldSize) {
+    while (perimeterGroup.children.length > 0) {
+        const obj = perimeterGroup.children[0];
+        perimeterGroup.remove(obj);
+        if (obj.geometry) obj.geometry.dispose();
+    }
+    const half = worldSize / 2;
+    const rGeoH = new THREE.BoxGeometry(worldSize, 0.22, 0.3);
+    const rGeoV = new THREE.BoxGeometry(0.3, 0.22, worldSize);
 
-const mergedPylonsGeo = mergeBufferGeometries(cornerCoords.map(([cx, cz]) => ({
-    geometry: pylonGeo,
-    matrix: new THREE.Matrix4().makeTranslation(cx, 0.6, cz)
-})));
-const pylonsMesh = new THREE.Mesh(mergedPylonsGeo, pylonMat);
-pylonsMesh.castShadow = true;
+    const mRailTop = new THREE.Matrix4().makeTranslation(0, 0.11, -half);
+    const mRailBottom = new THREE.Matrix4().makeTranslation(0, 0.11, half);
+    const mRailLeft = new THREE.Matrix4().makeTranslation(-half, 0.11, 0);
+    const mRailRight = new THREE.Matrix4().makeTranslation(half, 0.11, 0);
 
-const mergedBeaconsGeo = mergeBufferGeometries(cornerCoords.map(([cx, cz]) => ({
-    geometry: pylonBeaconGeo,
-    matrix: new THREE.Matrix4().makeTranslation(cx, 1.3, cz)
-})));
-const beaconsMesh = new THREE.Mesh(mergedBeaconsGeo, pylonBeaconMat);
+    const mergedRails = mergeBufferGeometries([
+        { geometry: rGeoH, matrix: mRailTop },
+        { geometry: rGeoH, matrix: mRailBottom },
+        { geometry: rGeoV, matrix: mRailLeft },
+        { geometry: rGeoV, matrix: mRailRight }
+    ]);
+    rGeoH.dispose();
+    rGeoV.dispose();
+    const railsMesh = new THREE.Mesh(mergedRails, borderRailMat);
+    perimeterGroup.add(railsMesh);
 
-perimeterGroup.add(pylonsMesh, beaconsMesh);
+    const pGeo = new THREE.CylinderGeometry(0.35, 0.45, 1.2, 8);
+    const bGeo = new THREE.SphereGeometry(0.18, 8, 8);
+    const corners = [
+        [-half, -half], [half, -half],
+        [-half, half],  [half, half]
+    ];
+    const mergedPylons = mergeBufferGeometries(corners.map(([cx, cz]) => ({
+        geometry: pGeo,
+        matrix: new THREE.Matrix4().makeTranslation(cx, 0.6, cz)
+    })));
+    pGeo.dispose();
+    const pMesh = new THREE.Mesh(mergedPylons, pylonMat);
+    pMesh.castShadow = true;
+
+    const mergedBeacons = mergeBufferGeometries(corners.map(([cx, cz]) => ({
+        geometry: bGeo,
+        matrix: new THREE.Matrix4().makeTranslation(cx, 1.3, cz)
+    })));
+    bGeo.dispose();
+    const bMesh = new THREE.Mesh(mergedBeacons, pylonBeaconMat);
+
+    perimeterGroup.add(pMesh, bMesh);
+}
+
+rebuildPerimeter(MAP_WORLD_SIZE);
 scene.add(perimeterGroup);
-
 
 // Материалы и геометрия стен-монолитов
 const wallTex = createWallTexture();
 const wallBumpTex = createWallBumpTexture();
 
-const wallGeo = new THREE.BoxGeometry(CELL_SIZE * 0.96, 1.5, CELL_SIZE * 0.96);
-const wallCapGeo = new THREE.BoxGeometry(CELL_SIZE * 0.98, 0.15, CELL_SIZE * 0.98);
+let wallGeo = new THREE.BoxGeometry(CELL_SIZE * 0.96, 1.5, CELL_SIZE * 0.96);
+let wallCapGeo = new THREE.BoxGeometry(CELL_SIZE * 0.98, 0.15, CELL_SIZE * 0.98);
 const wallMat = new THREE.MeshStandardMaterial({
     map: wallTex,
     bumpMap: wallBumpTex,
@@ -470,13 +479,44 @@ const wallCapMat = new THREE.MeshStandardMaterial({
 let instancedWalls = null;
 let instancedCaps = null;
 
+// Динамическое обновление земли, сетки и периметра под размер карты
+function updateTerrainForMapSize(worldSize, gridSize, cellSize) {
+    if (ground && ground.geometry) {
+        ground.geometry.dispose();
+        ground.geometry = new THREE.PlaneGeometry(worldSize, worldSize);
+    }
+    const repeats = worldSize / 16;
+    if (groundTex) groundTex.repeat.set(repeats, repeats);
+    if (groundBumpTex) groundBumpTex.repeat.set(repeats, repeats);
+    if (groundNormalTex) groundNormalTex.repeat.set(repeats, repeats);
+    if (groundRoughnessTex) groundRoughnessTex.repeat.set(repeats, repeats);
+    if (groundEmissiveTex) groundEmissiveTex.repeat.set(repeats, repeats);
+
+    if (gridHelper) {
+        scene.remove(gridHelper);
+        if (gridHelper.geometry) gridHelper.geometry.dispose();
+        gridHelper = new THREE.GridHelper(worldSize, gridSize, 0x00ffcc, 0x19243c);
+        gridHelper.position.y = 0.015;
+        scene.add(gridHelper);
+    }
+
+    rebuildPerimeter(worldSize);
+
+    if (wallGeo) wallGeo.dispose();
+    if (wallCapGeo) wallCapGeo.dispose();
+    wallGeo = new THREE.BoxGeometry(cellSize * 0.96, 1.5, cellSize * 0.96);
+    wallCapGeo = new THREE.BoxGeometry(cellSize * 0.98, 0.15, cellSize * 0.98);
+}
+
 function buildInstancedWalls() {
     if (instancedWalls) {
         scene.remove(instancedWalls);
+        if (instancedWalls.dispose) instancedWalls.dispose();
         instancedWalls = null;
     }
     if (instancedCaps) {
         scene.remove(instancedCaps);
+        if (instancedCaps.dispose) instancedCaps.dispose();
         instancedCaps = null;
     }
 

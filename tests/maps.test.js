@@ -8,6 +8,11 @@ const ROOT = path.resolve(__dirname, '..');
 function loadMapsContext() {
     const ctx = vm.createContext({
         console,
+        window: { addEventListener() {} },
+        THREE: {
+            Vector3: class { constructor(x=0,y=0,z=0) { this.x = x; this.y = y; this.z = z; } },
+            MathUtils: { clamp: (v, a, b) => Math.max(a, Math.min(b, v)) }
+        },
         GRID_SIZE: 22,
         CELL_SIZE: 2,
         MAP_WORLD_SIZE: 44,
@@ -28,16 +33,32 @@ function loadMapsContext() {
     const i18nCode = fs.readFileSync(path.join(ROOT, 'js', 'i18n.js'), 'utf8');
     vm.runInContext(i18nCode, ctx);
 
+    const configCode = fs.readFileSync(path.join(ROOT, 'js', 'config.js'), 'utf8');
+    vm.runInContext(configCode, ctx);
+
+    const perlinCode = fs.readFileSync(path.join(ROOT, 'js', 'perlin.js'), 'utf8');
+    vm.runInContext(perlinCode, ctx);
+
     const mapsCode = fs.readFileSync(path.join(ROOT, 'js', 'maps.js'), 'utf8');
     vm.runInContext(mapsCode, ctx);
 
     return vm.runInContext(`({
         MAP_CATALOG,
         DIFFICULTY_CONFIGS,
+        MAP_SIZE_CONFIGS,
+        PERLIN_BIOME_CONFIGS,
+        PerlinNoise,
         validateMapDef,
         setDifficulty,
         selectMap,
+        setMapSize,
+        buildScaledMap,
         applyMapToGrid,
+        getMapSeed,
+        setMapSeed,
+        rerollMapSeed,
+        get currentMapSize() { return currentMapSize; },
+        set currentMapSize(v) { currentMapSize = v; },
         get grid() { return grid; },
         get HQ_COL() { return HQ_COL; },
         get HQ_ROW() { return HQ_ROW; },
@@ -155,5 +176,166 @@ describe('MapDef v2 и валидация карт (js/maps.js)', () => {
                 expect(grid[r][c], `grid[${r}][${c}] для crossroads`).toBe(expected);
             }
         }
+    });
+
+    it('MAP_SIZE_CONFIGS содержит корректные параметры для 256, 512, 1024', () => {
+        const { MAP_SIZE_CONFIGS } = ctx;
+        expect(MAP_SIZE_CONFIGS).toBeDefined();
+        const expectedSizes = ['256', '512', '1024'];
+        expectedSizes.forEach(s => {
+            const conf = MAP_SIZE_CONFIGS[s];
+            expect(conf).toBeDefined();
+            expect(conf.worldSize).toBe(parseInt(s, 10));
+            expect(conf.gridSize).toBeGreaterThan(0);
+            expect(conf.cellSize).toBeGreaterThan(0);
+            expect(conf.gridSize * conf.cellSize).toBe(conf.worldSize);
+            expect(conf.baseCamDist).toBeGreaterThan(0);
+            expect(conf.maxCameraDist).toBeGreaterThan(conf.minCameraDist);
+            expect(conf.fogFar).toBeGreaterThan(conf.fogNear);
+        });
+    });
+
+    it('buildScaledMap корректно генерирует и валидирует все 12 комбинаций (4 карты x 3 размера)', () => {
+        const { MAP_CATALOG, buildScaledMap, validateMapDef } = ctx;
+        const mapKeys = ['canyon', 'arena', 'maze', 'crossroads'];
+        const sizeKeys = ['256', '512', '1024'];
+
+        for (const mk of mapKeys) {
+            for (const sk of sizeKeys) {
+                const scaled = buildScaledMap(MAP_CATALOG[mk], sk);
+                expect(scaled.schema).toBe(2);
+                expect(scaled.id).toBe(`${mk}-${sk}`);
+                expect(['64', '128', '256']).toContain(String(scaled.size));
+                expect(scaled.rows).toHaveLength(scaled.size);
+
+                // Проверка инвариантов через валидатор
+                const res = validateMapDef(scaled);
+                expect(res.errors, `Ошибки в ${mk}-${sk}: ${res.errors.join(', ')}`).toEqual([]);
+                expect(res.ok).toBe(true);
+
+                // Проверка количества ресурсных точек
+                if (sk === '256') expect(scaled.nodes.length).toBe(5);
+                else if (sk === '512') expect(scaled.nodes.length).toBe(7);
+                else if (sk === '1024') expect(scaled.nodes.length).toBe(9);
+            }
+        }
+    });
+
+    it('setMapSize переключает текущий размер и обновляет конфигурацию', () => {
+        const { setMapSize, currentMapSize } = ctx;
+        expect(currentMapSize).toBeNull();
+
+        setMapSize('256', false);
+        expect(ctx.currentMapSize).toBe('256');
+
+        setMapSize('512', false);
+        expect(ctx.currentMapSize).toBe('512');
+
+        setMapSize('1024', false);
+        expect(ctx.currentMapSize).toBe('1024');
+
+        // Невалидный размер сбрасывается в 256
+        setMapSize('invalid-size', false);
+        expect(ctx.currentMapSize).toBe('256');
+    });
+
+    it('PerlinNoise: детерминированность, диапазон значений и многооктавный FBM', () => {
+        const { PerlinNoise } = ctx;
+        expect(PerlinNoise).toBeDefined();
+
+        const p1 = new PerlinNoise(42);
+        const p2 = new PerlinNoise(42);
+        const p3 = new PerlinNoise(999);
+
+        // Одинаковый сид дает одинаковые значения
+        for (let i = 0; i < 20; i++) {
+            const v1 = p1.noise2D(i * 0.15, i * 0.25);
+            const v2 = p2.noise2D(i * 0.15, i * 0.25);
+            expect(v1).toBe(v2);
+            expect(v1).toBeGreaterThanOrEqual(-1.1);
+            expect(v1).toBeLessThanOrEqual(1.1);
+        }
+
+        // Разные сиды дают разные последовательности
+        let diffCount = 0;
+        for (let i = 1; i <= 20; i++) {
+            const v1 = p1.noise2D(i * 0.73, i * 0.89);
+            const v3 = p3.noise2D(i * 0.73, i * 0.89);
+            if (Math.abs(v1 - v3) > 0.001) diffCount++;
+        }
+        expect(diffCount).toBeGreaterThanOrEqual(15);
+
+        // FBM, Ridge, Billow
+        const fbm = p1.fbm2D(2.5, 3.5, { octaves: 3, scale: 0.5 });
+        expect(fbm).toBeGreaterThanOrEqual(-1.1);
+        expect(fbm).toBeLessThanOrEqual(1.1);
+
+        const ridge = p1.ridge2D(2.5, 3.5, { octaves: 2 });
+        expect(ridge).toBeGreaterThanOrEqual(-0.2);
+        expect(ridge).toBeLessThanOrEqual(1.2);
+
+        const billow = p1.billow2D(2.5, 3.5, { octaves: 2 });
+        expect(billow).toBeGreaterThanOrEqual(0);
+    });
+
+    it('Процедурные карты: разный рельеф при разных сидах и идентичность при одинаковом', () => {
+        const { MAP_CATALOG, buildScaledMap } = ctx;
+        const baseDef = MAP_CATALOG.canyon;
+
+        const mapA1 = buildScaledMap(baseDef, '256', 55555);
+        const mapA2 = buildScaledMap(baseDef, '256', 55555);
+        const mapB  = buildScaledMap(baseDef, '256', 77777);
+
+        // Одинаковый сид -> абсолютно идентичные строки карты
+        expect(mapA1.rows).toEqual(mapA2.rows);
+
+        // Разный сид -> разный рельеф
+        expect(mapA1.rows).not.toEqual(mapB.rows);
+    });
+
+    it('Управление сидом: getMapSeed, setMapSeed, rerollMapSeed', () => {
+        const { getMapSeed, setMapSeed, rerollMapSeed } = ctx;
+
+        setMapSeed(123456, false);
+        expect(getMapSeed()).toBe(123456);
+
+        // Строковый сид из чисел
+        setMapSeed('789012', false);
+        expect(getMapSeed()).toBe(789012);
+
+        // Текстовый сид хэшируется в целое число
+        setMapSeed('my-tactical-seed', false);
+        expect(typeof getMapSeed()).toBe('number');
+        expect(getMapSeed()).toBeGreaterThan(0);
+
+        // Reroll генерирует новый сид
+        const oldSeed = getMapSeed();
+        const newSeed = rerollMapSeed(false);
+        expect(newSeed).toBeDefined();
+        expect(getMapSeed()).toBe(newSeed);
+    });
+
+    it('Биомы Перлина: Лабиринт плотнее Арены по числу стен', () => {
+        const { MAP_CATALOG, buildScaledMap } = ctx;
+        const seed = 31415;
+
+        const arenaMap = buildScaledMap(MAP_CATALOG.arena, '256', seed);
+        const mazeMap = buildScaledMap(MAP_CATALOG.maze, '256', seed);
+
+        const countWalls = (rows) => {
+            let count = 0;
+            for (let r = 1; r < rows.length - 1; r++) {
+                for (let c = 1; c < rows.length - 1; c++) {
+                    if (rows[r][c] === '#') count++;
+                }
+            }
+            return count;
+        };
+
+        const arenaWalls = countWalls(arenaMap.rows);
+        const mazeWalls = countWalls(mazeMap.rows);
+
+        // Лабиринт должен иметь больше стен, чем открытая Арена
+        expect(mazeWalls).toBeGreaterThan(arenaWalls);
     });
 });

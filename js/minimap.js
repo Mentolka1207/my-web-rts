@@ -42,13 +42,17 @@ function updateMinimap() {
 
     // Штабы
     const hqMarkerSize = 7;
-    const pPos = worldToMinimap(playerHQ.mesh.position.x, playerHQ.mesh.position.z);
-    minimapCtx.fillStyle = playerHQ.hp > 0 ? '#00ffcc' : '#555555';
-    minimapCtx.fillRect(pPos.mx - hqMarkerSize * 0.5, pPos.my - hqMarkerSize * 0.5, hqMarkerSize, hqMarkerSize);
+    if (playerHQ && playerHQ.mesh) {
+        const pPos = worldToMinimap(playerHQ.mesh.position.x, playerHQ.mesh.position.z);
+        minimapCtx.fillStyle = playerHQ.hp > 0 ? '#00ffcc' : '#555555';
+        minimapCtx.fillRect(pPos.mx - hqMarkerSize * 0.5, pPos.my - hqMarkerSize * 0.5, hqMarkerSize, hqMarkerSize);
+    }
 
-    const ePos = worldToMinimap(enemyHQ.mesh.position.x, enemyHQ.mesh.position.z);
-    minimapCtx.fillStyle = enemyHQ.hp > 0 ? '#ff3333' : '#555555';
-    minimapCtx.fillRect(ePos.mx - hqMarkerSize * 0.5, ePos.my - hqMarkerSize * 0.5, hqMarkerSize, hqMarkerSize);
+    if (enemyHQ && enemyHQ.mesh) {
+        const ePos = worldToMinimap(enemyHQ.mesh.position.x, enemyHQ.mesh.position.z);
+        minimapCtx.fillStyle = enemyHQ.hp > 0 ? '#ff3333' : '#555555';
+        minimapCtx.fillRect(ePos.mx - hqMarkerSize * 0.5, ePos.my - hqMarkerSize * 0.5, hqMarkerSize, hqMarkerSize);
+    }
 
     // Точки сбора ресурсов
     for (let i = 0; i < resourceNodes.length; i++) {
@@ -132,7 +136,8 @@ function jumpCameraFromMinimapEvent(clientX, clientY) {
     const py = (clientY - rect.top) / rect.height * MINIMAP_PX;
     camPivot.x = (px / MINIMAP_PX) * MAP_WORLD_SIZE - MAP_WORLD_SIZE * 0.5;
     camPivot.z = (py / MINIMAP_PX) * MAP_WORLD_SIZE - MAP_WORLD_SIZE * 0.5;
-    applyCameraTransform();
+    if (typeof clampCameraBounds === 'function') clampCameraBounds();
+    else applyCameraTransform();
 }
 
 minimapCanvas.addEventListener('mousedown', (e) => {

@@ -18,7 +18,7 @@ class FlowFieldGenerator {
         this.totalCells = this.width * this.height;
 
         this.costField = Array(this.height).fill(null).map((_, r) =>
-            Array(this.width).fill(null).map((_, c) => grid[r][c] === 1 ? 255 : 1)
+            Array(this.width).fill(null).map((_, c) => (typeof grid !== 'undefined' && grid[r] && grid[r][c] === 1) ? 255 : 1)
         );
 
         // 2D структуры для обратной совместимости с существующим кодом
@@ -36,6 +36,35 @@ class FlowFieldGenerator {
         // LRU-кэш рассчитанных полей по целевым координатам (до 16 полей)
         this.cache = new Map();
         this.maxCacheSize = 16;
+        this.currentTargetCol = -1;
+        this.currentTargetRow = -1;
+        this.cachedGridRevision = 0;
+        this.pendingTarget = null;
+        this.lastComputeTime = 0;
+    }
+
+    // Изменение размеров и перевыделение буферов Flow Field под новую сетку
+    resize(gridWidth, gridHeight, cellSize) {
+        this.width = gridWidth;
+        this.height = gridHeight;
+        this.cellSize = cellSize;
+        this.totalCells = this.width * this.height;
+
+        this.costField = Array(this.height).fill(null).map((_, r) =>
+            Array(this.width).fill(null).map((_, c) => (typeof grid !== 'undefined' && grid[r] && grid[r][c] === 1) ? 255 : 1)
+        );
+
+        this.integrationField = Array(this.height).fill(null).map(() => Array(this.width).fill(65535));
+        this.flowField = Array(this.height).fill(null).map(() =>
+            Array(this.width).fill(null).map(() => new THREE.Vector2(0, 0))
+        );
+
+        this.integrationFlat = new Uint16Array(this.totalCells);
+        this.flowVectorsX = new Float32Array(this.totalCells);
+        this.flowVectorsY = new Float32Array(this.totalCells);
+        this.queue = new Int32Array(this.totalCells);
+
+        this.cache.clear();
         this.currentTargetCol = -1;
         this.currentTargetRow = -1;
         this.cachedGridRevision = 0;
@@ -152,6 +181,9 @@ class FlowFieldGenerator {
 
     // Обновление целевой точки с проверкой LRU кэша
     updateTarget(targetCol, targetRow, force = false) {
+        targetCol = Math.max(0, Math.min(this.width - 1, targetCol));
+        targetRow = Math.max(0, Math.min(this.height - 1, targetRow));
+
         // 1. Быстрый выход: цель уже рассчитана и проходимость карты не менялась
         if (!force &&
             this.currentTargetCol === targetCol &&

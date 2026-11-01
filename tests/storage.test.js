@@ -22,6 +22,7 @@ function loadStorageContext(initialLocalStorage = {}) {
         currentMapId: 'canyon',
         currentDifficulty: 'normal',
         VALID_MAP_IDS: ['canyon', 'arena', 'maze', 'crossroads'],
+        VALID_MAP_SIZES: ['256', '512', '1024'],
         VALID_DIFFICULTIES: ['easy', 'normal', 'hard']
     });
     ctx.globalThis = ctx;
@@ -63,7 +64,8 @@ describe('Storage Schema v2, валидация и миграция (js/storage.
             shadows: 'not-a-bool',
             language: 'es',
             difficulty: 'nightmare',
-            mapId: 'secret_base'
+            mapId: 'secret_base',
+            mapSize: '9999'
         };
 
         const res = validateAndSanitizeSettings(broken);
@@ -75,6 +77,7 @@ describe('Storage Schema v2, валидация и миграция (js/storage.
         expect(res.language).toBe('ru');    // fallback
         expect(res.difficulty).toBe('normal'); // fallback
         expect(res.mapId).toBe('canyon');   // fallback
+        expect(res.mapSize).toBe('256');    // fallback
     });
 
     it('корректно валидирует и структурирует профиль Profile v2', () => {

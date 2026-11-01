@@ -43,12 +43,31 @@
                 </select>
             </div>
             <div class="menu-config-item field">
+                <label for="map-size-select" data-i18n="MENU_MAP_SIZE_LABEL">Размер:</label>
+                <select id="map-size-select" class="menu-select" onchange="setMapSize(this.value)">
+                    <option value="256" selected data-i18n="MAP_SIZE_256">256×256 (Малая)</option>
+                    <option value="512" data-i18n="MAP_SIZE_512">512×512 (Средняя)</option>
+                    <option value="1024" data-i18n="MAP_SIZE_1024">1024×1024 (Большая)</option>
+                </select>
+            </div>
+            <div class="menu-config-item field">
                 <label for="difficulty-select" data-i18n="MENU_DIFF_LABEL">Сложность:</label>
                 <select id="difficulty-select" class="menu-select" onchange="setDifficulty(this.value)">
                     <option value="easy" data-i18n="DIFF_EASY">Рекрут (Легко)</option>
                     <option value="normal" selected data-i18n="DIFF_NORMAL">Офицер (Норма)</option>
                     <option value="hard" data-i18n="DIFF_HARD">Командир (Сложно)</option>
                 </select>
+            </div>
+            <div class="menu-config-item field">
+                <label for="map-seed-input" data-i18n="MENU_SEED_LABEL">Сид (Seed):</label>
+                <div class="seed-control-group">
+                    <input type="text" id="map-seed-input" class="menu-input seed-input" maxlength="12"
+                        oninput="setMapSeed(this.value, false)" onchange="setMapSeed(this.value, true)"
+                        data-i18n-aria="MENU_SEED_ARIA" aria-label="Сид генерации карты">
+                    <button type="button" id="map-seed-reroll-btn" class="btn-xs seed-reroll-btn"
+                        onclick="rerollMapSeed()" data-i18n-title="MENU_SEED_REROLL_TITLE"
+                        title="Сгенерировать случайный сид" aria-label="Сгенерировать случайный сид">🎲</button>
+                </div>
             </div>
         </div>
 
@@ -185,6 +204,7 @@
                     <button id="dbg-instancing-btn" class="dbg-toggle-btn instanced" type="button" onclick="toggleInstancingMode()"
                         data-i18n-title="DBG_INST_ON_TIP">⚡ GPU-инстансинг: вкл</button>
                     <div class="debug-row"><span data-i18n="DBG_SIM_CORE">Где идёт симуляция:</span> <span id="dbg-sim-mode" class="dbg-val" data-i18n="DBG_SIM_MAIN">главный поток</span></div>
+                    <div class="debug-row"><span data-i18n="DBG_THREADS">Многопоточность (Web Workers):</span> <span id="dbg-threads" class="dbg-val">--</span></div>
                 </div>
 
                 <div class="dbg-section">
@@ -193,7 +213,9 @@
                         <button class="dbg-btn-bench" type="button" onclick="runBenchmark(100)">100</button>
                         <button class="dbg-btn-bench" type="button" onclick="runBenchmark(500)">500</button>
                         <button class="dbg-btn-bench" type="button" onclick="runBenchmark(1000)">1000</button>
-                        <button class="dbg-btn-bench fire" type="button" onclick="runBenchmark(1500)">1500 🔥</button>
+                        <button class="dbg-btn-bench" type="button" onclick="runBenchmark(1500)">1500</button>
+                        <button class="dbg-btn-bench fire" type="button" onclick="runBenchmark(2000, 2000)" title="2000 vs 2000">2000×2000</button>
+                        <button class="dbg-btn-bench fire" type="button" onclick="runBenchmark(5000, 5000)" title="5000 vs 5000">5000×5000 🔥</button>
                     </div>
                     <div class="debug-row">
                         <span><span data-i18n="DBG_BENCH_STATUS">Статус теста:</span> <strong id="dbg-bench-status" class="dbg-val">выкл</strong></span>
@@ -219,6 +241,7 @@
                 <div class="debug-row"><span data-i18n="PERF_FPS">FPS</span> <span id="perf-fps" class="dbg-val">--</span></div>
                 <div class="debug-row"><span data-i18n="PERF_FRAME">Кадр (сред. / макс.)</span> <span id="perf-frame-time" class="dbg-val">-- ms</span></div>
                 <div class="debug-row"><span data-i18n="PERF_UNITS">Юниты (свои / враги)</span> <span id="perf-units" class="dbg-val">0 / 0</span></div>
+                <div class="debug-row"><span data-i18n="PERF_THREADS">Потоки CPU</span> <span id="perf-threads" class="dbg-val">1</span></div>
             </div>
             <div id="touch-mode-panel" style="display:none;">
                 <button id="touch-mode-btn" class="btn-ghost" type="button" onclick="toggleTouchMode()"
@@ -385,6 +408,7 @@
     <script src="js/config.js"></script>
     <script src="js/i18n.js"></script>
     <script src="js/storage.js"></script>
+    <script src="js/perlin.js"></script>
     <script src="js/maps.js"></script>
     <script src="js/prng.js"></script>
     <script src="js/audio.js"></script>

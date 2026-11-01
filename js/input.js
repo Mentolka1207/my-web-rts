@@ -53,16 +53,37 @@ function updateMouseNDC(clientX, clientY) {
 }
 
 function getUnitUnderScreenPoint(clientX, clientY) {
-    updateMouseNDC(clientX, clientY);
-    raycaster.setFromCamera(mouse, camera);
+    let closestUnit = null;
+    let closestDistSq = 36 * 36;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
 
     for (let i = 0; i < units.length; i++) {
         const u = units[i];
         if (u.hp <= 0) continue;
-        const hits = raycaster.intersectObject(u.mesh, true);
-        if (hits.length > 0) return u;
+        _projVec.copy(u.mesh.position);
+        _projVec.y += 0.5;
+        _projVec.project(camera);
+        if (_projVec.z < -1 || _projVec.z > 1) continue;
+
+        const sx = (_projVec.x * 0.5 + 0.5) * w;
+        const sy = (-_projVec.y * 0.5 + 0.5) * h;
+        const dx = sx - clientX;
+        const dy = sy - clientY;
+        const distSq = dx * dx + dy * dy;
+
+        const uType = u.type || 'standard';
+        const stats = DRONE_TYPES[uType];
+        const scale = (stats && stats.scale) ? stats.scale : 1.0;
+        const maxDist = 28 * scale;
+        const maxDistSq = maxDist * maxDist;
+
+        if (distSq < maxDistSq && distSq < closestDistSq) {
+            closestDistSq = distSq;
+            closestUnit = u;
+        }
     }
-    return null;
+    return closestUnit;
 }
 
 function updateDragSelection(currentX, currentY, additive) {
@@ -94,18 +115,42 @@ function getEnemyUnderScreenPoint(clientX, clientY) {
     updateMouseNDC(clientX, clientY);
     raycaster.setFromCamera(mouse, camera);
 
-    if (typeof enemyHQ !== 'undefined' && enemyHQ.hp > 0) {
+    if (typeof enemyHQ !== 'undefined' && enemyHQ && enemyHQ.hp > 0 && enemyHQ.mesh) {
         const hits = raycaster.intersectObject(enemyHQ.mesh, true);
         if (hits.length > 0) return enemyHQ;
     }
 
+    let closestEnemy = null;
+    let closestDistSq = 40 * 40;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
     for (let i = 0; i < enemies.length; i++) {
         const e = enemies[i];
         if (e.hp <= 0) continue;
-        const hits = raycaster.intersectObject(e.mesh, true);
-        if (hits.length > 0) return e;
+        _projVec.copy(e.mesh.position);
+        _projVec.y += 0.5;
+        _projVec.project(camera);
+        if (_projVec.z < -1 || _projVec.z > 1) continue;
+
+        const sx = (_projVec.x * 0.5 + 0.5) * w;
+        const sy = (-_projVec.y * 0.5 + 0.5) * h;
+        const dx = sx - clientX;
+        const dy = sy - clientY;
+        const distSq = dx * dx + dy * dy;
+
+        const eType = e.type || 'standard';
+        const stats = ENEMY_TYPES[eType];
+        const scale = (stats && stats.scale) ? stats.scale : (eType === 'boss' ? 2.2 : 1.0);
+        const maxDist = 30 * scale;
+        const maxDistSq = maxDist * maxDist;
+
+        if (distSq < maxDistSq && distSq < closestDistSq) {
+            closestDistSq = distSq;
+            closestEnemy = e;
+        }
     }
-    return null;
+    return closestEnemy;
 }
 
 function issueMoveOrderAtPoint(clientX, clientY) {
@@ -286,6 +331,10 @@ window.addEventListener('mousemove', (e) => {
     if (isDragging) updateDragSelection(e.clientX, e.clientY, e.shiftKey);
 });
 
+let lastUnitClickTime = 0;
+let lastClickedUnit = null;
+const DOUBLE_CLICK_TIME_MS = 360;
+
 window.addEventListener('mouseup', (e) => {
     // Отпускание колёсика мыши (MMB)
     if (e.button === 1 && isMiddlePanning) {
@@ -300,16 +349,34 @@ window.addEventListener('mouseup', (e) => {
         selectionBoxEl.style.display = 'none';
         if (!isDragging && !e.target.closest(UI_SELECTOR) && !e.target.closest('button, a')) {
             const clickedUnit = getUnitUnderScreenPoint(e.clientX, e.clientY);
-            if (!e.shiftKey) {
+            const now = performance.now();
+            const isDoubleClick = (now - lastUnitClickTime < DOUBLE_CLICK_TIME_MS) && (lastClickedUnit && lastClickedUnit === clickedUnit);
+            lastUnitClickTime = now;
+            lastClickedUnit = clickedUnit;
+
+            if (isDoubleClick && clickedUnit) {
+                // Двойной клик — выбор всех союзников того же типа на экране
+                const targetType = clickedUnit.type || 'standard';
                 for (let i = 0; i < units.length; i++) {
-                    units[i].selected = false;
-                    if (units[i].mesh.userData.selectionRing) units[i].mesh.userData.selectionRing.visible = false;
+                    const u = units[i];
+                    if (u.hp > 0 && (u.type || 'standard') === targetType) {
+                        u.selected = true;
+                        if (u.mesh.userData.selectionRing) u.mesh.userData.selectionRing.visible = true;
+                    }
                 }
-            }
-            if (clickedUnit) {
-                clickedUnit.selected = true;
-                if (clickedUnit.mesh.userData.selectionRing) clickedUnit.mesh.userData.selectionRing.visible = true;
                 if (typeof playSelectSound === 'function') playSelectSound();
+            } else {
+                if (!e.shiftKey) {
+                    for (let i = 0; i < units.length; i++) {
+                        units[i].selected = false;
+                        if (units[i].mesh.userData.selectionRing) units[i].mesh.userData.selectionRing.visible = false;
+                    }
+                }
+                if (clickedUnit) {
+                    clickedUnit.selected = true;
+                    if (clickedUnit.mesh.userData.selectionRing) clickedUnit.mesh.userData.selectionRing.visible = true;
+                    if (typeof playSelectSound === 'function') playSelectSound();
+                }
             }
             if (typeof updateAbilityUI === 'function') updateAbilityUI();
         } else if (isDragging) {
@@ -346,16 +413,34 @@ window.addEventListener('wheel', (e) => {
     applyCameraTransform();
 }, { passive: false });
 
-// --- 2. СЕНСОРНОЕ УПРАВЛЕНИЕ (TOUCH & SENSOR) ---
+let lastTapTime = 0;
+let lastTappedUnit = null;
+
 function handleTap(clientX, clientY) {
     const tappedUnit = getUnitUnderScreenPoint(clientX, clientY);
     if (tappedUnit) {
-        for (let i = 0; i < units.length; i++) {
-            units[i].selected = false;
-            if (units[i].mesh.userData.selectionRing) units[i].mesh.userData.selectionRing.visible = false;
+        const now = performance.now();
+        const isDoubleTap = (now - lastTapTime < 380) && (lastTappedUnit && lastTappedUnit === tappedUnit);
+        lastTapTime = now;
+        lastTappedUnit = tappedUnit;
+
+        if (isDoubleTap) {
+            const targetType = tappedUnit.type || 'standard';
+            for (let i = 0; i < units.length; i++) {
+                const u = units[i];
+                if (u.hp > 0 && (u.type || 'standard') === targetType) {
+                    u.selected = true;
+                    if (u.mesh.userData.selectionRing) u.mesh.userData.selectionRing.visible = true;
+                }
+            }
+        } else {
+            for (let i = 0; i < units.length; i++) {
+                units[i].selected = false;
+                if (units[i].mesh.userData.selectionRing) units[i].mesh.userData.selectionRing.visible = false;
+            }
+            tappedUnit.selected = true;
+            if (tappedUnit.mesh.userData.selectionRing) tappedUnit.mesh.userData.selectionRing.visible = true;
         }
-        tappedUnit.selected = true;
-        if (tappedUnit.mesh.userData.selectionRing) tappedUnit.mesh.userData.selectionRing.visible = true;
         if (typeof playSelectSound === 'function') playSelectSound();
         if (typeof updateAbilityUI === 'function') updateAbilityUI();
         return;
@@ -477,6 +562,48 @@ window.addEventListener('touchcancel', () => {
     selectionBoxEl.style.display = 'none';
 }, { passive: true });
 
+// Вспомогательные функции центрирования камеры и выбора армии
+function centerCameraOnSelection() {
+    let sumX = 0, sumZ = 0, count = 0;
+    for (let i = 0; i < units.length; i++) {
+        if (units[i].selected && units[i].hp > 0) {
+            sumX += units[i].mesh.position.x;
+            sumZ += units[i].mesh.position.z;
+            count++;
+        }
+    }
+    if (count > 0) {
+        camPivot.x = sumX / count;
+        camPivot.z = sumZ / count;
+        clampCameraBounds();
+    }
+}
+
+function centerCameraOnPlayerHQ() {
+    if (typeof playerHQ !== 'undefined' && playerHQ && playerHQ.hp > 0 && playerHQ.mesh) {
+        camPivot.x = playerHQ.mesh.position.x;
+        camPivot.z = playerHQ.mesh.position.z;
+        clampCameraBounds();
+    } else if (typeof BASE_COL !== 'undefined' && typeof gridToWorld === 'function') {
+        const pSpawnPos = gridToWorld(BASE_COL, BASE_ROW);
+        camPivot.x = pSpawnPos.x;
+        camPivot.z = pSpawnPos.z;
+        clampCameraBounds();
+    }
+}
+
+function selectAllAlliedUnits() {
+    for (let i = 0; i < units.length; i++) {
+        const u = units[i];
+        if (u.hp > 0) {
+            u.selected = true;
+            if (u.mesh.userData.selectionRing) u.mesh.userData.selectionRing.visible = true;
+        }
+    }
+    if (typeof playSelectSound === 'function') playSelectSound();
+    if (typeof updateAbilityUI === 'function') updateAbilityUI();
+}
+
 // --- 3. КЛАВИАТУРА И ДВИЖЕНИЕ КАМЕРЫ (WASD / СТРЕЛКИ) ---
 const keys = {};
 window.addEventListener('keydown', (e) => {
@@ -485,6 +612,24 @@ window.addEventListener('keydown', (e) => {
     // Пауза по клавише Esc или P
     if (e.code === 'KeyP' || e.code === 'Escape') {
         if (typeof togglePause === 'function') togglePause();
+        return;
+    }
+
+    // Выбор всей армии: Ctrl+A / Cmd+A
+    if (e.code === 'KeyA' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        selectAllAlliedUnits();
+        return;
+    }
+
+    // Центрирование камеры: Space на армию, H на базу игрока
+    if (e.code === 'Space') {
+        e.preventDefault();
+        centerCameraOnSelection();
+        return;
+    }
+    if (e.code === 'KeyH') {
+        centerCameraOnPlayerHQ();
         return;
     }
 
@@ -519,7 +664,10 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => keys[e.code] = false);
 
 function updateCamera(delta) {
-    const camSpeed = 25 * delta * (camZoomDist / BASE_CAM_DIST);
+    const isSprint = keys['ShiftLeft'] || keys['ShiftRight'];
+    const sprintMul = isSprint ? 2.2 : 1.0;
+    const baseSpeed = Math.max(32, MAP_WORLD_SIZE * 0.16);
+    const camSpeed = baseSpeed * delta * (camZoomDist / BASE_CAM_DIST) * sprintMul;
     if (keys['KeyW'] || keys['ArrowUp']) { camPivot.z -= camSpeed; }
     if (keys['KeyS'] || keys['ArrowDown']) { camPivot.z += camSpeed; }
     if (keys['KeyA'] || keys['ArrowLeft']) { camPivot.x -= camSpeed; }

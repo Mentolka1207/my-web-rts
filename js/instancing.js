@@ -5,11 +5,11 @@
 // и инстансированных колец выделения / лазеров.
 // =============================================================================
 
-const MAX_INSTANCES_PER_TYPE = 2000;
-const MAX_HEALTHBAR_INSTANCES = 4000;
-const MAX_INSTANCED_LASERS = 60;
+const MAX_INSTANCES_PER_TYPE = 6000;
+const MAX_HEALTHBAR_INSTANCES = 12000;
+const MAX_INSTANCED_LASERS = 120;
 
-// Утилита объединения геометрий (Zero-Dependency BufferGeometry Merger)
+// Утилита объединения геометрий (Zero-Dependency BufferGeometry Merger с поддержкой UV и Vertex Colors)
 function mergeGeometries(list) {
     let vertexCount = 0;
     let indexCount = 0;
@@ -21,7 +21,11 @@ function mergeGeometries(list) {
         if (!geo.index) {
             geo = geo.toNonIndexed();
         }
-        processed.push({ geo: geo, matrix: item.matrix || new THREE.Matrix4() });
+        processed.push({
+            geo: geo,
+            matrix: item.matrix || new THREE.Matrix4(),
+            color: item.color || null
+        });
         vertexCount += geo.attributes.position.count;
         indexCount += geo.index ? geo.index.count : 0;
     }
@@ -29,6 +33,8 @@ function mergeGeometries(list) {
     const merged = new THREE.BufferGeometry();
     const positions = new Float32Array(vertexCount * 3);
     const normals = new Float32Array(vertexCount * 3);
+    const uvs = new Float32Array(vertexCount * 2);
+    const colors = new Float32Array(vertexCount * 3);
     const indices = new Uint32Array(indexCount);
     let vOffset = 0;
     let iOffset = 0;
@@ -43,7 +49,10 @@ function mergeGeometries(list) {
         normalMatrix.getNormalMatrix(mat);
         const posAttr = geo.attributes.position;
         const normAttr = geo.attributes.normal;
+        const uvAttr = geo.attributes.uv;
+        const colAttr = geo.attributes.color;
         const count = posAttr.count;
+        const defaultCol = item.color || { r: 1, g: 1, b: 1 };
 
         for (let i = 0; i < count; i++) {
             v.fromBufferAttribute(posAttr, i).applyMatrix4(mat);
@@ -56,6 +65,24 @@ function mergeGeometries(list) {
                 normals[(vOffset + i) * 3] = n.x;
                 normals[(vOffset + i) * 3 + 1] = n.y;
                 normals[(vOffset + i) * 3 + 2] = n.z;
+            }
+
+            if (uvAttr) {
+                uvs[(vOffset + i) * 2] = uvAttr.getX(i);
+                uvs[(vOffset + i) * 2 + 1] = uvAttr.getY(i);
+            } else {
+                uvs[(vOffset + i) * 2] = 0;
+                uvs[(vOffset + i) * 2 + 1] = 0;
+            }
+
+            if (colAttr) {
+                colors[(vOffset + i) * 3] = colAttr.getX(i);
+                colors[(vOffset + i) * 3 + 1] = colAttr.getY(i);
+                colors[(vOffset + i) * 3 + 2] = colAttr.getZ(i);
+            } else {
+                colors[(vOffset + i) * 3] = defaultCol.r;
+                colors[(vOffset + i) * 3 + 1] = defaultCol.g;
+                colors[(vOffset + i) * 3 + 2] = defaultCol.b;
             }
         }
 
@@ -70,49 +97,66 @@ function mergeGeometries(list) {
 
     merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    merged.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     if (indexCount > 0) {
         merged.setIndex(new THREE.BufferAttribute(indices, 1));
     }
     return merged;
 }
 
-// 1. Построение композитных PBR геометрий
+// 1. Построение композитных PBR геометрий с передачей UV и вершинных цветов деталей
 function buildCompositeDroneGeo() {
     const parts = [
-        { geometry: new THREE.BoxGeometry(0.46, 0.14, 0.46), matrix: new THREE.Matrix4().makeTranslation(0, 0.15, 0) },
-        { geometry: new THREE.BoxGeometry(0.2, 0.06, 0.07), matrix: new THREE.Matrix4().makeTranslation(0, 0.17, 0.23) },
-        { geometry: new THREE.CylinderGeometry(0.06, 0.08, 0.12, 8), matrix: new THREE.Matrix4().makeTranslation(0, 0.06, -0.2) },
-        { geometry: new THREE.BoxGeometry(0.06, 0.03, 0.78), matrix: new THREE.Matrix4().makeRotationY(Math.PI / 4).setPosition(0, 0.16, 0) },
-        { geometry: new THREE.BoxGeometry(0.06, 0.03, 0.78), matrix: new THREE.Matrix4().makeRotationY(-Math.PI / 4).setPosition(0, 0.16, 0) },
-        { geometry: new THREE.CylinderGeometry(0.02, 0.02, 0.22, 6).rotateX(Math.PI / 2), matrix: new THREE.Matrix4().makeTranslation(-0.15, 0.07, 0.15) },
-        { geometry: new THREE.CylinderGeometry(0.02, 0.02, 0.22, 6).rotateX(Math.PI / 2), matrix: new THREE.Matrix4().makeTranslation(0.15, 0.07, 0.15) }
+        // Основной корпус — белый цвет, чтобы полностью отображать процедурную PBR текстуру
+        { geometry: new THREE.BoxGeometry(0.46, 0.14, 0.46), matrix: new THREE.Matrix4().makeTranslation(0, 0.15, 0), color: { r: 1, g: 1, b: 1 } },
+        // Сенсорный визор — неон
+        { geometry: new THREE.BoxGeometry(0.2, 0.06, 0.07), matrix: new THREE.Matrix4().makeTranslation(0, 0.17, 0.23), color: { r: 0.2, g: 1.0, b: 0.9 } },
+        // Сопло двигателя — темный металл
+        { geometry: new THREE.CylinderGeometry(0.06, 0.08, 0.12, 8), matrix: new THREE.Matrix4().makeTranslation(0, 0.06, -0.2), color: { r: 0.3, g: 0.32, b: 0.36 } },
+        // Лучи рамы — графитовый каркас
+        { geometry: new THREE.BoxGeometry(0.06, 0.03, 0.78), matrix: new THREE.Matrix4().makeRotationY(Math.PI / 4).setPosition(0, 0.16, 0), color: { r: 0.4, g: 0.45, b: 0.5 } },
+        { geometry: new THREE.BoxGeometry(0.06, 0.03, 0.78), matrix: new THREE.Matrix4().makeRotationY(-Math.PI / 4).setPosition(0, 0.16, 0), color: { r: 0.4, g: 0.45, b: 0.5 } },
+        // Пушки — вороненая сталь
+        { geometry: new THREE.CylinderGeometry(0.02, 0.02, 0.22, 6).rotateX(Math.PI / 2), matrix: new THREE.Matrix4().makeTranslation(-0.15, 0.07, 0.15), color: { r: 0.35, g: 0.38, b: 0.42 } },
+        { geometry: new THREE.CylinderGeometry(0.02, 0.02, 0.22, 6).rotateX(Math.PI / 2), matrix: new THREE.Matrix4().makeTranslation(0.15, 0.07, 0.15), color: { r: 0.35, g: 0.38, b: 0.42 } }
     ];
     return mergeGeometries(parts);
 }
 
 function buildCompositeScoutGeo() {
     const parts = [
-        { geometry: new THREE.BoxGeometry(0.26, 0.1, 0.65), matrix: new THREE.Matrix4().makeTranslation(0, 0.12, 0) },
-        { geometry: new THREE.BoxGeometry(0.72, 0.02, 0.24), matrix: new THREE.Matrix4().makeTranslation(0, 0.11, -0.05) },
-        { geometry: new THREE.BoxGeometry(0.02, 0.14, 0.16), matrix: new THREE.Matrix4().makeTranslation(-0.28, 0.17, -0.15) },
-        { geometry: new THREE.BoxGeometry(0.02, 0.14, 0.16), matrix: new THREE.Matrix4().makeTranslation(0.28, 0.17, -0.15) },
-        { geometry: new THREE.BoxGeometry(0.18, 0.05, 0.12), matrix: new THREE.Matrix4().makeTranslation(0, 0.17, 0.2) },
-        { geometry: new THREE.CylinderGeometry(0.04, 0.05, 0.14, 6), matrix: new THREE.Matrix4().makeTranslation(-0.08, 0.1, -0.32) },
-        { geometry: new THREE.CylinderGeometry(0.04, 0.05, 0.14, 6), matrix: new THREE.Matrix4().makeTranslation(0.08, 0.1, -0.32) }
+        // Фюзеляж разведчика
+        { geometry: new THREE.BoxGeometry(0.26, 0.1, 0.65), matrix: new THREE.Matrix4().makeTranslation(0, 0.12, 0), color: { r: 1, g: 1, b: 1 } },
+        // Крылья
+        { geometry: new THREE.BoxGeometry(0.72, 0.02, 0.24), matrix: new THREE.Matrix4().makeTranslation(0, 0.11, -0.05), color: { r: 0.85, g: 0.9, b: 1.0 } },
+        // Кили
+        { geometry: new THREE.BoxGeometry(0.02, 0.14, 0.16), matrix: new THREE.Matrix4().makeTranslation(-0.28, 0.17, -0.15), color: { r: 0.4, g: 0.45, b: 0.5 } },
+        { geometry: new THREE.BoxGeometry(0.02, 0.14, 0.16), matrix: new THREE.Matrix4().makeTranslation(0.28, 0.17, -0.15), color: { r: 0.4, g: 0.45, b: 0.5 } },
+        // Визор кабины
+        { geometry: new THREE.BoxGeometry(0.18, 0.05, 0.12), matrix: new THREE.Matrix4().makeTranslation(0, 0.17, 0.2), color: { r: 0.2, g: 1.0, b: 0.9 } },
+        // Сдвоенные микро-дюзы
+        { geometry: new THREE.CylinderGeometry(0.04, 0.05, 0.14, 6), matrix: new THREE.Matrix4().makeTranslation(-0.08, 0.1, -0.32), color: { r: 0.3, g: 0.32, b: 0.36 } },
+        { geometry: new THREE.CylinderGeometry(0.04, 0.05, 0.14, 6), matrix: new THREE.Matrix4().makeTranslation(0.08, 0.1, -0.32), color: { r: 0.3, g: 0.32, b: 0.36 } }
     ];
     return mergeGeometries(parts);
 }
 
 function buildCompositeTankGeo() {
     const parts = [
-        { geometry: new THREE.BoxGeometry(0.72, 0.22, 0.82), matrix: new THREE.Matrix4().makeTranslation(0, 0.2, 0) },
-        { geometry: new THREE.BoxGeometry(0.14, 0.18, 0.9), matrix: new THREE.Matrix4().makeTranslation(-0.43, 0.18, 0) },
-        { geometry: new THREE.BoxGeometry(0.14, 0.18, 0.9), matrix: new THREE.Matrix4().makeTranslation(0.43, 0.18, 0) },
-        { geometry: new THREE.CylinderGeometry(0.24, 0.28, 0.12, 6), matrix: new THREE.Matrix4().makeTranslation(0, 0.35, 0) },
-        { geometry: new THREE.CylinderGeometry(0.04, 0.05, 0.55, 8).rotateX(Math.PI / 2), matrix: new THREE.Matrix4().makeTranslation(-0.08, 0.36, 0.4) },
-        { geometry: new THREE.CylinderGeometry(0.04, 0.05, 0.55, 8).rotateX(Math.PI / 2), matrix: new THREE.Matrix4().makeTranslation(0.08, 0.36, 0.4) },
-        { geometry: new THREE.BoxGeometry(0.1, 0.08, 0.12), matrix: new THREE.Matrix4().makeTranslation(-0.08, 0.36, 0.68) },
-        { geometry: new THREE.BoxGeometry(0.1, 0.08, 0.12), matrix: new THREE.Matrix4().makeTranslation(0.08, 0.36, 0.68) }
+        // Бронекорпус танка — белый цвет под текстуру
+        { geometry: new THREE.BoxGeometry(0.72, 0.22, 0.82), matrix: new THREE.Matrix4().makeTranslation(0, 0.2, 0), color: { r: 1, g: 1, b: 1 } },
+        // Бронеюбки
+        { geometry: new THREE.BoxGeometry(0.14, 0.18, 0.9), matrix: new THREE.Matrix4().makeTranslation(-0.43, 0.18, 0), color: { r: 0.5, g: 0.55, b: 0.6 } },
+        { geometry: new THREE.BoxGeometry(0.14, 0.18, 0.9), matrix: new THREE.Matrix4().makeTranslation(0.43, 0.18, 0), color: { r: 0.5, g: 0.55, b: 0.6 } },
+        // Башня
+        { geometry: new THREE.CylinderGeometry(0.24, 0.28, 0.12, 6), matrix: new THREE.Matrix4().makeTranslation(0, 0.35, 0), color: { r: 0.9, g: 0.95, b: 1.0 } },
+        // Осадные орудия
+        { geometry: new THREE.CylinderGeometry(0.04, 0.05, 0.55, 8).rotateX(Math.PI / 2), matrix: new THREE.Matrix4().makeTranslation(-0.08, 0.36, 0.4), color: { r: 0.35, g: 0.38, b: 0.42 } },
+        { geometry: new THREE.CylinderGeometry(0.04, 0.05, 0.55, 8).rotateX(Math.PI / 2), matrix: new THREE.Matrix4().makeTranslation(0.08, 0.36, 0.4), color: { r: 0.35, g: 0.38, b: 0.42 } },
+        // Дульные тормоза
+        { geometry: new THREE.BoxGeometry(0.1, 0.08, 0.12), matrix: new THREE.Matrix4().makeTranslation(-0.08, 0.36, 0.68), color: { r: 0.25, g: 0.28, b: 0.32 } },
+        { geometry: new THREE.BoxGeometry(0.1, 0.08, 0.12), matrix: new THREE.Matrix4().makeTranslation(0.08, 0.36, 0.68), color: { r: 0.25, g: 0.28, b: 0.32 } }
     ];
     return mergeGeometries(parts);
 }

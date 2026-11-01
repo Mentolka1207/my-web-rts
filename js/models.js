@@ -30,6 +30,23 @@ tankBarrelGeo.rotateX(Math.PI / 2);
 const tankMuzzleGeo = new THREE.BoxGeometry(0.1, 0.08, 0.12);
 const tankHoverGeo = new THREE.CylinderGeometry(0.12, 0.14, 0.1, 8);
 
+// Инициализация дефолтных вершинных цветов для совместимости с vertexColors: true
+function ensureGeometryColors(geo, r = 1, g = 1, b = 1) {
+    if (!geo.attributes.color) {
+        const count = geo.attributes.position.count;
+        const colors = new Float32Array(count * 3);
+        for (let i = 0; i < count; i++) {
+            colors[i * 3] = r;
+            colors[i * 3 + 1] = g;
+            colors[i * 3 + 2] = b;
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    }
+}
+ensureGeometryColors(droneBodyGeo);
+ensureGeometryColors(scoutHullGeo);
+ensureGeometryColors(tankHullGeo);
+
 // Индикаторы и щиты
 const droneSelectionRingGeo = new THREE.RingGeometry(0.5, 0.56, 20);
 droneSelectionRingGeo.rotateX(-Math.PI / 2);
@@ -101,14 +118,199 @@ const hqStaticBeaconsGeo = (() => {
     return mergeBufferGeometries(items);
 })();
 
+// --- ПРОЦЕДУРНЫЕ PBR ТЕКСТУРЫ ДРОНОВ (Zero Assets) ---
+function createDroneAlbedoTexture(isAlly) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    // Базовый титановый корпус фракции
+    ctx.fillStyle = isAlly ? '#0d4a94' : '#941218';
+    ctx.fillRect(0, 0, 256, 256);
+
+    // Модульные бронепанели (4 квадранта)
+    for (let py = 0; py < 2; py++) {
+        for (let px = 0; px < 2; px++) {
+            const ox = px * 128, oy = py * 128;
+            ctx.fillStyle = isAlly
+                ? (((px + py) % 2 === 0) ? '#1056aa' : '#0a3d7d')
+                : (((px + py) % 2 === 0) ? '#aa161e' : '#7d0d12');
+            ctx.fillRect(ox + 3, oy + 3, 122, 122);
+
+            // Кромка панели
+            ctx.strokeStyle = isAlly ? '#1c75e8' : '#e8232f';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(ox + 4, oy + 4, 120, 120);
+
+            // Монтажные заклепки / болты на углах
+            const bolts = [[10, 10], [118, 10], [10, 118], [118, 118]];
+            for (let b = 0; b < bolts.length; b++) {
+                ctx.fillStyle = '#111622';
+                ctx.beginPath(); ctx.arc(ox + bolts[b][0], oy + bolts[b][1], 2.5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#64748b';
+                ctx.beginPath(); ctx.arc(ox + bolts[b][0], oy + bolts[b][1], 1.2, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+    }
+
+    // Нано-композитная сетка
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let y = 8; y < 256; y += 12) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y); ctx.stroke();
+    }
+    for (let x = 8; x < 256; x += 12) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 256); ctx.stroke();
+    }
+
+    // Тактические кибер-полосы и шевроны
+    ctx.strokeStyle = isAlly ? 'rgba(0, 255, 204, 0.85)' : 'rgba(255, 68, 68, 0.85)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(32, 128); ctx.lineTo(128, 64); ctx.lineTo(224, 128);
+    ctx.stroke();
+
+    ctx.fillStyle = isAlly ? '#00ffcc' : '#ff4444';
+    ctx.beginPath();
+    ctx.arc(128, 64, 4, 0, Math.PI * 2); ctx.fill();
+
+    // Разделительные швы между бронелистами
+    ctx.strokeStyle = '#05070d';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, 128); ctx.lineTo(256, 128);
+    ctx.moveTo(128, 0); ctx.lineTo(128, 256);
+    ctx.stroke();
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+}
+
+function createDroneBumpTexture() {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, 256, 256);
+
+    ctx.strokeStyle = '#181818';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, 128); ctx.lineTo(256, 128);
+    ctx.moveTo(128, 0); ctx.lineTo(128, 256);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#383838';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(4, 4, 120, 120);
+    ctx.strokeRect(132, 4, 120, 120);
+    ctx.strokeRect(4, 132, 120, 120);
+    ctx.strokeRect(132, 132, 120, 120);
+
+    const bolts = [
+        [10, 10], [118, 10], [10, 118], [118, 118],
+        [138, 10], [246, 10], [138, 118], [246, 118],
+        [10, 138], [118, 138], [10, 246], [118, 246],
+        [138, 138], [246, 138], [138, 246], [246, 246]
+    ];
+    ctx.fillStyle = '#ffffff';
+    for (let b = 0; b < bolts.length; b++) {
+        ctx.beginPath(); ctx.arc(bolts[b][0], bolts[b][1], 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+}
+
+function createDroneRoughnessTexture() {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(0, 0, 256, 256);
+
+    ctx.strokeStyle = '#999999';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, 128); ctx.lineTo(256, 128);
+    ctx.moveTo(128, 0); ctx.lineTo(128, 256);
+    ctx.stroke();
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+}
+
+function createDroneEmissiveTexture(isAlly) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, 256, 256);
+
+    ctx.strokeStyle = isAlly ? '#00ffcc' : '#ff3344';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(32, 128); ctx.lineTo(128, 64); ctx.lineTo(224, 128);
+    ctx.stroke();
+
+    ctx.fillStyle = isAlly ? '#00ffcc' : '#ff3344';
+    ctx.beginPath();
+    ctx.arc(128, 64, 4, 0, Math.PI * 2); ctx.fill();
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+}
+
+const allyDroneTex = createDroneAlbedoTexture(true);
+const enemyDroneTex = createDroneAlbedoTexture(false);
+const droneBumpTex = createDroneBumpTexture();
+const droneRoughnessTex = createDroneRoughnessTexture();
+const allyDroneEmissiveTex = createDroneEmissiveTexture(true);
+const enemyDroneEmissiveTex = createDroneEmissiveTexture(false);
+
 // --- МАТЕРИАЛЫ ---
 const allyBodyMat = new THREE.MeshStandardMaterial({
-    color: 0x0a6cd8, metalness: 0.85, roughness: 0.18, emissive: 0x00d4ff, emissiveIntensity: 0.28
+    color: 0xffffff,
+    map: allyDroneTex,
+    bumpMap: droneBumpTex,
+    bumpScale: 0.04,
+    roughnessMap: droneRoughnessTex,
+    roughness: 0.28,
+    metalness: 0.82,
+    emissiveMap: allyDroneEmissiveTex,
+    emissive: 0x00d4ff,
+    emissiveIntensity: 0.4,
+    vertexColors: true
 });
 const enemyBodyMat = new THREE.MeshStandardMaterial({
-    color: 0xcc2222, metalness: 0.85, roughness: 0.18, emissive: 0xff3344, emissiveIntensity: 0.28
+    color: 0xffffff,
+    map: enemyDroneTex,
+    bumpMap: droneBumpTex,
+    bumpScale: 0.04,
+    roughnessMap: droneRoughnessTex,
+    roughness: 0.28,
+    metalness: 0.82,
+    emissiveMap: enemyDroneEmissiveTex,
+    emissive: 0xff3344,
+    emissiveIntensity: 0.4,
+    vertexColors: true
 });
-const frameMat = new THREE.MeshStandardMaterial({ color: 0x141822, metalness: 0.9, roughness: 0.2 });
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x141822, metalness: 0.9, roughness: 0.25 });
 const allyRotorMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, metalness: 0.3, roughness: 0.4 });
 const enemyRotorMat = new THREE.MeshStandardMaterial({ color: 0xff3333, metalness: 0.3, roughness: 0.4 });
 const allyLedMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
@@ -123,7 +325,16 @@ const droneShieldMat = new THREE.MeshBasicMaterial({ color: 0x00d4ff, transparen
 const siegeRingMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false });
 
 const bossHullMat = new THREE.MeshStandardMaterial({
-    color: 0x180914, metalness: 0.85, roughness: 0.25, emissive: 0x660018, emissiveIntensity: 0.4
+    color: 0xffffff,
+    map: enemyDroneTex,
+    bumpMap: droneBumpTex,
+    bumpScale: 0.06,
+    roughnessMap: droneRoughnessTex,
+    roughness: 0.35,
+    metalness: 0.85,
+    emissiveMap: enemyDroneEmissiveTex,
+    emissive: 0x660018,
+    emissiveIntensity: 0.45
 });
 const bossCoreMat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
 const bossShieldMat = new THREE.MeshBasicMaterial({ color: 0x00d4ff, transparent: true, opacity: 0.35, wireframe: true, depthWrite: false });

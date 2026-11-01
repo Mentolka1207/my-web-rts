@@ -10,6 +10,7 @@ const STORAGE_KEY_SETTINGS = 'rts_neo_settings_v2';
 const STORAGE_KEY_PROFILE = 'rts_neo_profile_v2';
 
 const VALID_MAP_IDS = ['canyon', 'arena', 'maze', 'crossroads'];
+const VALID_MAP_SIZES = ['256', '512', '1024'];
 const VALID_DIFFICULTIES = ['easy', 'normal', 'hard'];
 const VALID_LANGUAGES = ['ru', 'en'];
 
@@ -42,7 +43,8 @@ const DEFAULT_SETTINGS = {
     shadows: true,
     language: 'ru',
     difficulty: 'normal',
-    mapId: 'canyon'
+    mapId: 'canyon',
+    mapSize: '256'
 };
 
 const DEFAULT_PROFILE = {
@@ -114,7 +116,8 @@ function validateAndSanitizeSettings(raw) {
         shadows: typeof raw.shadows === 'boolean' ? raw.shadows : true,
         language: VALID_LANGUAGES.includes(raw.language) ? raw.language : 'ru',
         difficulty: VALID_DIFFICULTIES.includes(raw.difficulty) ? raw.difficulty : 'normal',
-        mapId: VALID_MAP_IDS.includes(raw.mapId) ? raw.mapId : 'canyon'
+        mapId: VALID_MAP_IDS.includes(raw.mapId) ? raw.mapId : 'canyon',
+        mapSize: (typeof VALID_MAP_SIZES !== 'undefined' && VALID_MAP_SIZES.includes(raw.mapSize)) ? raw.mapSize : '256'
     };
 }
 
@@ -249,6 +252,10 @@ function loadSettingsFromStorage() {
 
     if (typeof selectMap === 'function') {
         selectMap(playerSettings.mapId, false);
+    }
+
+    if (typeof setMapSize === 'function') {
+        setMapSize(playerSettings.mapSize || '256', false);
     }
 
     return playerSettings;

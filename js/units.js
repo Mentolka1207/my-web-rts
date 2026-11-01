@@ -333,6 +333,24 @@ function triggerAbilityForSelected(abilityType) {
 
 // Инициализация стартовых юнитов
 function initStartingUnits() {
-    createUnit(2, 2); createUnit(2, 3); createUnit(3, 2); createUnit(3, 3); createUnit(4, 2);
-    createEnemy(12, 12, 'standard'); createEnemy(14, 12, 'scout'); createEnemy(13, 14, 'standard');
+    const bCol = (typeof BASE_COL !== 'undefined') ? BASE_COL : 2;
+    const bRow = (typeof BASE_ROW !== 'undefined') ? BASE_ROW : 2;
+    for (let i = 0; i < 5; i++) {
+        const spot = findFreeCellNear(bCol, bRow);
+        createUnit(spot.col, spot.row, 'standard');
+    }
+
+    const midCol = (typeof GRID_SIZE !== 'undefined') ? Math.floor(GRID_SIZE * 0.5) : 11;
+    const midRow = (typeof GRID_SIZE !== 'undefined') ? Math.floor(GRID_SIZE * 0.5) : 11;
+    const s1 = findFreeCellNear(midCol, midRow);
+    const p1 = (typeof gridToWorld === 'function') ? gridToWorld(s1.col, s1.row) : { x: 0, z: 0 };
+    createEnemy(p1.x, p1.z, 'standard');
+
+    const s2 = findFreeCellNear(midCol + 1, midRow);
+    const p2 = (typeof gridToWorld === 'function') ? gridToWorld(s2.col, s2.row) : { x: 2, z: 0 };
+    createEnemy(p2.x, p2.z, 'scout');
+
+    const s3 = findFreeCellNear(midCol, midRow + 1);
+    const p3 = (typeof gridToWorld === 'function') ? gridToWorld(s3.col, s3.row) : { x: 0, z: 2 };
+    createEnemy(p3.x, p3.z, 'standard');
 }

@@ -31,6 +31,22 @@ class SpatialGrid {
         this.lastPairsTested = 0;
     }
 
+    // Динамическое изменение размеров сетки под масштаб карты
+    resize(worldSize, cellSize = this.cellSize) {
+        this.cellSize = cellSize;
+        this.worldSize = worldSize;
+        this.halfMap = worldSize * 0.5;
+        this.cols = Math.ceil(worldSize / cellSize);
+        this.rows = Math.ceil(worldSize / cellSize);
+        const total = this.cols * this.rows;
+        this.cells = Array(total).fill(null).map(() => ({
+            allies: [],
+            enemies: [],
+            all: []
+        }));
+        this.clear();
+    }
+
     // Очистка списков ячеек без выделения новой памяти (zero GC pauses)
     clear() {
         const len = this.cells.length;

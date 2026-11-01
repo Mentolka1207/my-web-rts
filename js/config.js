@@ -112,9 +112,67 @@ const _v3 = new THREE.Vector3();
 const _projVec = new THREE.Vector3();
 
 // --- НАСТРОЙКИ СЕТКИ И КАРТЫ ---
-const GRID_SIZE = 22;
-const CELL_SIZE = 2;
-const MAP_WORLD_SIZE = GRID_SIZE * CELL_SIZE;
+let GRID_SIZE = 22;
+let CELL_SIZE = 2;
+let MAP_WORLD_SIZE = GRID_SIZE * CELL_SIZE;
+
+// Пресеты размеров карт: 256x256, 512x512, 1024x1024
+const MAP_SIZE_CONFIGS = {
+    '256': {
+        id: '256',
+        nameKey: 'MAP_SIZE_256',
+        worldSize: 256,
+        gridSize: 64,
+        cellSize: 4,
+        baseCamDist: 85,
+        minCameraDist: 22,
+        maxCameraDist: 220,
+        fogNear: 160,
+        fogFar: 380,
+        extraNodes: [
+            { id: 'gamma', nameKey: 'NODE_GAMMA', u: 0.25, v: 0.5 },
+            { id: 'delta', nameKey: 'NODE_DELTA', u: 0.75, v: 0.5 }
+        ]
+    },
+    '512': {
+        id: '512',
+        nameKey: 'MAP_SIZE_512',
+        worldSize: 512,
+        gridSize: 128,
+        cellSize: 4,
+        baseCamDist: 155,
+        minCameraDist: 30,
+        maxCameraDist: 440,
+        fogNear: 280,
+        fogFar: 720,
+        extraNodes: [
+            { id: 'gamma',   nameKey: 'NODE_GAMMA',   u: 0.25, v: 0.5 },
+            { id: 'delta',   nameKey: 'NODE_DELTA',   u: 0.75, v: 0.5 },
+            { id: 'epsilon', nameKey: 'NODE_EPSILON', u: 0.5,  v: 0.25 },
+            { id: 'zeta',    nameKey: 'NODE_ZETA',    u: 0.5,  v: 0.75 }
+        ]
+    },
+    '1024': {
+        id: '1024',
+        nameKey: 'MAP_SIZE_1024',
+        worldSize: 1024,
+        gridSize: 256,
+        cellSize: 4,
+        baseCamDist: 270,
+        minCameraDist: 45,
+        maxCameraDist: 850,
+        fogNear: 550,
+        fogFar: 1450,
+        extraNodes: [
+            { id: 'gamma',   nameKey: 'NODE_GAMMA',   u: 0.22, v: 0.5 },
+            { id: 'delta',   nameKey: 'NODE_DELTA',   u: 0.78, v: 0.5 },
+            { id: 'epsilon', nameKey: 'NODE_EPSILON', u: 0.5,  v: 0.22 },
+            { id: 'zeta',    nameKey: 'NODE_ZETA',    u: 0.5,  v: 0.78 },
+            { id: 'eta',     nameKey: 'NODE_ETA',     u: 0.28, v: 0.28 },
+            { id: 'theta',   nameKey: 'NODE_THETA',   u: 0.72, v: 0.72 }
+        ]
+    }
+};
 
 // База союзников
 let BASE_COL = 3;

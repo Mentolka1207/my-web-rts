@@ -123,6 +123,56 @@ function createResourceNode(col, row, name) {
 
 const resourceNodes = RESOURCE_NODE_COORDS.map(c => createResourceNode(c.col, c.row, c.name));
 
+// Синхронизация количества и позиций ресурсных точек под масштабы карт (3, 5, 7, 11 точек)
+function syncResourceNodes(nodeDefs) {
+    if (!Array.isArray(nodeDefs) || typeof gridToWorld !== 'function') return;
+
+    // 1. Создаём недостающие узлы
+    while (resourceNodes.length < nodeDefs.length) {
+        const idx = resourceNodes.length;
+        const def = nodeDefs[idx];
+        const name = (typeof t === 'function' && def.nameKey) ? t(def.nameKey) : (def.name || def.id);
+        resourceNodes.push(createResourceNode(def.col, def.row, name));
+    }
+
+    // 2. Скрываем/удаляем лишние узлы
+    while (resourceNodes.length > nodeDefs.length) {
+        const removed = resourceNodes.pop();
+        if (removed && removed.group) {
+            scene.remove(removed.group);
+        }
+    }
+
+    // 3. Синхронизируем позиции и имена
+    for (let i = 0; i < nodeDefs.length; i++) {
+        const def = nodeDefs[i];
+        const node = resourceNodes[i];
+        node.col = def.col;
+        node.row = def.row;
+        const wp = gridToWorld(def.col, def.row);
+        node.pos.set(wp.x, 0, wp.z);
+        node.group.position.set(wp.x, 0, wp.z);
+        node.name = (typeof t === 'function' && def.nameKey) ? t(def.nameKey) : (def.name || def.id);
+        node.owner = 'neutral';
+        node.captureProgress = 0;
+        if (node.crystalMat && node.crystalMat.emissive) {
+            node.crystalMat.emissive.setHex(0xffaa00);
+        }
+        if (node.ringMat && node.ringMat.color) {
+            node.ringMat.color.setHex(0xffaa00);
+        }
+        if (node.barFgMat && node.barFgMat.color) {
+            node.barFgMat.color.setHex(0xffaa00);
+        }
+        if (node.light && node.light.color) {
+            node.light.color.setHex(0xffaa00);
+        }
+        if (!node.group.parent) {
+            scene.add(node.group);
+        }
+    }
+}
+
 function updateResourceNodes(delta, currentTime) {
     let playerNodesCount = 0;
 

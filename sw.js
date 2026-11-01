@@ -14,6 +14,7 @@ const STATIC_ASSETS = [
     './js/config.js',
     './js/i18n.js',
     './js/storage.js',
+    './js/perlin.js',
     './js/maps.js',
     './js/prng.js',
     './js/audio.js',

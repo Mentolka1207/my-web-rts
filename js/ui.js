@@ -102,6 +102,103 @@ if (typeof document !== 'undefined' && document.addEventListener) {
     }, true);
 }
 
+// Полный детерминированный сброс игрового состояния для старта и рестарта матча
+function resetMatchState() {
+    // 1. Очистка всех юнитов с Three.js сцены
+    for (let i = 0; i < units.length; i++) {
+        if (units[i].mesh) scene.remove(units[i].mesh);
+    }
+    units.length = 0;
+
+    for (let i = 0; i < enemies.length; i++) {
+        if (enemies[i].mesh) scene.remove(enemies[i].mesh);
+    }
+    enemies.length = 0;
+
+    if (typeof spatialGrid !== 'undefined') spatialGrid.clear();
+    if (typeof instancedRenderer !== 'undefined') instancedRenderer.clear();
+    if (typeof simWorld !== 'undefined') simWorld.clear();
+
+    // 2. Сброс снарядов, следов и декалей
+    if (typeof clearAllVFX === 'function') clearAllVFX();
+
+    // 3. Восстановление штабов
+    if (typeof playerHQ !== 'undefined' && playerHQ && playerHQ.mesh) {
+        if (!playerHQ.mesh.parent) scene.add(playerHQ.mesh);
+        playerHQ.hp = playerHQ.maxHp;
+        if (typeof updateHealthBar === 'function' && playerHQ.healthBar) {
+            updateHealthBar(playerHQ.healthBar, playerHQ.hp, playerHQ.maxHp);
+        }
+    }
+    if (typeof enemyHQ !== 'undefined' && enemyHQ && enemyHQ.mesh) {
+        if (!enemyHQ.mesh.parent) scene.add(enemyHQ.mesh);
+        enemyHQ.hp = enemyHQ.maxHp;
+        if (typeof updateHealthBar === 'function' && enemyHQ.healthBar) {
+            updateHealthBar(enemyHQ.healthBar, enemyHQ.hp, enemyHQ.maxHp);
+        }
+    }
+
+    // 4. Сброс ресурсов и точек сбора
+    energy = 100;
+    energyAccumulator = 0;
+    if (typeof resourceNodes !== 'undefined') {
+        resourceNodes.forEach(node => {
+            node.owner = 'neutral';
+            node.captureProgress = 0;
+            if (node.crystalMat && node.crystalMat.emissive) {
+                node.crystalMat.emissive.setHex(0xffaa00);
+            }
+            if (node.ringMat && node.ringMat.color) {
+                node.ringMat.color.setHex(0xffaa00);
+            }
+            if (node.barFgMat && node.barFgMat.color) {
+                node.barFgMat.color.setHex(0xffaa00);
+            }
+        });
+    }
+
+    // 5. Применение выбранной карты (новый случайный сид, если не зафиксирован вручную)
+    if (typeof isCustomSeed !== 'undefined' && !isCustomSeed && typeof rerollMapSeed === 'function') {
+        rerollMapSeed(false);
+    }
+    if (typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
+        applyMapToGrid(currentMapId);
+    }
+
+    // 6. Сброс волн и статистики матча
+    waveNumber = 0;
+    waveTimer = (typeof getWaveInterval === 'function') ? getWaveInterval() : (typeof WAVE_INTERVAL !== 'undefined' ? WAVE_INTERVAL : 60);
+    waveWarningGiven = false;
+
+    if (typeof matchStats !== 'undefined') {
+        matchStats.startTime = performance.now();
+        matchStats.enemiesKilled = 0;
+        matchStats.bossesKilled = 0;
+        matchStats.unitsProduced = 0;
+        matchStats.energyHarvested = 100;
+        matchStats.nodesCaptured = 0;
+    }
+
+    // 7. Создание стартовых отрядов
+    if (typeof initStartingUnits === 'function') initStartingUnits();
+
+    // 8. Сброс камеры на базу игрока
+    if (typeof BASE_COL !== 'undefined' && typeof gridToWorld === 'function') {
+        const pSpawnPos = gridToWorld(BASE_COL, BASE_ROW);
+        camPivot.set(pSpawnPos.x, 0, pSpawnPos.z);
+    } else {
+        camPivot.set(0, 0, 0);
+    }
+    if (typeof BASE_CAM_DIST !== 'undefined') camZoomDist = BASE_CAM_DIST;
+    if (typeof clampCameraBounds === 'function') clampCameraBounds();
+    else if (typeof applyCameraTransform === 'function') applyCameraTransform();
+
+    // 9. Состояния матча
+    gameOver = false;
+    isGamePaused = false;
+    gameStarted = true;
+}
+
 function startGame() {
     const menuEl = document.getElementById('main-menu-overlay');
     if (menuEl) menuEl.style.display = 'none';
@@ -115,14 +212,8 @@ function startGame() {
     const hudFirst = document.getElementById('instructions-toggle');
     if (hudFirst) hudFirst.focus({ preventScroll: true });
 
-    // Применяем выбранную карту при старте матча
-    if (typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
-        applyMapToGrid(currentMapId);
-    }
-
-    gameStarted = true;
-    gameOver = false;
-    isGamePaused = false;
+    // Полная инициализация матча
+    resetMatchState();
 
     // Если это первый запуск игрока, показать обучающий онбординг
     if (typeof playerProfile !== 'undefined' && !playerProfile.tutorialCompleted && playerProfile.matchesPlayed === 0) {
@@ -134,7 +225,6 @@ function startGame() {
         soundEngine.startAmbient();
         playOrderSound(false);
     }
-    if (typeof matchStats !== 'undefined') matchStats.startTime = performance.now();
     updateResourceUI();
     updateWaveUI();
 }
@@ -231,88 +321,15 @@ if (typeof window !== 'undefined' && window.addEventListener) {
 
 // Быстрый перезапуск боя без перезагрузки страницы
 function restartMatch() {
-    // 1. Очистка всех юнитов с Three.js сцены
-    for (let i = 0; i < units.length; i++) {
-        if (units[i].mesh) scene.remove(units[i].mesh);
-    }
-    units.length = 0;
+    resetMatchState();
 
-    for (let i = 0; i < enemies.length; i++) {
-        if (enemies[i].mesh) scene.remove(enemies[i].mesh);
-    }
-    enemies.length = 0;
-
-    if (typeof spatialGrid !== 'undefined') spatialGrid.clear();
-    if (typeof instancedRenderer !== 'undefined') instancedRenderer.clear();
-    if (typeof simWorld !== 'undefined') simWorld.clear();
-
-    // 2. Сброс снарядов и следов
-    if (typeof clearAllVFX === 'function') clearAllVFX();
-
-    // 3. Восстановление штабов
-    if (typeof playerHQ !== 'undefined' && playerHQ && playerHQ.mesh) {
-        if (!playerHQ.mesh.parent) scene.add(playerHQ.mesh);
-        playerHQ.hp = playerHQ.maxHp;
-        updateHealthBar(playerHQ.healthBar, playerHQ.hp, playerHQ.maxHp);
-    }
-    if (typeof enemyHQ !== 'undefined' && enemyHQ && enemyHQ.mesh) {
-        if (!enemyHQ.mesh.parent) scene.add(enemyHQ.mesh);
-        enemyHQ.hp = enemyHQ.maxHp;
-        updateHealthBar(enemyHQ.healthBar, enemyHQ.hp, enemyHQ.maxHp);
-    }
-
-    // 4. Сброс ресурсов и точек сбора
-    energy = 100;
-    energyAccumulator = 0;
-    if (typeof resourceNodes !== 'undefined') {
-        resourceNodes.forEach(node => {
-            node.owner = 'neutral';
-            node.captureProgress = 0;
-            if (node.crystalMat && node.crystalMat.emissive) {
-                node.crystalMat.emissive.setHex(0xffaa00);
-            }
-        });
-    }
-
-    // 5. Применение выбранной карты
-    if (typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
-        applyMapToGrid(currentMapId);
-    }
-
-    // 6. Сброс волн и статистики матча
-    waveNumber = 0;
-    waveTimer = (typeof getWaveInterval === 'function') ? getWaveInterval() : WAVE_INTERVAL;
-    waveWarningGiven = false;
-
-    if (typeof matchStats !== 'undefined') {
-        matchStats.startTime = performance.now();
-        matchStats.enemiesKilled = 0;
-        matchStats.bossesKilled = 0;
-        matchStats.unitsProduced = 0;
-        matchStats.energyHarvested = 100;
-        matchStats.nodesCaptured = 0;
-    }
-
-    // 7. Создание стартовых отрядов
-    initStartingUnits();
-
-    // 8. Сброс камеры
-    camPivot.set(0, 0, 0);
-    camZoomDist = BASE_CAM_DIST;
-    applyCameraTransform();
-
-    // 9. Состояния матча
-    gameOver = false;
-    isGamePaused = false;
-    gameStarted = true;
-
-    // 10. Скрытие оверлеев и окон
+    // Скрытие оверлеев и окон
     hideAllModals();
     refreshStatefulLabels();
     const hudFirst = document.getElementById('instructions-toggle');
     if (hudFirst) hudFirst.focus({ preventScroll: true });
 
-    // 11. Звук и интерфейс
+    // Звук и интерфейс
     if (typeof soundEngine !== 'undefined') {
         soundEngine.ensureContext();
         soundEngine.startAmbient();
@@ -344,6 +361,7 @@ function returnToMainMenu() {
 
     const menuEl = document.getElementById('main-menu-overlay');
     if (menuEl) menuEl.style.display = 'flex';
+    if (typeof syncSeedUI === 'function') syncSeedUI();
     const playBtn = document.getElementById('play-btn');
     if (playBtn) playBtn.focus({ preventScroll: true });
 }
@@ -426,10 +444,10 @@ function renderStatList(rows, ariaLabel) {
 }
 
 function checkGameOverConditions() {
-    if (gameOver) return;
-    if (enemyHQ.hp <= 0) {
+    if (gameOver || (typeof benchmarkActive !== 'undefined' && benchmarkActive)) return;
+    if (enemyHQ && enemyHQ.hp <= 0) {
         triggerGameOver(true);
-    } else if (playerHQ.hp <= 0) {
+    } else if (playerHQ && playerHQ.hp <= 0) {
         triggerGameOver(false);
     }
 }
@@ -764,6 +782,28 @@ function updateDebugOverlay(delta) {
             pairsEl.textContent = numPairs.toLocaleString();
             setLevelClass(pairsEl, (typeof spatialGrid !== 'undefined' && spatialGrid.collisionMode === 'naive') ? 'warn' : null);
         }
+
+        const simModeEl = document.getElementById('dbg-sim-mode');
+        const threadsEl = document.getElementById('dbg-threads');
+        if (simModeEl) {
+            if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
+                simModeEl.textContent = `${simWorkerPool.threadCount} Web Workers (Multi-Core)`;
+                setLevelClass(simModeEl, 'good');
+            } else {
+                simModeEl.textContent = typeof t === 'function' ? t('DBG_SIM_MAIN') : 'главный поток (SoA)';
+                setLevelClass(simModeEl, null);
+            }
+        }
+        if (threadsEl) {
+            if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
+                const totalHw = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : simWorkerPool.threadCount;
+                threadsEl.textContent = `${simWorkerPool.threadCount} / ${totalHw} ядер CPU`;
+                setLevelClass(threadsEl, 'good');
+            } else {
+                threadsEl.textContent = '1 поток (SoA)';
+                setLevelClass(threadsEl, null);
+            }
+        }
     }
 
 }
@@ -830,6 +870,17 @@ function updatePerfPanel(timestamp) {
     }
     if (ftEl) ftEl.textContent = `${avgMs.toFixed(1)} / ${perfWorstFrame.toFixed(1)} ms`;
     if (uEl) uEl.textContent = typeof t === 'function' ? t('UNITS_TOTAL', alliesAlive, enemiesAlive, alliesAlive + enemiesAlive) : `${alliesAlive} / ${enemiesAlive}`;
+
+    const threadsEl = document.getElementById('perf-threads');
+    if (threadsEl) {
+        if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
+            threadsEl.textContent = `${simWorkerPool.threadCount} CPU (Multi-Core)`;
+            setLevelClass(threadsEl, 'good');
+        } else {
+            threadsEl.textContent = '1 (Main Thread)';
+            setLevelClass(threadsEl, null);
+        }
+    }
 
     perfFrames = 0;
     perfWorstFrame = 0;

@@ -604,14 +604,52 @@ button:disabled {
 }
 
 .menu-config-row {
-    display: flex;
-    gap: var(--space-6);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4) var(--space-6);
     width: 100%;
     max-width: var(--menu-config-w);
 }
 
 .menu-config-item {
+    width: 100%;
+}
+
+.seed-control-group {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    width: 100%;
+}
+
+.seed-input {
     flex: 1;
+    min-width: 0;
+    min-height: var(--control-md);
+    padding: var(--space-4) var(--space-5);
+    background: var(--color-surface-sunken);
+    border: 1px solid var(--color-border-strong);
+    color: var(--color-text);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    box-sizing: border-box;
+    transition: border-color var(--motion-base) var(--motion-ease);
+}
+
+.seed-input:hover,
+.seed-input:focus {
+    border-color: var(--color-accent);
+}
+
+.seed-reroll-btn {
+    min-height: var(--control-md);
+    min-width: var(--control-md);
+    padding: var(--space-2);
+    font-size: var(--text-base);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 #main-menu-buttons {
@@ -1060,7 +1098,7 @@ button:disabled {
     }
 
     .menu-config-row {
-        flex-direction: column;
+        grid-template-columns: 1fr;
         gap: var(--space-4);
     }
 
