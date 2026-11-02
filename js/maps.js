@@ -818,4 +818,7 @@ function applyMapToGrid(mapId) {
     if (typeof enemyFlowFieldGen !== 'undefined') {
         enemyFlowFieldGen.updateTarget(HQ_COL, HQ_ROW);
     }
+    if (typeof simWorkerPool !== 'undefined') {
+        simWorkerPool.updateFlowFields(flowFieldGen, enemyFlowFieldGen);
+    }
 }

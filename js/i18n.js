@@ -270,7 +270,13 @@ const TRANSLATIONS = {
         STATS_TITLE: 'Итоги боя',
         ABILITY_SHIELD_NAME: 'Щит',
         ABILITY_OVERDRIVE_NAME: 'Форсаж',
-        ABILITY_SIEGE_NAME: 'Осада'
+        ABILITY_SIEGE_NAME: 'Осада',
+        ALERT_BENCH_START: '🚀 СТРЕСС-ТЕСТ: Запущено {0} vs {1} ({2} всего)!',
+        ALERT_BENCH_STOP: '⏹️ Стресс-тест остановлен. Стандартный отряд восстановлен.',
+        ALERT_BENCH_SWARM_INST: '⚠️ Для армий от 1000 юнитов требуется GPU-инстансинг!',
+        ALERT_BENCH_WIN: '🏁 Стресс-тест завершён! Победитель: {0}. Средний FPS: {1}',
+        BENCH_WIN_ALLIES: 'Союзники',
+        BENCH_WIN_ENEMIES: 'Враги'
     },
 
     en: {
@@ -537,7 +543,13 @@ const TRANSLATIONS = {
         STATS_TITLE: 'Battle summary',
         ABILITY_SHIELD_NAME: 'Shield',
         ABILITY_OVERDRIVE_NAME: 'Overdrive',
-        ABILITY_SIEGE_NAME: 'Siege'
+        ABILITY_SIEGE_NAME: 'Siege',
+        ALERT_BENCH_START: '🚀 STRESS-TEST: Spawned {0} vs {1} ({2} total)!',
+        ALERT_BENCH_STOP: '⏹️ Stress-test stopped. Standard squad restored.',
+        ALERT_BENCH_SWARM_INST: '⚠️ GPU instancing is required for armies of 1000+ units!',
+        ALERT_BENCH_WIN: '🏁 Stress-test finished! Winner: {0}. Average FPS: {1}',
+        BENCH_WIN_ALLIES: 'Allies',
+        BENCH_WIN_ENEMIES: 'Enemies'
     }
 };
 

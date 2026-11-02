@@ -13,6 +13,11 @@ let cellSize = 4;
 let halfWorld = 128;
 let maxBound = 120;
 
+let allyFlowX = null;
+let allyFlowY = null;
+let enemyFlowX = null;
+let enemyFlowY = null;
+
 // Пространственные корзины (Spatial Grid Linked-List) для поиска соседей за O(1)
 let bCellSize = 6.0;
 let bCols = 0;
@@ -54,6 +59,14 @@ self.onmessage = function (e) {
             break;
         }
 
+        case 'SET_FLOW': {
+            allyFlowX = msg.allyFlowX ? new Float32Array(msg.allyFlowX) : null;
+            allyFlowY = msg.allyFlowY ? new Float32Array(msg.allyFlowY) : null;
+            enemyFlowX = msg.enemyFlowX ? new Float32Array(msg.enemyFlowX) : null;
+            enemyFlowY = msg.enemyFlowY ? new Float32Array(msg.enemyFlowY) : null;
+            break;
+        }
+
         case 'RESIZE': {
             gridSize = msg.gridSize || gridSize;
             worldSize = msg.worldSize || worldSize;
@@ -76,6 +89,7 @@ self.onmessage = function (e) {
             const delta = msg.delta || 0.033;
             const currentTime = msg.currentTime || 0;
             const hq = msg.hqData || null;
+            const collisionMode = msg.collisionMode || 'spatial';
 
             // Выделение буфера под результат слайса
             const neededLen = sliceCount * 16;
@@ -107,12 +121,14 @@ self.onmessage = function (e) {
                     const bIdx = br * bCols + bc;
                     bNext[i] = bHead[bIdx];
                     bHead[bIdx] = i;
+                } else {
+                    bNext[i] = -1;
                 }
             }
 
-            // 2. Параллельная обработка юнитов слайса на данном ядре CPU
-            const sliceEnd = sliceStart + sliceCount;
+            // 2. Расчет FSM, поиска целей, расталкивания и интеграции физики для своего среза юнитов
             let outOffset = 0;
+            const sliceEnd = sliceStart + sliceCount;
 
             for (let i = sliceStart; i < sliceEnd; i++) {
                 const uOff = i * 16;
@@ -122,10 +138,10 @@ self.onmessage = function (e) {
                 let vz = globalBuffer[uOff + 3];
                 const r = globalBuffer[uOff + 4];
                 const speed = globalBuffer[uOff + 5];
-                let hp = globalBuffer[uOff + 6];
+                const hp = globalBuffer[uOff + 6];
                 const maxHp = globalBuffer[uOff + 7];
-                const team = globalBuffer[uOff + 8]; // 0: ally, 1: enemy
-                const uType = globalBuffer[uOff + 9]; // 0: standard, 1: scout, 2: tank, 3: boss
+                const team = globalBuffer[uOff + 8];
+                const uType = globalBuffer[uOff + 9];
                 let state = globalBuffer[uOff + 10];
                 const tx = globalBuffer[uOff + 11];
                 const tz = globalBuffer[uOff + 12];
@@ -134,7 +150,7 @@ self.onmessage = function (e) {
                 let lastAtt = globalBuffer[uOff + 15];
 
                 if (hp > 0) {
-                    // А. Поиск ближайшей цели противника в окрестных ячейках
+                    // А. Поиск ближайшей цели противника в окрестных ячейках или наивным перебором
                     const bc = Math.max(0, Math.min(bCols - 1, ((x + halfWorld) / bCellSize) | 0));
                     const br = Math.max(0, Math.min(bRows - 1, ((z + halfWorld) / bCellSize) | 0));
 
@@ -143,36 +159,61 @@ self.onmessage = function (e) {
                     let targetX = 0;
                     let targetZ = 0;
 
-                    for (let dr = -1; dr <= 1; dr++) {
-                        const nbr = br + dr;
-                        if (nbr < 0 || nbr >= bRows) continue;
-                        const rowOff = nbr * bCols;
+                    if (collisionMode === 'naive') {
+                        const maxTest = Math.min(totalUnits, 500);
+                        for (let j = 0; j < maxTest; j++) {
+                            if (j === i) continue;
+                            const cOff = j * 16;
+                            const candTeam = globalBuffer[cOff + 8];
+                            const candHp = globalBuffer[cOff + 6];
 
-                        for (let dc = -1; dc <= 1; dc++) {
-                            const nbc = bc + dc;
-                            if (nbc < 0 || nbc >= bCols) continue;
+                            if (candTeam !== team && candHp > 0) {
+                                const ex = globalBuffer[cOff];
+                                const ez = globalBuffer[cOff + 1];
+                                const dX = ex - x;
+                                const dZ = ez - z;
+                                const dSq = dX * dX + dZ * dZ;
 
-                            let candIdx = bHead[rowOff + nbc];
-                            while (candIdx !== -1) {
-                                const cOff = candIdx * 16;
-                                const candTeam = globalBuffer[cOff + 8];
-                                const candHp = globalBuffer[cOff + 6];
-
-                                if (candTeam !== team && candHp > 0) {
-                                    const ex = globalBuffer[cOff];
-                                    const ez = globalBuffer[cOff + 1];
-                                    const dX = ex - x;
-                                    const dZ = ez - z;
-                                    const dSq = dX * dX + dZ * dZ;
-
-                                    if (dSq < nearestDistSq) {
-                                        nearestDistSq = dSq;
-                                        nearestEnemyIdx = candIdx;
-                                        targetX = ex;
-                                        targetZ = ez;
-                                    }
+                                if (dSq < nearestDistSq) {
+                                    nearestDistSq = dSq;
+                                    nearestEnemyIdx = j;
+                                    targetX = ex;
+                                    targetZ = ez;
                                 }
-                                candIdx = bNext[candIdx];
+                            }
+                        }
+                    } else {
+                        for (let dr = -1; dr <= 1; dr++) {
+                            const nbr = br + dr;
+                            if (nbr < 0 || nbr >= bRows) continue;
+                            const rowOff = nbr * bCols;
+
+                            for (let dc = -1; dc <= 1; dc++) {
+                                const nbc = bc + dc;
+                                if (nbc < 0 || nbc >= bCols) continue;
+
+                                let candIdx = bHead[rowOff + nbc];
+                                while (candIdx !== -1) {
+                                    const cOff = candIdx * 16;
+                                    const candTeam = globalBuffer[cOff + 8];
+                                    const candHp = globalBuffer[cOff + 6];
+
+                                    if (candTeam !== team && candHp > 0) {
+                                        const ex = globalBuffer[cOff];
+                                        const ez = globalBuffer[cOff + 1];
+                                        const dX = ex - x;
+                                        const dZ = ez - z;
+                                        const dSq = dX * dX + dZ * dZ;
+
+                                        if (dSq < nearestDistSq) {
+                                            nearestDistSq = dSq;
+                                            nearestEnemyIdx = candIdx;
+                                            targetX = ex;
+                                            targetZ = ez;
+                                        }
+                                    }
+                                    candIdx = bNext[candIdx];
+                                }
                             }
                         }
                     }
@@ -206,7 +247,9 @@ self.onmessage = function (e) {
                             if (currentTime - lastAtt >= cooldown) {
                                 lastAtt = currentTime;
                                 if (nearestEnemyIdx >= 0) {
-                                    damageEvents.push(nearestEnemyIdx, dmg);
+                                    damageEvents.push(nearestEnemyIdx, dmg, team);
+                                } else if (nearestEnemyIdx === -99) {
+                                    damageEvents.push(-99, dmg, team);
                                 }
                                 laserEvents.push(x, z, targetX, targetZ, team, uType);
                             }
@@ -219,12 +262,35 @@ self.onmessage = function (e) {
                         }
                     } else if (tx !== 0 || tz !== 0) {
                         state = 1; // MOVE
-                        const dx = tx - x;
-                        const dz = tz - z;
-                        const d = Math.hypot(dx, dz);
-                        if (d > 0.4) {
-                            vx = (dx / d) * speed;
-                            vz = (dz / d) * speed;
+                        let dirX = 0, dirZ = 0;
+
+                        // Навигация по вектору Flow Field
+                        const flowX = (team === 0) ? allyFlowX : enemyFlowX;
+                        const flowY = (team === 0) ? allyFlowY : enemyFlowY;
+                        if (flowX && flowY && cellSize > 0) {
+                            const gc = Math.floor((x + halfWorld) / cellSize);
+                            const gr = Math.floor((z + halfWorld) / cellSize);
+                            if (gc >= 0 && gc < gridSize && gr >= 0 && gr < gridSize) {
+                                const cIdx = gr * gridSize + gc;
+                                dirX = flowX[cIdx] || 0;
+                                dirZ = flowY[cIdx] || 0;
+                            }
+                        }
+
+                        // Если вектор поля 0 (или цель близко), идём по прямой
+                        if (dirX === 0 && dirZ === 0) {
+                            const dx = tx - x;
+                            const dz = tz - z;
+                            const d = Math.hypot(dx, dz);
+                            if (d > 0.4) {
+                                dirX = dx / d;
+                                dirZ = dz / d;
+                            }
+                        }
+
+                        if (dirX !== 0 || dirZ !== 0) {
+                            vx = dirX * speed;
+                            vz = dirZ * speed;
                         } else {
                             state = 0; // IDLE
                             vx = 0; vz = 0;
@@ -234,38 +300,62 @@ self.onmessage = function (e) {
                         vx = 0; vz = 0;
                     }
 
-                    // В. Высокопроизводительное расталкивание (Separation)
+                    // В. Расталкивание (Separation)
                     let sepX = 0, sepZ = 0;
-                    for (let dr = -1; dr <= 1; dr++) {
-                        const nbr = br + dr;
-                        if (nbr < 0 || nbr >= bRows) continue;
-                        const rowOff = nbr * bCols;
+                    if (collisionMode === 'naive') {
+                        const maxSep = Math.min(totalUnits, 300);
+                        for (let j = 0; j < maxSep; j++) {
+                            if (j !== i) {
+                                const oOff = j * 16;
+                                const ox = globalBuffer[oOff];
+                                const oz = globalBuffer[oOff + 1];
+                                const oRad = globalBuffer[oOff + 4];
+                                const minD = r + oRad;
 
-                        for (let dc = -1; dc <= 1; dc++) {
-                            const nbc = bc + dc;
-                            if (nbc < 0 || nbc >= bCols) continue;
+                                const diffX = x - ox;
+                                const diffZ = z - oz;
+                                const dSq = diffX * diffX + diffZ * diffZ;
 
-                            let otherIdx = bHead[rowOff + nbc];
-                            while (otherIdx !== -1) {
-                                if (otherIdx !== i) {
-                                    const oOff = otherIdx * 16;
-                                    const ox = globalBuffer[oOff];
-                                    const oz = globalBuffer[oOff + 1];
-                                    const oRad = globalBuffer[oOff + 4];
-                                    const minD = r + oRad;
-
-                                    const diffX = x - ox;
-                                    const diffZ = z - oz;
-                                    const dSq = diffX * diffX + diffZ * diffZ;
-
-                                    if (dSq < minD * minD && dSq > 0.000001) {
-                                        const d = Math.sqrt(dSq);
-                                        const push = (minD - d) * 0.5;
-                                        sepX += (diffX / d) * push;
-                                        sepZ += (diffZ / d) * push;
-                                    }
+                                if (dSq < minD * minD && dSq > 0.000001) {
+                                    const d = Math.sqrt(dSq);
+                                    const push = (minD - d) * 0.5;
+                                    sepX += (diffX / d) * push;
+                                    sepZ += (diffZ / d) * push;
                                 }
-                                otherIdx = bNext[otherIdx];
+                            }
+                        }
+                    } else {
+                        for (let dr = -1; dr <= 1; dr++) {
+                            const nbr = br + dr;
+                            if (nbr < 0 || nbr >= bRows) continue;
+                            const rowOff = nbr * bCols;
+
+                            for (let dc = -1; dc <= 1; dc++) {
+                                const nbc = bc + dc;
+                                if (nbc < 0 || nbc >= bCols) continue;
+
+                                let otherIdx = bHead[rowOff + nbc];
+                                while (otherIdx !== -1) {
+                                    if (otherIdx !== i) {
+                                        const oOff = otherIdx * 16;
+                                        const ox = globalBuffer[oOff];
+                                        const oz = globalBuffer[oOff + 1];
+                                        const oRad = globalBuffer[oOff + 4];
+                                        const minD = r + oRad;
+
+                                        const diffX = x - ox;
+                                        const diffZ = z - oz;
+                                        const dSq = diffX * diffX + diffZ * diffZ;
+
+                                        if (dSq < minD * minD && dSq > 0.000001) {
+                                            const d = Math.sqrt(dSq);
+                                            const push = (minD - d) * 0.5;
+                                            sepX += (diffX / d) * push;
+                                            sepZ += (diffZ / d) * push;
+                                        }
+                                    }
+                                    otherIdx = bNext[otherIdx];
+                                }
                             }
                         }
                     }
@@ -280,7 +370,7 @@ self.onmessage = function (e) {
                     if (z < -maxBound) z = -maxBound;
                     else if (z > maxBound) z = maxBound;
 
-                    // Е. Коллизии со стенами карты
+                    // Е. Коллизии со стенами карты с отражением направленной скорости
                     if (workerGrid && cellSize > 0) {
                         const gc = Math.floor((x + halfWorld) / cellSize);
                         const gr = Math.floor((z + halfWorld) / cellSize);
@@ -290,8 +380,16 @@ self.onmessage = function (e) {
                             const pushDirX = x - cellCenterX;
                             const pushDirZ = z - cellCenterZ;
                             const pLen = Math.hypot(pushDirX, pushDirZ) || 0.001;
-                            x = cellCenterX + (pushDirX / pLen) * (cellSize * 0.72);
-                            z = cellCenterZ + (pushDirZ / pLen) * (cellSize * 0.72);
+                            const pushX = pushDirX / pLen;
+                            const pushZ = pushDirZ / pLen;
+                            x = cellCenterX + pushX * (cellSize * 0.72);
+                            z = cellCenterZ + pushZ * (cellSize * 0.72);
+
+                            const dot = vx * (-pushX) + vz * (-pushZ);
+                            if (dot > 0) {
+                                vx += pushX * dot;
+                                vz += pushZ * dot;
+                            }
                         }
                     }
                 }

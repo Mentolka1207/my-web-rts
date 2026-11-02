@@ -23,6 +23,11 @@ let cellSize = 4;
 let halfWorld = 128;
 let maxBound = 120;
 
+let allyFlowX = null;
+let allyFlowY = null;
+let enemyFlowX = null;
+let enemyFlowY = null;
+
 let bCellSize = 6.0;
 let bCols = 0;
 let bRows = 0;
@@ -47,6 +52,7 @@ self.onmessage = function (e) {
             cellSize = msg.cellSize || 4;
             halfWorld = worldSize * 0.5;
             maxBound = halfWorld - (cellSize * 1.05);
+
             workerGrid = msg.grid || null;
 
             bCellSize = msg.bCellSize || 6.0;
@@ -58,6 +64,14 @@ self.onmessage = function (e) {
             bNext = new Int32Array(15000);
 
             self.postMessage({ type: 'READY', workerId: workerId });
+            break;
+        }
+
+        case 'SET_FLOW': {
+            allyFlowX = msg.allyFlowX ? new Float32Array(msg.allyFlowX) : null;
+            allyFlowY = msg.allyFlowY ? new Float32Array(msg.allyFlowY) : null;
+            enemyFlowX = msg.enemyFlowX ? new Float32Array(msg.enemyFlowX) : null;
+            enemyFlowY = msg.enemyFlowY ? new Float32Array(msg.enemyFlowY) : null;
             break;
         }
 
@@ -83,6 +97,7 @@ self.onmessage = function (e) {
             const delta = msg.delta || 0.033;
             const currentTime = msg.currentTime || 0;
             const hq = msg.hqData || null;
+            const collisionMode = msg.collisionMode || 'spatial';
 
             const neededLen = sliceCount * 16;
             if (!sliceResultBuffer || sliceResultBuffer.length < neededLen) {
@@ -112,11 +127,13 @@ self.onmessage = function (e) {
                     const bIdx = br * bCols + bc;
                     bNext[i] = bHead[bIdx];
                     bHead[bIdx] = i;
+                } else {
+                    bNext[i] = -1;
                 }
             }
 
-            const sliceEnd = sliceStart + sliceCount;
             let outOffset = 0;
+            const sliceEnd = sliceStart + sliceCount;
 
             for (let i = sliceStart; i < sliceEnd; i++) {
                 const uOff = i * 16;
@@ -126,7 +143,7 @@ self.onmessage = function (e) {
                 let vz = globalBuffer[uOff + 3];
                 const r = globalBuffer[uOff + 4];
                 const speed = globalBuffer[uOff + 5];
-                let hp = globalBuffer[uOff + 6];
+                const hp = globalBuffer[uOff + 6];
                 const maxHp = globalBuffer[uOff + 7];
                 const team = globalBuffer[uOff + 8];
                 const uType = globalBuffer[uOff + 9];
@@ -146,36 +163,61 @@ self.onmessage = function (e) {
                     let targetX = 0;
                     let targetZ = 0;
 
-                    for (let dr = -1; dr <= 1; dr++) {
-                        const nbr = br + dr;
-                        if (nbr < 0 || nbr >= bRows) continue;
-                        const rowOff = nbr * bCols;
+                    if (collisionMode === 'naive') {
+                        const maxTest = Math.min(totalUnits, 500);
+                        for (let j = 0; j < maxTest; j++) {
+                            if (j === i) continue;
+                            const cOff = j * 16;
+                            const candTeam = globalBuffer[cOff + 8];
+                            const candHp = globalBuffer[cOff + 6];
 
-                        for (let dc = -1; dc <= 1; dc++) {
-                            const nbc = bc + dc;
-                            if (nbc < 0 || nbc >= bCols) continue;
+                            if (candTeam !== team && candHp > 0) {
+                                const ex = globalBuffer[cOff];
+                                const ez = globalBuffer[cOff + 1];
+                                const dX = ex - x;
+                                const dZ = ez - z;
+                                const dSq = dX * dX + dZ * dZ;
 
-                            let candIdx = bHead[rowOff + nbc];
-                            while (candIdx !== -1) {
-                                const cOff = candIdx * 16;
-                                const candTeam = globalBuffer[cOff + 8];
-                                const candHp = globalBuffer[cOff + 6];
-
-                                if (candTeam !== team && candHp > 0) {
-                                    const ex = globalBuffer[cOff];
-                                    const ez = globalBuffer[cOff + 1];
-                                    const dX = ex - x;
-                                    const dZ = ez - z;
-                                    const dSq = dX * dX + dZ * dZ;
-
-                                    if (dSq < nearestDistSq) {
-                                        nearestDistSq = dSq;
-                                        nearestEnemyIdx = candIdx;
-                                        targetX = ex;
-                                        targetZ = ez;
-                                    }
+                                if (dSq < nearestDistSq) {
+                                    nearestDistSq = dSq;
+                                    nearestEnemyIdx = j;
+                                    targetX = ex;
+                                    targetZ = ez;
                                 }
-                                candIdx = bNext[candIdx];
+                            }
+                        }
+                    } else {
+                        for (let dr = -1; dr <= 1; dr++) {
+                            const nbr = br + dr;
+                            if (nbr < 0 || nbr >= bRows) continue;
+                            const rowOff = nbr * bCols;
+
+                            for (let dc = -1; dc <= 1; dc++) {
+                                const nbc = bc + dc;
+                                if (nbc < 0 || nbc >= bCols) continue;
+
+                                let candIdx = bHead[rowOff + nbc];
+                                while (candIdx !== -1) {
+                                    const cOff = candIdx * 16;
+                                    const candTeam = globalBuffer[cOff + 8];
+                                    const candHp = globalBuffer[cOff + 6];
+
+                                    if (candTeam !== team && candHp > 0) {
+                                        const ex = globalBuffer[cOff];
+                                        const ez = globalBuffer[cOff + 1];
+                                        const dX = ex - x;
+                                        const dZ = ez - z;
+                                        const dSq = dX * dX + dZ * dZ;
+
+                                        if (dSq < nearestDistSq) {
+                                            nearestDistSq = dSq;
+                                            nearestEnemyIdx = candIdx;
+                                            targetX = ex;
+                                            targetZ = ez;
+                                        }
+                                    }
+                                    candIdx = bNext[candIdx];
+                                }
                             }
                         }
                     }
@@ -203,11 +245,13 @@ self.onmessage = function (e) {
                             state = 3; // ATTACK
                             vx = 0; vz = 0;
 
-                            const cooldown = (uType === 2) ? 1.6 : (uType === 1 ? 0.75 : (uType === 3 ? 1.2 : 1.0));
+                            const cooldown = (uType === 2) ? 1.6 : (uType === 1 ? 0.75 : 1.0);
                             if (currentTime - lastAtt >= cooldown) {
                                 lastAtt = currentTime;
                                 if (nearestEnemyIdx >= 0) {
-                                    damageEvents.push(nearestEnemyIdx, dmg);
+                                    damageEvents.push(nearestEnemyIdx, dmg, team);
+                                } else if (nearestEnemyIdx === -99) {
+                                    damageEvents.push(-99, dmg, team);
                                 }
                                 laserEvents.push(x, z, targetX, targetZ, team, uType);
                             }
@@ -220,12 +264,33 @@ self.onmessage = function (e) {
                         }
                     } else if (tx !== 0 || tz !== 0) {
                         state = 1; // MOVE
-                        const dx = tx - x;
-                        const dz = tz - z;
-                        const d = Math.hypot(dx, dz);
-                        if (d > 0.4) {
-                            vx = (dx / d) * speed;
-                            vz = (dz / d) * speed;
+                        let dirX = 0, dirZ = 0;
+
+                        const flowX = (team === 0) ? allyFlowX : enemyFlowX;
+                        const flowY = (team === 0) ? allyFlowY : enemyFlowY;
+                        if (flowX && flowY && cellSize > 0) {
+                            const gc = Math.floor((x + halfWorld) / cellSize);
+                            const gr = Math.floor((z + halfWorld) / cellSize);
+                            if (gc >= 0 && gc < gridSize && gr >= 0 && gr < gridSize) {
+                                const cIdx = gr * gridSize + gc;
+                                dirX = flowX[cIdx] || 0;
+                                dirZ = flowY[cIdx] || 0;
+                            }
+                        }
+
+                        if (dirX === 0 && dirZ === 0) {
+                            const dx = tx - x;
+                            const dz = tz - z;
+                            const d = Math.hypot(dx, dz);
+                            if (d > 0.4) {
+                                dirX = dx / d;
+                                dirZ = dz / d;
+                            }
+                        }
+
+                        if (dirX !== 0 || dirZ !== 0) {
+                            vx = dirX * speed;
+                            vz = dirZ * speed;
                         } else {
                             state = 0; // IDLE
                             vx = 0; vz = 0;
@@ -236,36 +301,60 @@ self.onmessage = function (e) {
                     }
 
                     let sepX = 0, sepZ = 0;
-                    for (let dr = -1; dr <= 1; dr++) {
-                        const nbr = br + dr;
-                        if (nbr < 0 || nbr >= bRows) continue;
-                        const rowOff = nbr * bCols;
+                    if (collisionMode === 'naive') {
+                        const maxSep = Math.min(totalUnits, 300);
+                        for (let j = 0; j < maxSep; j++) {
+                            if (j !== i) {
+                                const oOff = j * 16;
+                                const ox = globalBuffer[oOff];
+                                const oz = globalBuffer[oOff + 1];
+                                const oRad = globalBuffer[oOff + 4];
+                                const minD = r + oRad;
 
-                        for (let dc = -1; dc <= 1; dc++) {
-                            const nbc = bc + dc;
-                            if (nbc < 0 || nbc >= bCols) continue;
+                                const diffX = x - ox;
+                                diffZ = z - oz;
+                                const dSq = diffX * diffX + diffZ * diffZ;
 
-                            let otherIdx = bHead[rowOff + nbc];
-                            while (otherIdx !== -1) {
-                                if (otherIdx !== i) {
-                                    const oOff = otherIdx * 16;
-                                    const ox = globalBuffer[oOff];
-                                    const oz = globalBuffer[oOff + 1];
-                                    const oRad = globalBuffer[oOff + 4];
-                                    const minD = r + oRad;
-
-                                    const diffX = x - ox;
-                                    const diffZ = z - oz;
-                                    const dSq = diffX * diffX + diffZ * diffZ;
-
-                                    if (dSq < minD * minD && dSq > 0.000001) {
-                                        const d = Math.sqrt(dSq);
-                                        const push = (minD - d) * 0.5;
-                                        sepX += (diffX / d) * push;
-                                        sepZ += (diffZ / d) * push;
-                                    }
+                                if (dSq < minD * minD && dSq > 0.000001) {
+                                    const d = Math.sqrt(dSq);
+                                    const push = (minD - d) * 0.5;
+                                    sepX += (diffX / d) * push;
+                                    sepZ += (diffZ / d) * push;
                                 }
-                                otherIdx = bNext[otherIdx];
+                            }
+                        }
+                    } else {
+                        for (let dr = -1; dr <= 1; dr++) {
+                            const nbr = br + dr;
+                            if (nbr < 0 || nbr >= bRows) continue;
+                            const rowOff = nbr * bCols;
+
+                            for (let dc = -1; dc <= 1; dc++) {
+                                const nbc = bc + dc;
+                                if (nbc < 0 || nbc >= bCols) continue;
+
+                                let otherIdx = bHead[rowOff + nbc];
+                                while (otherIdx !== -1) {
+                                    if (otherIdx !== i) {
+                                        const oOff = otherIdx * 16;
+                                        const ox = globalBuffer[oOff];
+                                        const oz = globalBuffer[oOff + 1];
+                                        const oRad = globalBuffer[oOff + 4];
+                                        const minD = r + oRad;
+
+                                        const diffX = x - ox;
+                                        const diffZ = z - oz;
+                                        const dSq = diffX * diffX + diffZ * diffZ;
+
+                                        if (dSq < minD * minD && dSq > 0.000001) {
+                                            const d = Math.sqrt(dSq);
+                                            const push = (minD - d) * 0.5;
+                                            sepX += (diffX / d) * push;
+                                            sepZ += (diffZ / d) * push;
+                                        }
+                                    }
+                                    otherIdx = bNext[otherIdx];
+                                }
                             }
                         }
                     }
@@ -287,8 +376,16 @@ self.onmessage = function (e) {
                             const pushDirX = x - cellCenterX;
                             const pushDirZ = z - cellCenterZ;
                             const pLen = Math.hypot(pushDirX, pushDirZ) || 0.001;
-                            x = cellCenterX + (pushDirX / pLen) * (cellSize * 0.72);
-                            z = cellCenterZ + (pushDirZ / pLen) * (cellSize * 0.72);
+                            const pushX = pushDirX / pLen;
+                            const pushZ = pushDirZ / pLen;
+                            x = cellCenterX + pushX * (cellSize * 0.72);
+                            z = cellCenterZ + pushZ * (cellSize * 0.72);
+
+                            const dot = vx * (-pushX) + vz * (-pushZ);
+                            if (dot > 0) {
+                                vx += pushX * dot;
+                                vz += pushZ * dot;
+                            }
                         }
                     }
                 }
@@ -592,6 +689,11 @@ class SimulationWorkerPool {
         this.damageEventsQueue = [];
         this.laserEventsQueue = [];
 
+        this.allyFlowX = null;
+        this.allyFlowY = null;
+        this.enemyFlowX = null;
+        this.enemyFlowY = null;
+
         this.lastStepDuration = 0;
         this.stepStartTime = 0;
         this.stepCount = 0;
@@ -599,6 +701,39 @@ class SimulationWorkerPool {
         // Память для быстрого фоллбэка на главном потоке (Single-Thread Linked-List SoA)
         this.syncHead = null;
         this.syncNext = new Int32Array(maxEntities);
+    }
+
+    clear() {
+        this.activeUnits.length = 0;
+        this.pendingSlices = 0;
+        this.sliceResults.length = 0;
+        this.damageEventsQueue.length = 0;
+        this.laserEventsQueue.length = 0;
+        this.isBusy = false;
+        if (this.syncHead) this.syncHead.fill(-1);
+    }
+
+    updateFlowFields(allyFlowGen, enemyFlowGen) {
+        if (allyFlowGen && allyFlowGen.fieldX && allyFlowGen.fieldY) {
+            this.allyFlowX = allyFlowGen.fieldX;
+            this.allyFlowY = allyFlowGen.fieldY;
+        }
+        if (enemyFlowGen && enemyFlowGen.fieldX && enemyFlowGen.fieldY) {
+            this.enemyFlowX = enemyFlowGen.fieldX;
+            this.enemyFlowY = enemyFlowGen.fieldY;
+        }
+
+        if (this.isMultiThreaded) {
+            for (let i = 0; i < this.workers.length; i++) {
+                this.workers[i].postMessage({
+                    type: 'SET_FLOW',
+                    allyFlowX: this.allyFlowX ? this.allyFlowX.buffer.slice(0) : null,
+                    allyFlowY: this.allyFlowY ? this.allyFlowY.buffer.slice(0) : null,
+                    enemyFlowX: this.enemyFlowX ? this.enemyFlowX.buffer.slice(0) : null,
+                    enemyFlowY: this.enemyFlowY ? this.enemyFlowY.buffer.slice(0) : null
+                });
+            }
+        }
     }
 
     terminate() {
@@ -795,6 +930,8 @@ class SimulationWorkerPool {
         this.laserEventsQueue.length = 0;
         this.currentDelta = delta;
 
+        const collisionMode = (typeof spatialGrid !== 'undefined' && spatialGrid.collisionMode === 'naive') ? 'naive' : 'spatial';
+
         // Копия подмассива активных данных для передачи воркерам (Zero-Allocation по размеру среза)
         const activeBytes = totalUnits * 16 * 4;
         const sendBuffer = this.globalBuffer.buffer.slice(0, activeBytes);
@@ -813,7 +950,8 @@ class SimulationWorkerPool {
                     sliceCount: count,
                     delta: delta,
                     currentTime: currentTime,
-                    hqData: hqData
+                    hqData: hqData,
+                    collisionMode: collisionMode
                 });
             } else {
                 this.pendingSlices--;
@@ -905,9 +1043,10 @@ class SimulationWorkerPool {
     }
 
     applyDamageEvents() {
-        for (let i = 0; i < this.damageEventsQueue.length; i += 2) {
+        for (let i = 0; i < this.damageEventsQueue.length; i += 3) {
             const targetIdx = this.damageEventsQueue[i];
             const dmg = this.damageEventsQueue[i + 1];
+            const team = this.damageEventsQueue[i + 2];
 
             if (targetIdx >= 0 && targetIdx < this.activeUnits.length) {
                 const target = this.activeUnits[targetIdx];
@@ -921,6 +1060,12 @@ class SimulationWorkerPool {
                     } else {
                         target.hp -= dmg;
                     }
+                }
+            } else if (targetIdx === -99) {
+                if (team === 0 && typeof enemyHQ !== 'undefined' && enemyHQ && enemyHQ.hp > 0) {
+                    enemyHQ.hp = Math.max(0, enemyHQ.hp - dmg);
+                } else if (team === 1 && typeof playerHQ !== 'undefined' && playerHQ && playerHQ.hp > 0) {
+                    playerHQ.hp = Math.max(0, playerHQ.hp - dmg);
                 }
             }
         }
@@ -958,6 +1103,7 @@ class SimulationWorkerPool {
         const bCellSize = 6.0;
         const bCols = Math.ceil(worldSize / bCellSize);
         const bRows = Math.ceil(worldSize / bCellSize);
+        const collisionMode = (typeof spatialGrid !== 'undefined' && spatialGrid.collisionMode === 'naive') ? 'naive' : 'spatial';
 
         if (!this.syncHead || this.syncHead.length < bCols * bRows) {
             this.syncHead = new Int32Array(bCols * bRows);
@@ -979,6 +1125,8 @@ class SimulationWorkerPool {
                 const bIdx = br * bCols + bc;
                 this.syncNext[i] = this.syncHead[bIdx];
                 this.syncHead[bIdx] = i;
+            } else {
+                this.syncNext[i] = -1;
             }
         }
 
@@ -1013,36 +1161,78 @@ class SimulationWorkerPool {
             let targetX = 0;
             let targetZ = 0;
 
-            for (let dr = -1; dr <= 1; dr++) {
-                const nbr = br + dr;
-                if (nbr < 0 || nbr >= bRows) continue;
-                const rowOff = nbr * bCols;
+            if (collisionMode === 'naive') {
+                const maxTest = Math.min(totalUnits, 500);
+                for (let j = 0; j < maxTest; j++) {
+                    if (j === i) continue;
+                    const cOff = j * 16;
+                    const candTeam = this.globalBuffer[cOff + 8];
+                    const candHp = this.activeUnits[j] ? this.activeUnits[j].hp : 0;
 
-                for (let dc = -1; dc <= 1; dc++) {
-                    const nbc = bc + dc;
-                    if (nbc < 0 || nbc >= bCols) continue;
+                    if (candTeam !== team && candHp > 0) {
+                        const ex = this.globalBuffer[cOff];
+                        const ez = this.globalBuffer[cOff + 1];
+                        const dX = ex - x;
+                        const dZ = ez - z;
+                        const dSq = dX * dX + dZ * dZ;
 
-                    let candIdx = this.syncHead[rowOff + nbc];
-                    while (candIdx !== -1) {
-                        const cOff = candIdx * 16;
-                        const candTeam = this.globalBuffer[cOff + 8];
-                        const candHp = this.activeUnits[candIdx] ? this.activeUnits[candIdx].hp : 0;
-
-                        if (candTeam !== team && candHp > 0) {
-                            const ex = this.globalBuffer[cOff];
-                            const ez = this.globalBuffer[cOff + 1];
-                            const dX = ex - x;
-                            const dZ = ez - z;
-                            const dSq = dX * dX + dZ * dZ;
-
-                            if (dSq < nearestDistSq) {
-                                nearestDistSq = dSq;
-                                nearestEnemyIdx = candIdx;
-                                targetX = ex;
-                                targetZ = ez;
-                            }
+                        if (dSq < nearestDistSq) {
+                            nearestDistSq = dSq;
+                            nearestEnemyIdx = j;
+                            targetX = ex;
+                            targetZ = ez;
                         }
-                        candIdx = this.syncNext[candIdx];
+                    }
+                }
+            } else {
+                for (let dr = -1; dr <= 1; dr++) {
+                    const nbr = br + dr;
+                    if (nbr < 0 || nbr >= bRows) continue;
+                    const rowOff = nbr * bCols;
+
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const nbc = bc + dc;
+                        if (nbc < 0 || nbc >= bCols) continue;
+
+                        let candIdx = this.syncHead[rowOff + nbc];
+                        while (candIdx !== -1) {
+                            const cOff = candIdx * 16;
+                            const candTeam = this.globalBuffer[cOff + 8];
+                            const candHp = this.activeUnits[candIdx] ? this.activeUnits[candIdx].hp : 0;
+
+                            if (candTeam !== team && candHp > 0) {
+                                const ex = this.globalBuffer[cOff];
+                                const ez = this.globalBuffer[cOff + 1];
+                                const dX = ex - x;
+                                const dZ = ez - z;
+                                const dSq = dX * dX + dZ * dZ;
+
+                                if (dSq < nearestDistSq) {
+                                    nearestDistSq = dSq;
+                                    nearestEnemyIdx = candIdx;
+                                    targetX = ex;
+                                    targetZ = ez;
+                                }
+                            }
+                            candIdx = this.syncNext[candIdx];
+                        }
+                    }
+                }
+            }
+
+            if (hqData) {
+                const targetHQX = (team === 0) ? hqData.enemyX : hqData.playerX;
+                const targetHQZ = (team === 0) ? hqData.enemyZ : hqData.playerZ;
+                const targetHQHp = (team === 0) ? hqData.enemyHp : hqData.playerHp;
+                if (targetHQHp > 0) {
+                    const dX = targetHQX - x;
+                    const dZ = targetHQZ - z;
+                    const dSq = dX * dX + dZ * dZ;
+                    if (dSq < nearestDistSq) {
+                        nearestDistSq = dSq;
+                        nearestEnemyIdx = -99;
+                        targetX = targetHQX;
+                        targetZ = targetHQZ;
                     }
                 }
             }
@@ -1053,10 +1243,14 @@ class SimulationWorkerPool {
                     state = 3; // ATTACK
                     vx = 0; vz = 0;
 
-                    const cooldown = (uType === 2) ? 1.6 : (uType === 1 ? 0.75 : (uType === 3 ? 1.2 : 1.0));
+                    const cooldown = (uType === 2) ? 1.6 : (uType === 1 ? 0.75 : 1.0);
                     if (currentTime - lastAtt >= cooldown) {
                         lastAtt = currentTime;
-                        this.damageEventsQueue.push(nearestEnemyIdx, dmg);
+                        if (nearestEnemyIdx >= 0) {
+                            this.damageEventsQueue.push(nearestEnemyIdx, dmg, team);
+                        } else if (nearestEnemyIdx === -99) {
+                            this.damageEventsQueue.push(-99, dmg, team);
+                        }
                         this.laserEventsQueue.push(x, z, targetX, targetZ, team, uType);
                     }
                 } else {
@@ -1068,52 +1262,97 @@ class SimulationWorkerPool {
                 }
             } else if (tx !== 0 || tz !== 0) {
                 state = 1; // MOVE
-                const dx = tx - x;
-                const dz = tz - z;
-                const d = Math.hypot(dx, dz);
-                if (d > 0.4) {
-                    vx = (dx / d) * speed;
-                    vz = (dz / d) * speed;
+                let dirX = 0, dirZ = 0;
+
+                const flowX = (team === 0) ? this.allyFlowX : this.enemyFlowX;
+                const flowY = (team === 0) ? this.allyFlowY : this.enemyFlowY;
+                if (flowX && flowY && cellSize > 0) {
+                    const gc = Math.floor((x + halfWorld) / cellSize);
+                    const gr = Math.floor((z + halfWorld) / cellSize);
+                    if (gc >= 0 && gc < this.gridSize && gr >= 0 && gr < this.gridSize) {
+                        const cIdx = gr * this.gridSize + gc;
+                        dirX = flowX[cIdx] || 0;
+                        dirZ = flowY[cIdx] || 0;
+                    }
+                }
+
+                if (dirX === 0 && dirZ === 0) {
+                    const dx = tx - x;
+                    const dz = tz - z;
+                    const d = Math.hypot(dx, dz);
+                    if (d > 0.4) {
+                        dirX = dx / d;
+                        dirZ = dz / d;
+                    }
+                }
+
+                if (dirX !== 0 || dirZ !== 0) {
+                    vx = dirX * speed;
+                    vz = dirZ * speed;
                 } else {
-                    state = 0;
+                    state = 0; // IDLE
                     vx = 0; vz = 0;
                 }
             } else {
-                state = 0;
+                state = 0; // IDLE
                 vx = 0; vz = 0;
             }
 
             let sepX = 0, sepZ = 0;
-            for (let dr = -1; dr <= 1; dr++) {
-                const nbr = br + dr;
-                if (nbr < 0 || nbr >= bRows) continue;
-                const rowOff = nbr * bCols;
+            if (collisionMode === 'naive') {
+                const maxSep = Math.min(totalUnits, 300);
+                for (let j = 0; j < maxSep; j++) {
+                    if (j !== i) {
+                        const oOff = j * 16;
+                        const ox = this.globalBuffer[oOff];
+                        const oz = this.globalBuffer[oOff + 1];
+                        const oRad = this.globalBuffer[oOff + 4];
+                        const minD = r + oRad;
 
-                for (let dc = -1; dc <= 1; dc++) {
-                    const nbc = bc + dc;
-                    if (nbc < 0 || nbc >= bCols) continue;
+                        const diffX = x - ox;
+                        diffZ = z - oz;
+                        const dSq = diffX * diffX + diffZ * diffZ;
 
-                    let otherIdx = this.syncHead[rowOff + nbc];
-                    while (otherIdx !== -1) {
-                        if (otherIdx !== i) {
-                            const oOff = otherIdx * 16;
-                            const ox = this.globalBuffer[oOff];
-                            const oz = this.globalBuffer[oOff + 1];
-                            const oRad = this.globalBuffer[oOff + 4];
-                            const minD = r + oRad;
-
-                            const diffX = x - ox;
-                            const diffZ = z - oz;
-                            const dSq = diffX * diffX + diffZ * diffZ;
-
-                            if (dSq < minD * minD && dSq > 0.000001) {
-                                const d = Math.sqrt(dSq);
-                                const push = (minD - d) * 0.5;
-                                sepX += (diffX / d) * push;
-                                sepZ += (diffZ / d) * push;
-                            }
+                        if (dSq < minD * minD && dSq > 0.000001) {
+                            const d = Math.sqrt(dSq);
+                            const push = (minD - d) * 0.5;
+                            sepX += (diffX / d) * push;
+                            sepZ += (diffZ / d) * push;
                         }
-                        otherIdx = this.syncNext[otherIdx];
+                    }
+                }
+            } else {
+                for (let dr = -1; dr <= 1; dr++) {
+                    const nbr = br + dr;
+                    if (nbr < 0 || nbr >= bRows) continue;
+                    const rowOff = nbr * bCols;
+
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const nbc = bc + dc;
+                        if (nbc < 0 || nbc >= bCols) continue;
+
+                        let otherIdx = this.syncHead[rowOff + nbc];
+                        while (otherIdx !== -1) {
+                            if (otherIdx !== i) {
+                                const oOff = otherIdx * 16;
+                                const ox = this.globalBuffer[oOff];
+                                const oz = this.globalBuffer[oOff + 1];
+                                const oRad = this.globalBuffer[oOff + 4];
+                                const minD = r + oRad;
+
+                                const diffX = x - ox;
+                                diffZ = z - oz;
+                                const dSq = diffX * diffX + diffZ * diffZ;
+
+                                if (dSq < minD * minD && dSq > 0.000001) {
+                                    const d = Math.sqrt(dSq);
+                                    const push = (minD - d) * 0.5;
+                                    sepX += (diffX / d) * push;
+                                    sepZ += (diffZ / d) * push;
+                                }
+                            }
+                            otherIdx = this.syncNext[otherIdx];
+                        }
                     }
                 }
             }
@@ -1135,8 +1374,16 @@ class SimulationWorkerPool {
                     const pushDirX = x - cellCenterX;
                     const pushDirZ = z - cellCenterZ;
                     const pLen = Math.hypot(pushDirX, pushDirZ) || 0.001;
-                    x = cellCenterX + (pushDirX / pLen) * (cellSize * 0.72);
-                    z = cellCenterZ + (pushDirZ / pLen) * (cellSize * 0.72);
+                    const pushX = pushDirX / pLen;
+                    const pushZ = pushDirZ / pLen;
+                    x = cellCenterX + pushX * (cellSize * 0.72);
+                    z = cellCenterZ + pushZ * (cellSize * 0.72);
+
+                    const dot = vx * (-pushX) + vz * (-pushZ);
+                    if (dot > 0) {
+                        vx += pushX * dot;
+                        vz += pushZ * dot;
+                    }
                 }
             }
 

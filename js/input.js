@@ -213,6 +213,9 @@ function issueMoveOrderAtPoint(clientX, clientY) {
     const angle = Math.atan2(targetPoint.z - groupCenterZ, targetPoint.x - groupCenterX);
     const offsets = getFormationOffsets(count, currentFormation);
     flowFieldGen.updateTarget(targetGrid.col, targetGrid.row);
+    if (typeof simWorkerPool !== 'undefined') {
+        simWorkerPool.updateFlowFields(flowFieldGen, enemyFlowFieldGen);
+    }
 
     const cosA = Math.cos(-angle);
     const sinA = Math.sin(-angle);

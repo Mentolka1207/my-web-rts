@@ -118,7 +118,10 @@ function stepSimulation(delta, currentTime) {
         if (typeof engineProfiler !== 'undefined') {
             engineProfiler.fsmTime = simWorkerPool.lastStepDuration;
             engineProfiler.spatialTime = 0;
-            engineProfiler.pairsTested = simWorkerPool.activeUnits.length * 9;
+            const isNaive = (typeof spatialGrid !== 'undefined' && spatialGrid.collisionMode === 'naive');
+            engineProfiler.pairsTested = isNaive
+                ? simWorkerPool.activeUnits.length * Math.min(simWorkerPool.activeUnits.length, 500)
+                : simWorkerPool.activeUnits.length * 9;
         }
     } else {
         // 5.5. Обновление пространственного хеша для O(1) поиска целей и коллизий
@@ -374,6 +377,9 @@ function stepSimulation(delta, currentTime) {
 
     // Проверка победы или поражения
     checkGameOverConditions();
+    if (typeof checkBenchmarkCompletion === 'function' && typeof benchmarkActive !== 'undefined' && benchmarkActive) {
+        checkBenchmarkCompletion();
+    }
 
     // 10. Высокопроизводительное пространственное расталкивание юнитов и коллизии с препятствиями
     const numAllies = units.length;

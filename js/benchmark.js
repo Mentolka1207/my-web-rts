@@ -88,12 +88,29 @@ function clearAllUnitsForBenchmark() {
     if (typeof simWorld !== 'undefined') {
         simWorld.clear();
     }
+    if (typeof simWorkerPool !== 'undefined') {
+        simWorkerPool.clear();
+    }
 }
 
 // Запуск стресс-теста на N юнитов (или allyCount vs enemyCount: 2000×2000, 5000×5000)
 function runBenchmark(countOrAllies, maybeEnemies) {
     if (!gameStarted) {
         if (typeof startGame === 'function') startGame();
+    }
+
+    // Закрываем любые открытые модальные окна (обучение, настройки) и снимаем с паузы
+    while (typeof modalStack !== 'undefined' && modalStack.length > 0) {
+        const top = modalStack[modalStack.length - 1];
+        if (typeof hideModal === 'function' && top && top.id) {
+            hideModal(top.id, false);
+        } else {
+            modalStack.pop();
+        }
+    }
+    if (typeof isGamePaused !== 'undefined' && isGamePaused) {
+        if (typeof togglePause === 'function') togglePause();
+        else isGamePaused = false;
     }
 
     benchmarkActive = true;
@@ -144,6 +161,7 @@ function runBenchmark(countOrAllies, maybeEnemies) {
     const unitTypes = ['standard', 'standard', 'scout', 'standard', 'tank'];
     const enemyTargetPos = gridToWorld(ENEMY_HQ_COL, ENEMY_HQ_ROW);
     const allyTargetPos = gridToWorld(HQ_COL, HQ_ROW);
+    const maxSpread = (typeof CELL_SIZE !== 'undefined') ? CELL_SIZE * 0.38 : 1.5;
 
     let spawnedAllies = 0;
     while (spawnedAllies < allyCount) {
@@ -151,7 +169,7 @@ function runBenchmark(countOrAllies, maybeEnemies) {
         const basePos = gridToWorld(cell.col, cell.row);
         const subSlot = Math.floor(spawnedAllies / allyCells.length);
         const angle = (spawnedAllies * 2.39996) % (Math.PI * 2);
-        const radius = Math.min(0.42, 0.08 * Math.sqrt(subSlot + 1));
+        const radius = Math.min(maxSpread, 0.15 * Math.sqrt(subSlot + 1));
         const offsetX = Math.cos(angle) * radius;
         const offsetZ = Math.sin(angle) * radius;
 
@@ -170,6 +188,7 @@ function runBenchmark(countOrAllies, maybeEnemies) {
             mesh.scale.setScalar(stats.scale);
             mesh.position.set(basePos.x + offsetX, 0.75, basePos.z + offsetZ);
             hpBar = attachHealthBar(mesh, true, 0.7 * stats.scale);
+            scene.add(mesh);
         }
 
         let simId = -1;
@@ -217,7 +236,7 @@ function runBenchmark(countOrAllies, maybeEnemies) {
         const basePos = gridToWorld(cell.col, cell.row);
         const subSlot = Math.floor(spawnedEnemies / enemyCells.length);
         const angle = (spawnedEnemies * 2.39996) % (Math.PI * 2);
-        const radius = Math.min(0.42, 0.08 * Math.sqrt(subSlot + 1));
+        const radius = Math.min(maxSpread, 0.15 * Math.sqrt(subSlot + 1));
         const offsetX = Math.cos(angle) * radius;
         const offsetZ = Math.sin(angle) * radius;
 
@@ -236,6 +255,7 @@ function runBenchmark(countOrAllies, maybeEnemies) {
             mesh.scale.setScalar(stats.scale);
             mesh.position.set(basePos.x + offsetX, 0.75, basePos.z + offsetZ);
             hpBar = attachHealthBar(mesh, false, 0.7 * stats.scale);
+            scene.add(mesh);
         }
 
         let simId = -1;
@@ -275,9 +295,15 @@ function runBenchmark(countOrAllies, maybeEnemies) {
     if (typeof enemyFlowFieldGen !== 'undefined') {
         enemyFlowFieldGen.updateTarget(HQ_COL, HQ_ROW);
     }
+    if (typeof simWorkerPool !== 'undefined') {
+        simWorkerPool.updateFlowFields(flowFieldGen, enemyFlowFieldGen);
+    }
 
     if (typeof showTacticalAlert === 'function') {
-        showTacticalAlert(`🚀 СТРЕСС-ТЕСТ: Запущено ${allyCount} vs ${enemyCount} (${totalCount} всего)!`, false);
+        const msg = typeof t === 'function'
+            ? t('ALERT_BENCH_START', allyCount, enemyCount, totalCount)
+            : `🚀 СТРЕСС-ТЕСТ: Запущено ${allyCount} vs ${enemyCount} (${totalCount} всего)!`;
+        showTacticalAlert(msg, false);
     }
 
     updateBenchmarkUI();
@@ -296,12 +322,36 @@ function stopBenchmark() {
 
     // Восстанавливаем нормальный интервал волн
     waveTimer = (typeof WAVE_INTERVAL !== 'undefined') ? WAVE_INTERVAL : 60;
+    if (typeof waveWarningGiven !== 'undefined') {
+        waveWarningGiven = false;
+    }
 
     if (typeof showTacticalAlert === 'function') {
-        showTacticalAlert('⏹️ Стресс-тест остановлен. Стандартный отряд восстановлен.', false);
+        const msg = typeof t === 'function'
+            ? t('ALERT_BENCH_STOP')
+            : '⏹️ Стресс-тест остановлен. Стандартный отряд восстановлен.';
+        showTacticalAlert(msg, false);
     }
 
     updateBenchmarkUI();
+}
+
+// Проверка завершения битвы в стресс-тесте
+function checkBenchmarkCompletion() {
+    if (!benchmarkActive) return;
+    if (units.length === 0 || enemies.length === 0) {
+        const winner = units.length > 0
+            ? (typeof t === 'function' ? t('BENCH_WIN_ALLIES') : 'Союзники')
+            : (typeof t === 'function' ? t('BENCH_WIN_ENEMIES') : 'Враги');
+        const avgFps = (typeof engineProfiler !== 'undefined' && engineProfiler.avgFps) ? Math.round(engineProfiler.avgFps) : 60;
+        const msg = typeof t === 'function'
+            ? t('ALERT_BENCH_WIN', winner, avgFps)
+            : `🏁 Стресс-тест завершён! Победитель: ${winner}. Средний FPS: ${avgFps}`;
+        if (typeof showTacticalAlert === 'function') {
+            showTacticalAlert(msg, false);
+        }
+        stopBenchmark();
+    }
 }
 
 // Переключение алгоритма коллизий: Spatial Grid O(N) vs Naive Brute-Force O(N²)
@@ -325,6 +375,14 @@ function toggleCollisionMode() {
 // Переключение GPU Instancing: THREE.InstancedMesh (<20 calls) vs Individual Meshes (12k calls)
 function toggleInstancingMode() {
     if (typeof instancedRenderer === 'undefined') return;
+
+    const totalUnits = units.length + enemies.length;
+    if (instancedRenderer.enabled && totalUnits >= 1000) {
+        if (typeof showTacticalAlert === 'function') {
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_BENCH_SWARM_INST') : '⚠️ Для армий от 1000 юнитов требуется GPU-инстансинг!', true);
+        }
+        return;
+    }
 
     instancedRenderer.enabled = !instancedRenderer.enabled;
     if (typeof refreshProfilerToggles === 'function') refreshProfilerToggles();
