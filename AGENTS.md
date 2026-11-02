@@ -46,7 +46,7 @@
   * `scripts/headless_wave_test.js` — быстрый headless-тест баланса волн выживания на 1000x скорости без WebGL.
   * `libs/three.min.js` — автономная библиотека Three.js (v0.186.1, работающая без интернета и CORS).
   * `THIRD_PARTY_LICENSES.md` — лицензии сторонних библиотек (Three.js MIT).
-  * `manifest.json`, `sw.js` — PWA-манифест и Service Worker v0.3.0 для офлайн-игры (прекэш всех 27 скриптов и стилей, включая design/tokens.css).
+  * `manifest.json`, `sw.js` — PWA-манифест и Service Worker v0.3.0 для офлайн-игры (прекэш всех 28 скриптов и стилей, включая design/tokens.css).
   * `README.md` — пользовательская и техническая документация.
 
 ---
