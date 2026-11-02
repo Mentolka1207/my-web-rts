@@ -406,7 +406,7 @@ function triggerGameOver(playerWon) {
     if (abPanel) abPanel.style.display = 'none';
 
     if (titleEl) {
-        titleEl.textContent = playerWon ? (typeof t === 'function' ? t('GAME_OVER_VICTORY') : '🏆 ПОБЕДА!') : (typeof t === 'function' ? t('GAME_OVER_DEFEAT') : '💥 ПОРАЖЕНИЕ');
+        titleEl.textContent = playerWon ? (typeof t === 'function' ? t('GAME_OVER_VICTORY') : 'Победа. Штаб врага снесён.') : (typeof t === 'function' ? t('GAME_OVER_DEFEAT') : 'Штаб потерян. Попробуешь ещё?');
         titleEl.classList.toggle('is-defeat', !playerWon);
     }
 

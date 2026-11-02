@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Генератор дизайн-токенов Minimal Web RTS. Только стандартная библиотека.
+"""Генератор дизайн-токенов Tabhold. Только стандартная библиотека.
 
 Один источник правды -> design/tokens.json (для contrast.py) и design/tokens.css.
 
@@ -214,7 +214,7 @@ LAYOUT = {
 
 def build():
     tokens = {
-        "_about": ("Токены Minimal Web RTS. Сгенерировано design/build_tokens.py — правьте там. "
+        "_about": ("Токены Tabhold. Сгенерировано design/build_tokens.py — правьте там. "
                    "Цвета surface-* и border-input здесь — ИТОГОВЫЙ цвет стекла поверх худшего фона сцены "
                    "(" + SCENE_WORST + "), для проверки контраста. В CSS стекло остаётся rgba (см. glass)."),
         "_measured": {"commit": "36e225f", "scene_worst": SCENE_WORST, "scene_floor": SCENE_FLOOR},
@@ -231,7 +231,7 @@ def build():
         fh.write("\n")
 
     L = ["/* =============================================================================",
-         "   design/tokens.css — дизайн-токены Minimal Web RTS",
+         "   design/tokens.css — дизайн-токены Tabhold",
          "   СГЕНЕРИРОВАНО design/build_tokens.py, руками не править.",
          "   Подключать ПЕРВЫМ, до style.css. Компоненты используют только var(--…).",
          "   ============================================================================= */",

@@ -1,4 +1,4 @@
-# План тестов: Minimal Web RTS
+# План тестов: Tabhold
 
 Сборка: `b94bfa4` (main, 2026-11-01), исправления до `f015d1f`. Дата: 2026-11-02. Среда: локальный сервер `e2e/serve.js` и `file://`,
 Chromium 1243 (Playwright 1.63.0), программный WebGL (SwiftShader), без сетевых данных.

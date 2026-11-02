@@ -19,7 +19,7 @@ for (const [name, url] of [
         expect((await state(page)).waveTimer).toBeLessThan(t0);
 
         await page.evaluate(() => { enemyHQ.hp = 0; }); // хук: штаб врага разрушен
-        await expect(page.getByRole('dialog', { name: /ПОБЕДА|VICTORY/ })).toBeVisible();
+        await expect(page.getByRole('dialog', { name: /Победа|Victory/ })).toBeVisible();
         await expect(page.getByRole('button', { name: /Играть снова|Play Again/ })).toBeFocused();
         const totals = await page.evaluate(() => JSON.parse(localStorage.getItem('rts_neo_profile_v2')).totals);
         expect(totals).toMatchObject({ matchesPlayed: 1, victories: 1 });

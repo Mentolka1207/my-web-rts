@@ -8,8 +8,8 @@ let currentLanguage = 'ru';
 const TRANSLATIONS = {
     ru: {
         // Главное меню
-        MENU_TITLE: '🛰️ Minimal Web RTS',
-        MENU_SUBTITLE: 'Neo-Drone Swarm & Patrolling AI',
+        MENU_TITLE: 'Tabhold',
+        MENU_SUBTITLE: 'Рой дронов против волн. Только ты и ИИ, в своём темпе.',
         MENU_PLAY: '▶ Играть',
         MENU_SETTINGS: '⚙️ Настройки',
         MENU_TUTORIAL: '❓ Обучение',
@@ -72,7 +72,7 @@ const TRANSLATIONS = {
         PAUSE_BTN: '⏸️ Пауза',
 
         // Панель инструкций
-        INSTR_TITLE: 'Управление Swarm RTS:',
+        INSTR_TITLE: 'Управление:',
         INSTR_LINE1: '<strong>Клик ЛКМ</strong> — выбор юнита; <strong>2× клик</strong> — выбрать всех юнитов этого типа',
         INSTR_LINE2: 'Зажми <strong>ЛКМ и тяни</strong> — рамка выделения группы; <strong>Ctrl+A</strong> — вся армия',
         INSTR_LINE3: 'Клик <strong>ПКМ</strong> — приказ перемещения по Flow Field / фокус-атака врагов и штаба',
@@ -122,18 +122,18 @@ const TRANSLATIONS = {
         ALERT_LEVIATHAN: '⚠️ ВНИМАНИЕ: ВОЛНА {0} — ПРИБЛИЖАЕТСЯ ЛЕВИАФАН!',
         ALERT_SWARM: '🌊 Волна {0}: РОЙ ПЕРЕХВАТЧИКОВ! Приготовьте плотный строй!',
         ALERT_ARMORED: '🌊 Волна {0}: ОСАДНЫЙ ТАРАН! Тяжёлые танки атакуют базу!',
-        ALERT_STANDARD: '🌊 Надвигается Волна {0}! Защищайте периметр базы!',
+        ALERT_STANDARD: '🌊 Волна {0} пошла. Держи дронов у штаба.',
         ALERT_SABOTAGE: '⚠️ ТРЕВОГА: Вражеская группа нацелена на точку «{0}»!',
-        ALERT_HQ_ATTACK: '⚠️ ВРАГ АТАКУЕТ НАШ ШТАБ!',
+        ALERT_HQ_ATTACK: '⚠️ Штаб под атакой — верни армию (Space).',
         BOSS_DESTROYED_ALERT: '🏆 БОСС «ЛЕВИАФАН» УНИЧТОЖЕН! (+100⚡)',
         ALERT_NODE_CAPTURED: '💎 Точка «{0}» перешла под наш контроль! (+3⚡/сек)',
         ALERT_NODE_LOST: '⚠️ Противник захватил точку «{0}»!',
         ALERT_WAVE_10S_BOSS: '⚠️ ТРЕВОГА: Приближается БОСС «Левиафан» через 10с!',
-        ALERT_WAVE_10S_NORMAL: '🌊 Внимание: Волна {0} начнётся через 10 секунд!',
+        ALERT_WAVE_10S_NORMAL: 'Волна {0} через 10 с.',
 
         // Конец игры
-        GAME_OVER_VICTORY: '🏆 ПОБЕДА!',
-        GAME_OVER_DEFEAT: '💥 ПОРАЖЕНИЕ',
+        GAME_OVER_VICTORY: 'Победа. Штаб врага снесён.',
+        GAME_OVER_DEFEAT: 'Штаб потерян. Попробуешь ещё?',
         STAT_TIME: '⏱️ Время боя:',
         STAT_WAVES_DEFENDED: '🌊 Отражено волн:',
         STAT_KILLED: '💥 Уничтожено врагов:',
@@ -174,7 +174,7 @@ const TRANSLATIONS = {
         REC_TOTAL_BOSSES: 'Сбито боссов:',
         REC_FILTER_MAP: 'Карта:',
         REC_FILTER_DIFF: 'Сложность:',
-        REC_EMPTY: 'Пока нет данных. Сыграйте первый матч!',
+        REC_EMPTY: 'Здесь появятся твои матчи. Первый — одной кнопкой «Играть».',
         BTN_CLOSE: 'Закрыть',
 
         // Обучение
@@ -185,11 +185,11 @@ const TRANSLATIONS = {
         TUT_STEP2_DESC: 'Стройте сбалансированную армию: быстрых Разведчиков (40⚡), боевых Дронов (70⚡) и осадные Танки (150⚡). Меняйте построение: Шеренга [Z], Клин [X], Кольцо [C].',
         TUT_STEP3_TITLE: '3. ВОЛНЫ И СПОСОБНОСТИ',
         TUT_STEP3_DESC: 'Каждые 60 сек база врага отправляет волны. Используйте Форсаж [Q] разведчиков, Щит [E] дронов и Осадный режим [R] танков. На волне 10 отразите Босса «Левиафана» и сокрушите вражеский штаб!',
-        BTN_TUTORIAL_START: '🚀 Понятно, в бой!',
+        BTN_TUTORIAL_START: 'Понятно, начинаем',
 
         // Лицензии
         LICENSES_TITLE: '📜 ЛИЦЕНЗИИ И БЛАГОДАРНОСТИ',
-        LICENSES_DESC: 'Minimal Web RTS — открытый проект под лицензией MIT. Вся графика, процедурные PBR-текстуры, 3D-модели и аудиоэффекты созданы автономно на WebGL/Web Audio API.',
+        LICENSES_DESC: 'Tabhold — открытый проект под лицензией MIT. Вся графика, процедурные PBR-текстуры, 3D-модели и аудиоэффекты созданы автономно на WebGL/Web Audio API.',
         LICENSES_THREE_TITLE: 'Three.js (v0.186.1) — The MIT License',
         LICENSES_THREE_TEXT: 'Copyright © 2010-2026 three.js authors. Разрешено свободное использование, модификация и распространение.',
         // Сборка UI 2026-10-31: доступность, HUD, профайлер, экран ошибки
@@ -207,7 +207,7 @@ const TRANSLATIONS = {
         BTN_FPS_PANEL: 'FPS-панель (`)',
         TOUCH_MODE_LABEL: 'Режим касания',
         ABILITY_ARIA: '{0}: {1}',
-        ERR_TITLE: '🚨 Сбой в коде игры',
+        ERR_TITLE: 'Игра споткнулась',
         ERR_UNKNOWN: 'Неизвестная ошибка',
         ERR_SOURCE: 'Где: {0}',
         DBG_TITLE: '🛠️ Профайлер (F3)',
@@ -281,8 +281,8 @@ const TRANSLATIONS = {
 
     en: {
         // Main menu
-        MENU_TITLE: '🛰️ Minimal Web RTS',
-        MENU_SUBTITLE: 'Neo-Drone Swarm & Patrolling AI',
+        MENU_TITLE: 'Tabhold',
+        MENU_SUBTITLE: 'A drone swarm against the waves. Just you and the AI, at your own pace.',
         MENU_PLAY: '▶ Play',
         MENU_SETTINGS: '⚙️ Settings',
         MENU_TUTORIAL: '❓ Tutorial',
@@ -345,7 +345,7 @@ const TRANSLATIONS = {
         PAUSE_BTN: '⏸️ Pause',
 
         // Instructions
-        INSTR_TITLE: 'Swarm RTS Controls:',
+        INSTR_TITLE: 'Controls:',
         INSTR_LINE1: '<strong>LMB Click</strong> — select unit; <strong>Double Click</strong> — select all units of this type',
         INSTR_LINE2: 'Hold <strong>LMB & Drag</strong> — box selection; <strong>Ctrl+A</strong> — select entire army',
         INSTR_LINE3: '<strong>RMB Click</strong> — Flow Field movement / focus-attack enemy drones or HQ',
@@ -395,18 +395,18 @@ const TRANSLATIONS = {
         ALERT_LEVIATHAN: '⚠️ WARNING: WAVE {0} — LEVIATHAN BOSS APPROACHING!',
         ALERT_SWARM: '🌊 Wave {0}: INTERCEPTOR SWARM! Form defensive lines!',
         ALERT_ARMORED: '🌊 Wave {0}: SIEGE BATTERY! Heavy tanks assault our base!',
-        ALERT_STANDARD: '🌊 Wave {0} approaching! Defend base perimeter!',
+        ALERT_STANDARD: '🌊 Wave {0} is here. Keep your drones near the HQ.',
         ALERT_SABOTAGE: '⚠️ ALERT: Enemy strike team targeting node "{0}"!',
-        ALERT_HQ_ATTACK: '⚠️ ENEMY IS ATTACKING OUR HQ!',
+        ALERT_HQ_ATTACK: '⚠️ Your HQ is under attack. Bring the army back (Space).',
         BOSS_DESTROYED_ALERT: '🏆 BOSS "LEVIATHAN" DESTROYED! (+100⚡)',
         ALERT_NODE_CAPTURED: '💎 Node "{0}" secured! (+3⚡/sec)',
         ALERT_NODE_LOST: '⚠️ Enemy captured node "{0}"!',
         ALERT_WAVE_10S_BOSS: '⚠️ ALERT: Boss "Leviathan" inbound in 10s!',
-        ALERT_WAVE_10S_NORMAL: '🌊 Attention: Wave {0} begins in 10 seconds!',
+        ALERT_WAVE_10S_NORMAL: 'Wave {0} in 10 s.',
 
         // Game over
-        GAME_OVER_VICTORY: '🏆 VICTORY!',
-        GAME_OVER_DEFEAT: '💥 DEFEAT',
+        GAME_OVER_VICTORY: 'Victory. The enemy HQ is down.',
+        GAME_OVER_DEFEAT: 'HQ lost. Another go?',
         STAT_TIME: '⏱️ Battle Time:',
         STAT_WAVES_DEFENDED: '🌊 Waves Defeated:',
         STAT_KILLED: '💥 Enemies Destroyed:',
@@ -447,7 +447,7 @@ const TRANSLATIONS = {
         REC_TOTAL_BOSSES: 'Total bosses defeated:',
         REC_FILTER_MAP: 'Map:',
         REC_FILTER_DIFF: 'Difficulty:',
-        REC_EMPTY: 'No data yet. Play your first match!',
+        REC_EMPTY: 'Your matches will show up here. The first one is a single tap on “Play”.',
         BTN_CLOSE: 'Close',
 
         // Tutorial
@@ -458,11 +458,11 @@ const TRANSLATIONS = {
         TUT_STEP2_DESC: 'Build a balanced swarm: agile Scouts (40⚡), standard Drones (70⚡), and heavy Siege Tanks (150⚡). Switch formations: Line [Z], Wedge [X], Circle [C].',
         TUT_STEP3_TITLE: '3. ABILITIES & DEFENSE',
         TUT_STEP3_DESC: 'Survive incoming waves every 60s. Trigger Scout Overdrive [Q], Drone Shield [E], and Tank Siege mode [R]. Defeat the Leviathan on wave 10 and obliterate the enemy HQ!',
-        BTN_TUTORIAL_START: '🚀 Got it, to battle!',
+        BTN_TUTORIAL_START: 'Got it, let’s start',
 
         // Licenses
         LICENSES_TITLE: '📜 LICENSES & CREDITS',
-        LICENSES_DESC: 'Minimal Web RTS is an open-source project licensed under MIT. All graphics, procedural PBR textures, 3D models, and sound effects are generated proceduraly via WebGL & Web Audio API.',
+        LICENSES_DESC: 'Tabhold is an open-source project licensed under MIT. All graphics, procedural PBR textures, 3D models, and sound effects are generated procedurally via WebGL & Web Audio API.',
         LICENSES_THREE_TITLE: 'Three.js (v0.186.1) — The MIT License',
         LICENSES_THREE_TEXT: 'Copyright © 2010-2026 three.js authors. Free to use, modify, and distribute.',
         // UI build 2026-10-31: accessibility, HUD, profiler, error screen
@@ -480,7 +480,7 @@ const TRANSLATIONS = {
         BTN_FPS_PANEL: 'FPS panel (`)',
         TOUCH_MODE_LABEL: 'Touch mode',
         ABILITY_ARIA: '{0}: {1}',
-        ERR_TITLE: '🚨 Game code error',
+        ERR_TITLE: 'The game tripped up',
         ERR_UNKNOWN: 'Unknown error',
         ERR_SOURCE: 'Where: {0}',
         DBG_TITLE: '🛠️ Profiler (F3)',

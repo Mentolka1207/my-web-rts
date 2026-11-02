@@ -1,4 +1,4 @@
-# Компоненты Minimal Web RTS: спецификация
+# Компоненты Tabhold: спецификация
 
 Основа: код коммита `36e225f`, скриншоты Playwright 1280×800 и 390×844 (Chromium + SwiftShader), вычисленные стили
 `getComputedStyle`. Токены: `design/tokens.css` (генерирует `design/build_tokens.py`). Ссылки `файл:строка` даны для `36e225f`.

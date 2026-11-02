@@ -1,4 +1,4 @@
-# Паритет: Minimal Web RTS
+# Паритет: Tabhold
 
 Сравнение исходной версии `a1919fb` (2026-10-28, на ней делали recon) со сборкой `35dabce` (2026-11-02).
 Оценка функций: `parity.py` из replica-diff по `features.csv`. Снимки и проверки поведения: Chromium (Playwright), программный WebGL.

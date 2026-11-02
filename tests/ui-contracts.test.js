@@ -50,7 +50,7 @@ describe('Service Worker: прекэш и версия', () => {
 
     it('имя кэша содержит версию из package.json', () => {
         const name = (sw.match(/CACHE_NAME\s*=\s*'([^']+)'/) || [])[1];
-        expect(name).toBe(`minimal-web-rts-v${pkg.version}`);
+        expect(name).toBe(`tabhold-v${pkg.version}`);
     });
 
     it('все локальные <script src> и <link rel=stylesheet> из index.html есть в прекэше', () => {

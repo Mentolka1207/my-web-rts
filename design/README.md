@@ -1,4 +1,4 @@
-# design/ — дизайн-система Minimal Web RTS
+# design/ — дизайн-система Tabhold
 
 Снята с кода коммита `36e225f` (`style.css`, inline-стили `index.html` и `js/ui.js`) и со скриншотов Playwright
 (1280×800 и 390×844). С 2026-10-31 игра подключает `tokens.css` первым в `index.html`, а `style.css` написан только на

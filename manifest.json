@@ -1,7 +1,7 @@
 {
-  "name": "Minimal Web RTS: Neo-Drone Swarm",
-  "short_name": "Web RTS",
-  "description": "3D Sci-Fi Real-Time Strategy with Neo-Drone Swarm & Patrolling AI on Three.js",
+  "name": "Tabhold",
+  "short_name": "Tabhold",
+  "description": "Solo 3D RTS in your browser: a drone swarm against the waves, at your own pace. Works offline.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#090c16",

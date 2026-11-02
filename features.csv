@@ -60,3 +60,9 @@ PWA / офлайн-установка,distribution,should,no,yes,"manifest.json 
 "Клавиатура: меню, окна, пауза, итог боя",ux,must,no,yes,"видимый фокус, ловушка Tab и Esc в окнах, возврат фокуса; e2e-проверка 17/17 шагов; бой требует мыши или касания"
 Экранные дикторы: роли и подписи,ux,should,no,yes,"role=dialog/alertdialog, live-регион оповещений, aria-pressed/aria-checked, подписи полей; axe WCAG 2.2 AA: 0 нарушений, кроме meta-viewport"
 Экран системной ошибки (S06),dev,should,partial,yes,"config.js: текст ошибки вставляется как текст (раньше innerHTML), фокус на «Закрыть», Esc, i18n"
+Армия на таче без рамки: «вся армия» и приказ одним касанием,ux,should,no,no,"replica/fixes.md F1; управление: 6 строк отзывов, 3 источника"
+Группы юнитов Ctrl+1…9 на десктопе,gameplay,could,no,no,replica/fixes.md F1; цифры 1-3 сейчас заняты способностями (js/input.js:646-650)
+Режим для новичков: спокойная сложность и замедление ×0.5,gameplay,should,no,no,"replica/fixes.md F2; порог входа: 6 строк, 4 источника"
+Сохранение посреди матча с продолжением,gameplay,could,no,no,"replica/fixes.md F4; тонкая тема: 5 строк, 1 тред Steam"
+Замер FPS на реальных устройствах и авто-понижение качества,perf,should,no,no,replica/fixes.md F5; жалобы на рывки в основном 2013 года
+Ссылка на карту по сиду,shell,could,no,no,"replica/fixes.md F6; тема «без регистрации»: 9 строк, 1 источник"

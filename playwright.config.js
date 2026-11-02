@@ -1,4 +1,4 @@
-// playwright.config.js — e2e-тесты Minimal Web RTS (npm run e2e).
+// playwright.config.js — e2e-тесты Tabhold (npm run e2e).
 // Unit-тесты остаются в Vitest (npm test); e2e-файлы названы *.e2e.js, чтобы Vitest их не подхватывал.
 const { defineConfig, devices } = require('@playwright/test');
 

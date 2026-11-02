@@ -1,0 +1,9 @@
+{
+  "name": "Tabhold",
+  "chosen": "2026-11-02",
+  "avoid": ["Minimal Web RTS", "Neo-Drone Swarm", "Patrolling AI", "Swarm RTS",
+            "They Are Billions", "Mindustry", "Rusted Warfare", "Swarmhold", "Hivetide"],
+  "domains": [],
+  "colors": [],
+  "_notes": "avoid: старое имя игры и его хвосты + похожие игры, которые нельзя упоминать в имени, рекламе и листинге. colors пуст: палитра своя и остаётся (contrast.py 2026-11-02: 33 пары, 0 провалов AA). domains пуст: у старой версии не было своего домена, кроме GitHub Pages mentolka1207.github.io/my-web-rts (оставлен, это твой репозиторий)."
+}
