@@ -626,6 +626,8 @@ function showTutorialModal() {
 function closeTutorialModal() {
     hideModal('tutorial-modal');
     if (typeof playerProfile !== 'undefined') {
+        // свежий профиль из хранилища: другая вкладка могла записать результат матча (BUG-001)
+        if (typeof loadProfileFromStorage === 'function') loadProfileFromStorage();
         playerProfile.tutorialCompleted = true;
         if (typeof saveProfileToStorage === 'function') saveProfileToStorage();
     }
@@ -787,7 +789,7 @@ function updateDebugOverlay(delta) {
         const threadsEl = document.getElementById('dbg-threads');
         if (simModeEl) {
             if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
-                simModeEl.textContent = `${simWorkerPool.threadCount} Web Workers (Multi-Core)`;
+                simModeEl.textContent = typeof t === 'function' ? t('DBG_SIM_WORKERS', simWorkerPool.threadCount) : `${simWorkerPool.threadCount} Web Workers`;
                 setLevelClass(simModeEl, 'good');
             } else {
                 simModeEl.textContent = typeof t === 'function' ? t('DBG_SIM_MAIN') : 'главный поток (SoA)';
@@ -797,10 +799,10 @@ function updateDebugOverlay(delta) {
         if (threadsEl) {
             if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
                 const totalHw = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : simWorkerPool.threadCount;
-                threadsEl.textContent = `${simWorkerPool.threadCount} / ${totalHw} ядер CPU`;
+                threadsEl.textContent = typeof t === 'function' ? t('DBG_THREADS_MULTI', simWorkerPool.threadCount, totalHw) : `${simWorkerPool.threadCount} / ${totalHw}`;
                 setLevelClass(threadsEl, 'good');
             } else {
-                threadsEl.textContent = '1 поток (SoA)';
+                threadsEl.textContent = typeof t === 'function' ? t('DBG_THREADS_SINGLE') : '1';
                 setLevelClass(threadsEl, null);
             }
         }
@@ -874,10 +876,10 @@ function updatePerfPanel(timestamp) {
     const threadsEl = document.getElementById('perf-threads');
     if (threadsEl) {
         if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
-            threadsEl.textContent = `${simWorkerPool.threadCount} CPU (Multi-Core)`;
+            threadsEl.textContent = typeof t === 'function' ? t('PERF_THREADS_MULTI', simWorkerPool.threadCount) : String(simWorkerPool.threadCount);
             setLevelClass(threadsEl, 'good');
         } else {
-            threadsEl.textContent = '1 (Main Thread)';
+            threadsEl.textContent = typeof t === 'function' ? t('PERF_THREADS_SINGLE') : '1';
             setLevelClass(threadsEl, null);
         }
     }

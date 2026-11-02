@@ -415,6 +415,11 @@ function getMapSeed() {
 function setMapSeed(newSeed, rerender = true) {
     if (typeof newSeed === 'string') {
         const trimmed = newSeed.trim();
+        // Пустой ввод сид не меняет: на Enter/blur возвращаем в поле действующий сид (BUG-003)
+        if (trimmed.length === 0) {
+            if (rerender) syncSeedUI(true);
+            return;
+        }
         const parsed = parseInt(trimmed, 10);
         if (!isNaN(parsed) && String(parsed) === trimmed) {
             currentMapSeed = parsed;
@@ -445,10 +450,10 @@ function rerollMapSeed(rerender = true) {
     return currentMapSeed;
 }
 
-function syncSeedUI() {
+function syncSeedUI(force = false) {
     if (typeof document === 'undefined') return;
     const input = document.getElementById('map-seed-input');
-    if (input && document.activeElement !== input) {
+    if (input && (force || document.activeElement !== input)) {
         input.value = String(currentMapSeed);
     }
 }

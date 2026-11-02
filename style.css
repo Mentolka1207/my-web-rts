@@ -1157,6 +1157,7 @@ button:disabled {
     .btn-xs,
     .settings-select,
     .menu-select,
+    .seed-input,
     .slider-row input[type="range"],
     #main-menu-github {
         min-height: var(--target-touch);

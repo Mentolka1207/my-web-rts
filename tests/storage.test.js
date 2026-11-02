@@ -5,8 +5,9 @@ const vm = require('node:vm');
 
 const ROOT = path.resolve(__dirname, '..');
 
-function loadStorageContext(initialLocalStorage = {}) {
-    const store = { ...initialLocalStorage };
+// sharedStore: общий объект хранилища для нескольких «вкладок» (BUG-001)
+function loadStorageContext(initialLocalStorage = {}, sharedStore = null) {
+    const store = sharedStore || { ...initialLocalStorage };
     const mockLocalStorage = {
         getItem: (k) => store[k] || null,
         setItem: (k, v) => { store[k] = String(v); },
@@ -222,3 +223,38 @@ describe('Storage Schema v2, валидация и миграция (js/storage.
         expect(canyonNormal.fastestWinSec).toBeNull();
     });
 });
+
+describe('BUG-001: две вкладки с одним профилем', () => {
+    it('результат матча из каждой вкладки сохраняется, а не затирает другой', () => {
+        const shared = {};
+        const tabA = loadStorageContext({}, shared);
+        const tabB = loadStorageContext({}, shared);
+        // обе вкладки открыты до первого матча и держат профиль в памяти
+        tabA.loadProfileFromStorage();
+        tabB.loadProfileFromStorage();
+
+        const stats = { enemiesKilled: 3, energyHarvested: 100, bossesKilled: 0 };
+        tabA.recordMatchResult(true, stats, 60, 1);
+        tabB.recordMatchResult(false, stats, 90, 0);
+
+        const saved = JSON.parse(shared['rts_neo_profile_v2']);
+        expect(saved.totals.matchesPlayed).toBe(2);
+        expect(saved.totals.victories).toBe(1);
+        expect(saved.totals.defeats).toBe(1);
+    });
+
+    it('пройденное в одной вкладке обучение не сбрасывается результатом матча из другой', () => {
+        const shared = {};
+        const tabA = loadStorageContext({}, shared);
+        const tabB = loadStorageContext({}, shared);
+        tabA.loadProfileFromStorage();
+        tabB.loadProfileFromStorage();
+
+        tabA.playerProfile.tutorialCompleted = true;
+        tabA.saveProfileToStorage();
+        tabB.recordMatchResult(true, { enemiesKilled: 0, energyHarvested: 0, bossesKilled: 0 }, 30, 0);
+
+        expect(JSON.parse(shared['rts_neo_profile_v2']).tutorialCompleted).toBe(true);
+    });
+});
+

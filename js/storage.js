@@ -309,9 +309,9 @@ function saveProfileToStorage() {
  * Запись результатов матча в профиль (по карте и сложности + в totals)
  */
 function recordMatchResult(isVictory, stats, durationSec, wavesDefeated) {
-    if (!playerProfile || !playerProfile.totals) {
-        loadProfileFromStorage();
-    }
+    // Читаем профиль заново перед изменением: в другой вкладке мог закончиться свой матч.
+    // Иначе запись копии из памяти затёрла бы чужой результат (BUG-001).
+    loadProfileFromStorage();
 
     // 1. Обновляем глобальные итоги (totals)
     playerProfile.totals.matchesPlayed++;
@@ -350,4 +350,11 @@ function recordMatchResult(isVictory, stats, durationSec, wavesDefeated) {
     }
 
     saveProfileToStorage();
+}
+
+// Другие вкладки поменяли профиль — подхватываем, чтобы рекорды и обучение не откатывались (BUG-001)
+if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('storage', (e) => {
+        if (e.key === STORAGE_KEY_PROFILE) loadProfileFromStorage();
+    });
 }
