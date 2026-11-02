@@ -22,7 +22,7 @@ Spatial hash: поиск целей и расталкивание,engine,must,ye
 Коллизии со стенами / штабами / кристаллами,engine,must,yes,yes,main.js: отталкивание от препятствий и границ арены
 Фиксированный шаг 30 Гц,engine,must,yes,yes,main.js: детерминированный шаг 1/30 с с защитой от накопления лагов (спираль смерти)
 Детерминированный PRNG,engine,should,partial,yes,prng.js: Mulberry32 с сидом для симуляции
-Симуляция в Web Worker,engine,could,stub,stub,sim_worker.js: прототип SoA; симуляция честно выполняется в главном потоке (30 Гц)
+Симуляция в Web Worker,engine,could,no,yes,"на a1919fb воркер был прототипом и не вызывался (recon); с b94bfa4 главный цикл шлёт шаг в SimulationWorkerPool (main.js:97-116, js/simulation.js:572), проверка 2026-11-02 на 35dabce: пул включён, 2 воркера в Chromium по HTTP; по file:// воркеры недоступны, остаётся SoA в главном потоке (simulation.js, сообщение в консоли)"
 GPU-инстансинг юнитов и HP-баров,render,must,yes,yes,"instancing.js: THREE.InstancedMesh для дронов, снарядов и HP-баров в шейдере"
 Объединение статичной геометрии (стены / рельсы / штабы),render,must,yes,yes,"scene.js / terrain.js / models.js / resources.js: mergeBufferGeometries объединяет рельсы, пилоны, маяки, каркасы HQ и кристаллы-спутники; InstancedMesh стен"
 Настройка качества (тени / pixel ratio),render,should,no,yes,scene.js: переключение теней в настройках; переход на Three.js r186 PCFShadowMap
@@ -37,7 +37,7 @@ FSM юнитов IDLE/MOVE/CHASE/ATTACK,gameplay,must,yes,yes,main.js: стей�
 Диверсии ИИ при 3/3 точках,gameplay,should,yes,yes,ai.js: отправка штурмовой группы противника на отбитие точки
 Штабы и условия победы/поражения,gameplay,must,yes,yes,"ui.js: уничтожение вражеского штаба = победа, потеря своего = поражение"
 Выбор сложности,content,must,no,yes,"maps.js: Рекрут (Easy), Командир (Normal), Ветеран (Hard) со скейлингом HP, урона и волн"
-Несколько карт (карта как данные),content,must,no,partial,"js/maps.js: MapDef v2 + validateMapDef; 4 карты различаются стенами, но playerHQ/enemyHQ/playerSpawn одинаковы на всех (maps.js:66-68, 106-108, 146-148, 186-188)"
+Несколько карт (карта как данные),content,must,no,partial,"js/maps.js: MapDef v2 + validateMapDef; 4 пресета различаются стенами, но playerHQ/enemyHQ/playerSpawn одинаковы (maps.js:66-68, 106-108, 146-148, 186-188); генератор на шуме Перлина (b94bfa4) меняет рельеф по сиду, но штабы тоже всегда в углах (maps.js:532-534)"
 Режим skirmish против ИИ со своей экономикой,content,should,no,no,будущее расширение
 Кампания / миссии,content,could,no,no,будущее расширение
 Рекорды / таблица результатов,content,should,no,yes,"#records-modal: Storage v2 с валидацией, миграцией v1->v2 и фильтрами рекордов по каждой карте и сложности"
