@@ -104,13 +104,20 @@ function spawnWave() {
     }
 }
 
+// Панель волны перерисовывается, только когда меняется видимый текст (секунда, номер волны, язык),
+// а не 30 раз в секунду на каждом тике симуляции
+let lastWavePanelHtml = '';
 function updateWaveUI() {
     const waveEl = document.getElementById('wave-panel');
     if (waveEl) {
         const waveLbl = typeof t === 'function' ? t('WAVE_LABEL') : '🌊 Волна';
         const nextIn = typeof t === 'function' ? t('WAVE_NEXT_IN') : '— след. через';
         const sec = typeof t === 'function' ? t('SEC_SHORT') : 'с';
-        waveEl.innerHTML = `${waveLbl} <span id="wave-number">${waveNumber}</span> ${nextIn} <span id="wave-timer">${Math.max(0, Math.ceil(waveTimer))}</span>${sec}`;
+        const html = `${waveLbl} <span id="wave-number">${waveNumber}</span> ${nextIn} <span id="wave-timer">${Math.max(0, Math.ceil(waveTimer))}</span>${sec}`;
+        if (html !== lastWavePanelHtml) {
+            lastWavePanelHtml = html;
+            waveEl.innerHTML = html;
+        }
     }
 }
 
@@ -118,11 +125,22 @@ function updateWaveUI() {
 let retaliationCooldown = 0;
 const RETALIATION_COOLDOWN_TIME = 35; // раз в 35 сек при полном контроле карты игроком
 
+// Снимок поля потока врагов к произвольной клетке (маршрут диверсантов к точке сбора).
+// Считается в рабочих буферах поля волн и тут же возвращает их к цели «штаб игрока»
+// (второй вызов — попадание в кэш), поэтому волны промежуточного состояния не видят.
+function buildEnemyFieldTo(col, row) {
+    if (typeof enemyFlowFieldGen === 'undefined' || typeof enemyFlowFieldGen.getActiveField !== 'function') return null;
+    enemyFlowFieldGen.updateTarget(col, row);
+    const field = enemyFlowFieldGen.getActiveField();
+    enemyFlowFieldGen.updateTarget(HQ_COL, HQ_ROW);
+    return field;
+}
+
 function checkAIRetaliation(delta) {
     if (gameOver || !gameStarted) return;
 
     const playerNodes = resourceNodes.filter(n => n.owner === 'player');
-    if (playerNodes.length === resourceNodes.length && enemyHQ.hp > 0) {
+    if (resourceNodes.length > 0 && playerNodes.length === resourceNodes.length && enemyHQ.hp > 0) {
         retaliationCooldown -= delta;
         if (retaliationCooldown <= 0) {
             retaliationCooldown = RETALIATION_COOLDOWN_TIME;
@@ -142,11 +160,15 @@ function checkAIRetaliation(delta) {
 
             // Диверсионный отряд: 2 быстрых Разведчика + 1 Танк
             const sabotageRoster = ['scout', 'scout', 'tank'];
+            // Маршрут до точки — по полю потока. Обход «ближайшей свободной клеткой» в лабиринте
+            // заводил отряд в тупик, и до точки он не доходил вовсе.
+            const sabotageField = buildEnemyFieldTo(targetNode.col, targetNode.row);
             for (let i = 0; i < sabotageRoster.length; i++) {
                 const uType = sabotageRoster[i];
                 const spot = findFreeCellNear(ENEMY_HQ_COL, ENEMY_HQ_ROW);
                 const worldPos = gridToWorld(spot.col, spot.row);
                 createEnemy(worldPos.x, worldPos.z, uType, false, targetNode);
+                enemies[enemies.length - 1].sabotageField = sabotageField;
             }
 
             showTacticalAlert(typeof t === 'function' ? t('ALERT_SABOTAGE', targetNode.name) : `🚨 ДИВЕРСИЯ: Вражеский отряд направлен на отбитие точки «${targetNode.name}»!`, true);
@@ -240,6 +262,7 @@ function updateEnemiesAI(currentTime, delta) {
             if (enemy.sabotageNode.owner === 'enemy') {
                 // Точка отбита — переходим в штурм штаба
                 enemy.sabotageNode = null;
+                enemy.sabotageField = null;
                 enemy.isWaveUnit = true;
             } else {
                 const targetPos = enemy.sabotageNode.pos;
@@ -249,9 +272,26 @@ function updateEnemiesAI(currentTime, delta) {
                     enemy.velocity.set(0, 0, 0);
                     enemy.mesh.rotation.y += delta * 1.5;
                 } else {
-                    _v1.subVectors(targetPos, pos);
-                    _v1.y = 0;
-                    _v1.normalize();
+                    // Точка видна — идём прямо; закрыта стенами — по полю потока своего приказа
+                    if (hasLineOfSight(pos.x, pos.z, targetPos.x, targetPos.z)) {
+                        _v1.subVectors(targetPos, pos);
+                        _v1.y = 0;
+                        _v1.normalize();
+                    } else {
+                        let followsField = false;
+                        const field = enemy.sabotageField;
+                        if (field && field.width === GRID_SIZE && field.flowX.length === GRID_SIZE * GRID_SIZE) {
+                            const cg = worldToGrid(pos.x, pos.z);
+                            if (cg.col >= 0 && cg.col < GRID_SIZE && cg.row >= 0 && cg.row < GRID_SIZE) {
+                                const ci = cg.row * GRID_SIZE + cg.col;
+                                if (field.flowX[ci] !== 0 || field.flowY[ci] !== 0) {
+                                    _v1.set(field.flowX[ci], 0, field.flowY[ci]);
+                                    followsField = true;
+                                }
+                            }
+                        }
+                        if (!followsField) findBypassDirection(pos.x, pos.z, targetPos.x, targetPos.z, _v1);
+                    }
                     pos.addScaledVector(_v1, enemy.speed * delta);
                     enemy.velocity.copy(_v1).multiplyScalar(enemy.speed);
                     enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
@@ -313,10 +353,12 @@ function updateEnemiesAI(currentTime, delta) {
                     if (rnd < 0.35 && resourceNodes.length > 0) {
                         const nodeIdx = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.int(0, resourceNodes.length - 1) : Math.floor(Math.random() * resourceNodes.length);
                         const targetNode = resourceNodes[nodeIdx];
-                        const offX = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.range(-1, 1) : (Math.random() - 0.5) * 2;
-                        const offZ = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.range(-1, 1) : (Math.random() - 0.5) * 2;
+                        // Точка патруля — на кольце захвата вокруг кристалла, а не внутри него: цель в ±1 от центра
+                        // лежала в самом кристалле (радиус 1.35), и патрульный толкался в него до истечения таймера
+                        const roamAngle = ((typeof rtsPRNG !== 'undefined') ? rtsPRNG.random() : Math.random()) * Math.PI * 2;
+                        const roamRadius = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.range(2.1, 2.5) : 2.1 + Math.random() * 0.4;
                         if (!enemy.roamTarget) enemy.roamTarget = new THREE.Vector3();
-                        enemy.roamTarget.set(targetNode.pos.x + offX, 0.75, targetNode.pos.z + offZ);
+                        enemy.roamTarget.set(targetNode.pos.x + Math.cos(roamAngle) * roamRadius, 0.75, targetNode.pos.z + Math.sin(roamAngle) * roamRadius);
                     } else {
                         let col = 1, row = 1;
                         for (let attempt = 0; attempt < 50; attempt++) {
@@ -332,24 +374,38 @@ function updateEnemiesAI(currentTime, delta) {
                         enemy.roamTarget.set(worldPos.x, 0.75, worldPos.z);
                     }
                     enemy.state = States.MOVE;
+                    // Запас времени на переход: точка за стеной может оказаться недостижимой по прямой
+                    enemy.roamTimeLeft = 4 + pos.distanceTo(enemy.roamTarget) / Math.max(enemy.speed, 0.5) * 1.5;
                 }
             } else if (enemy.state === States.MOVE && enemy.roamTarget) {
                 const distToRoam = pos.distanceTo(enemy.roamTarget);
                 const stopThreshold = Math.max(0.4, enemy.radius * 0.9);
-                if (distToRoam <= stopThreshold) {
+                enemy.roamTimeLeft = (enemy.roamTimeLeft || 0) - delta;
+                if (distToRoam <= stopThreshold || enemy.roamTimeLeft <= 0) {
                     enemy.state = States.IDLE;
+                    enemy.roamTarget = null;
                     enemy.roamCooldown = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.range(2, 6) : (Math.random() * 4 + 2);
                     enemy.velocity.set(0, 0, 0);
                 } else {
-                    _v1.subVectors(enemy.roamTarget, pos);
-                    _v1.y = 0;
-                    _v1.normalize();
+                    if (hasLineOfSight(pos.x, pos.z, enemy.roamTarget.x, enemy.roamTarget.z)) {
+                        _v1.subVectors(enemy.roamTarget, pos);
+                        _v1.y = 0;
+                        _v1.normalize();
+                    } else {
+                        findBypassDirection(pos.x, pos.z, enemy.roamTarget.x, enemy.roamTarget.z, _v1);
+                    }
                     let spd = enemy.speed;
                     if (distToRoam < 1.5) spd *= Math.max(0.25, distToRoam / 1.5);
                     pos.addScaledVector(_v1, spd * delta);
                     enemy.velocity.copy(_v1).multiplyScalar(spd);
                     enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
                 }
+            } else {
+                // Патрульный гнался за союзником (цель патруля сброшена) и потерял его: раньше он навсегда
+                // застывал в MOVE без цели. Возвращаем в патруль.
+                enemy.state = States.IDLE;
+                enemy.velocity.set(0, 0, 0);
+                if (!(enemy.roamCooldown > 0)) enemy.roamCooldown = 1.0;
             }
         }
 

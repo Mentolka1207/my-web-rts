@@ -93,10 +93,25 @@ function clearAllUnitsForBenchmark() {
     }
 }
 
+// Штабы в стресс-тесте — только мишени: до и после теста у них полное здоровье
+function restoreHeadquartersForBenchmark() {
+    const hqs = [typeof playerHQ !== 'undefined' ? playerHQ : null, typeof enemyHQ !== 'undefined' ? enemyHQ : null];
+    for (let i = 0; i < hqs.length; i++) {
+        const hq = hqs[i];
+        if (!hq) continue;
+        hq.hp = hq.maxHp;
+        if (hq.healthBar && typeof updateHealthBar === 'function') updateHealthBar(hq.healthBar, hq.hp, hq.maxHp);
+    }
+}
+
 // Запуск стресс-теста на N юнитов (или allyCount vs enemyCount: 2000×2000, 5000×5000)
 function runBenchmark(countOrAllies, maybeEnemies) {
     if (!gameStarted) {
         if (typeof startGame === 'function') startGame();
+    } else if (typeof gameOver !== 'undefined' && gameOver) {
+        // Тест с экрана итога боя: раньше окно итога закрывалось, а матч оставался «завершённым» —
+        // армии появлялись и стояли, симуляция не шла. Сначала начинаем новый матч.
+        if (typeof restartMatch === 'function') restartMatch();
     }
 
     // Закрываем любые открытые модальные окна (обучение, настройки) и снимаем с паузы
@@ -114,6 +129,7 @@ function runBenchmark(countOrAllies, maybeEnemies) {
     }
 
     benchmarkActive = true;
+    restoreHeadquartersForBenchmark();
     let allyCount, enemyCount;
     if (typeof maybeEnemies === 'number') {
         allyCount = countOrAllies;
@@ -314,6 +330,9 @@ function stopBenchmark() {
     benchmarkActive = false;
     benchmarkTargetCount = 0;
     clearAllUnitsForBenchmark();
+    // Армии теста бьют по штабам. Без восстановления HP сразу после теста срабатывал экран
+    // победы/поражения, и «матч» записывался в рекорды.
+    restoreHeadquartersForBenchmark();
 
     // Восстанавливаем стартовый отряд
     if (typeof initStartingUnits === 'function') {
@@ -321,7 +340,7 @@ function stopBenchmark() {
     }
 
     // Восстанавливаем нормальный интервал волн
-    waveTimer = (typeof WAVE_INTERVAL !== 'undefined') ? WAVE_INTERVAL : 60;
+    waveTimer = (typeof getWaveInterval === 'function') ? getWaveInterval() : ((typeof WAVE_INTERVAL !== 'undefined') ? WAVE_INTERVAL : 60);
     if (typeof waveWarningGiven !== 'undefined') {
         waveWarningGiven = false;
     }

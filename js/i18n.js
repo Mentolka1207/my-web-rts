@@ -57,6 +57,7 @@ const TRANSLATIONS = {
         ALERT_SIEGE_ON: '⚓ ОСАДА ВКЛЮЧЕНА ({0} Танков зафиксировано)!',
         ALERT_SIEGE_OFF: '🚜 МОБИЛЬНЫЙ РЕЖИМ ({0} Танков снялись с якоря)!',
         ALERT_SIEGE_SWITCH: '⚓ РЕЖИМ ОСАДЫ ПЕРЕКЛЮЧЁН ({0} Танков)!',
+        ALERT_SIEGE_NO_MOVE: '⚓ Танки в осаде не двигаются. Сними осаду [R], чтобы ехать.',
         ALERT_SHIELD: '🛡️ ЭНЕРГОЩИТ активирован ({0} Дронов)!',
         ABILITY_READY: 'ГОТОВО',
         ABILITY_ACTIVE: 'АКТИВНО',
@@ -79,7 +80,7 @@ const TRANSLATIONS = {
         INSTR_LINE4: '<strong>Способности юнитов (клавиши Q, E, R или 1, 2, 3):</strong>',
         INSTR_LINE5: '⚡ <strong>Форсаж [Q / 2]</strong> (Разведчик) — +80% скорости на 3с (кд 10с)',
         INSTR_LINE6: '🛡️ <strong>Щит [E / 1]</strong> (Дрон) — энергобарьер 50 HP на 6с (кд 12с)',
-        INSTR_LINE7: '⚓ <strong>Осада [R/F / 3]</strong> (Танк) — дальность огня ×2, сплэш-урон по площади (кд 2.5с)',
+        INSTR_LINE7: '⚓ <strong>Осада [R/F / 3]</strong> (Танк) — стоит на месте, дальность огня ×2, сплэш-урон по площади (кд 2.5с)',
         INSTR_LINE8: '<strong>Камера:</strong> W, A, S, D (+Shift — ускорение), <strong>Space</strong> — центрировать на армию, <strong>H</strong> — на базу',
         INSTR_LINE9: '<strong>Мышь:</strong> зажатое колёсико (MMB) — панорама карты 1:1, вращение — зум',
         INSTR_LINE10: '<strong>Сенсор / Тач:</strong> переключатель [Карта/Рамка], свайп — панорама, щипок — зум, тап — выбор/приказ',
@@ -126,8 +127,10 @@ const TRANSLATIONS = {
         ALERT_SABOTAGE: '⚠️ ТРЕВОГА: Вражеская группа нацелена на точку «{0}»!',
         ALERT_HQ_ATTACK: '⚠️ Штаб под атакой — верни армию (Space).',
         BOSS_DESTROYED_ALERT: '🏆 БОСС «ЛЕВИАФАН» УНИЧТОЖЕН! (+100⚡)',
+        ALERT_BOSS_SHIELD_DOWN: '⚡ ЩИТ ЛЕВИАФАНА ПРОБИТ!',
         ALERT_NODE_CAPTURED: '💎 Точка «{0}» перешла под наш контроль! (+3⚡/сек)',
         ALERT_NODE_LOST: '⚠️ Противник захватил точку «{0}»!',
+        ALERT_NODE_CONTESTED: '⚠️ Контроль над точкой «{0}» потерян!',
         ALERT_WAVE_10S_BOSS: '⚠️ ТРЕВОГА: Приближается БОСС «Левиафан» через 10с!',
         ALERT_WAVE_10S_NORMAL: 'Волна {0} через 10 с.',
 
@@ -180,11 +183,11 @@ const TRANSLATIONS = {
         // Обучение
         TUTORIAL_TITLE: '❓ РУКОВОДСТВО КОМАНДИРА',
         TUT_STEP1_TITLE: '1. ЭНЕРГИЯ И КРИСТАЛЛЫ',
-        TUT_STEP1_DESC: 'Энергия — главный ресурс. Захватывай кристаллы Альфа, Центр и Бета на карте. Отправь дронов внутрь кольца захвата: каждая точка приносит +3⚡/сек.',
+        TUT_STEP1_DESC: 'Энергия — главный ресурс. Захватывай кристаллы на карте (их от 5 до 9, смотри миникарту). Отправь дронов внутрь кольца захвата: каждая точка приносит +3⚡/сек.',
         TUT_STEP2_TITLE: '2. ПРОИЗВОДСТВО И СТРОЙ',
         TUT_STEP2_DESC: 'Стройте сбалансированную армию: быстрых Разведчиков (40⚡), боевых Дронов (70⚡) и осадные Танки (150⚡). Меняйте построение: Шеренга [Z], Клин [X], Кольцо [C].',
         TUT_STEP3_TITLE: '3. ВОЛНЫ И СПОСОБНОСТИ',
-        TUT_STEP3_DESC: 'Каждые 60 сек база врага отправляет волны. Используйте Форсаж [Q] разведчиков, Щит [E] дронов и Осадный режим [R] танков. На волне 10 отразите Босса «Левиафана» и сокрушите вражеский штаб!',
+        TUT_STEP3_DESC: 'База врага отправляет волну раз в 48–70 секунд (зависит от сложности). Используйте Форсаж [Q] разведчиков, Щит [E] дронов и Осадный режим [R] танков. На волне 10 отразите Босса «Левиафана» и сокрушите вражеский штаб!',
         BTN_TUTORIAL_START: 'Понятно, начинаем',
 
         // Лицензии
@@ -264,6 +267,7 @@ const TRANSLATIONS = {
         DBG_SIM_WORKERS: '{0} Web Workers (многоядерно)',
         DBG_THREADS_MULTI: '{0} / {1} ядер CPU',
         DBG_THREADS_SINGLE: '1 поток (SoA)',
+        DBG_THREADS_STANDBY: 'готово {0}, работают в стресс-тесте',
         PERF_THREADS_MULTI: '{0} (многоядерно)',
         PERF_THREADS_SINGLE: '1 (главный поток)',
         UNITS_TOTAL: '{0} / {1} (всего {2})',
@@ -330,6 +334,7 @@ const TRANSLATIONS = {
         ALERT_SIEGE_ON: '⚓ SIEGE MODE ON ({0} Tanks anchored)!',
         ALERT_SIEGE_OFF: '🚜 MOBILE MODE ({0} Tanks mobile)!',
         ALERT_SIEGE_SWITCH: '⚓ SIEGE TOGGLED ({0} Tanks)!',
+        ALERT_SIEGE_NO_MOVE: '⚓ Sieged tanks hold position. Lift siege [R] to move.',
         ALERT_SHIELD: '🛡️ ENERGY SHIELD active ({0} Drones)!',
         ABILITY_READY: 'READY',
         ABILITY_ACTIVE: 'ACTIVE',
@@ -352,7 +357,7 @@ const TRANSLATIONS = {
         INSTR_LINE4: '<strong>Unit Abilities (Hotkeys Q, E, R or 1, 2, 3):</strong>',
         INSTR_LINE5: '⚡ <strong>Overdrive [Q / 2]</strong> (Scout) — +80% speed for 3s (10s CD)',
         INSTR_LINE6: '🛡️ <strong>Shield [E / 1]</strong> (Drone) — 50 HP energy barrier for 6s (12s CD)',
-        INSTR_LINE7: '⚓ <strong>Siege [R/F / 3]</strong> (Tank) — 2x weapon range & splash AoE (2.5s CD)',
+        INSTR_LINE7: '⚓ <strong>Siege [R/F / 3]</strong> (Tank) — holds position, 2x weapon range & splash AoE (2.5s CD)',
         INSTR_LINE8: '<strong>Camera:</strong> W, A, S, D (+Shift to sprint), <strong>Space</strong> — center on army, <strong>H</strong> — center on HQ',
         INSTR_LINE9: '<strong>Mouse:</strong> hold & drag wheel (MMB) to pan 1:1, scroll to zoom',
         INSTR_LINE10: '<strong>Touch / Mobile:</strong> [Pan/Box] mode, swipe to pan, pinch-zoom, tap for order',
@@ -399,8 +404,10 @@ const TRANSLATIONS = {
         ALERT_SABOTAGE: '⚠️ ALERT: Enemy strike team targeting node "{0}"!',
         ALERT_HQ_ATTACK: '⚠️ Your HQ is under attack. Bring the army back (Space).',
         BOSS_DESTROYED_ALERT: '🏆 BOSS "LEVIATHAN" DESTROYED! (+100⚡)',
+        ALERT_BOSS_SHIELD_DOWN: '⚡ LEVIATHAN SHIELD DOWN!',
         ALERT_NODE_CAPTURED: '💎 Node "{0}" secured! (+3⚡/sec)',
         ALERT_NODE_LOST: '⚠️ Enemy captured node "{0}"!',
+        ALERT_NODE_CONTESTED: '⚠️ Control of node "{0}" lost!',
         ALERT_WAVE_10S_BOSS: '⚠️ ALERT: Boss "Leviathan" inbound in 10s!',
         ALERT_WAVE_10S_NORMAL: 'Wave {0} in 10 s.',
 
@@ -453,11 +460,11 @@ const TRANSLATIONS = {
         // Tutorial
         TUTORIAL_TITLE: "❓ COMMANDER'S GUIDE",
         TUT_STEP1_TITLE: '1. ENERGY & RESOURCE NODES',
-        TUT_STEP1_DESC: 'Energy powers your army. Capture Alpha, Center, and Beta crystal nodes by moving drones inside capture rings (+3⚡/sec per node).',
+        TUT_STEP1_DESC: 'Energy powers your army. Capture the crystal nodes on the map (5 to 9 of them, see the minimap) by moving drones inside capture rings (+3⚡/sec per node).',
         TUT_STEP2_TITLE: '2. PRODUCTION & FORMATIONS',
         TUT_STEP2_DESC: 'Build a balanced swarm: agile Scouts (40⚡), standard Drones (70⚡), and heavy Siege Tanks (150⚡). Switch formations: Line [Z], Wedge [X], Circle [C].',
         TUT_STEP3_TITLE: '3. ABILITIES & DEFENSE',
-        TUT_STEP3_DESC: 'Survive incoming waves every 60s. Trigger Scout Overdrive [Q], Drone Shield [E], and Tank Siege mode [R]. Defeat the Leviathan on wave 10 and obliterate the enemy HQ!',
+        TUT_STEP3_DESC: 'Survive incoming waves every 48–70s (depends on difficulty). Trigger Scout Overdrive [Q], Drone Shield [E], and Tank Siege mode [R]. Defeat the Leviathan on wave 10 and obliterate the enemy HQ!',
         BTN_TUTORIAL_START: 'Got it, let’s start',
 
         // Licenses
@@ -537,6 +544,7 @@ const TRANSLATIONS = {
         DBG_SIM_WORKERS: '{0} Web Workers (multi-core)',
         DBG_THREADS_MULTI: '{0} / {1} CPU cores',
         DBG_THREADS_SINGLE: '1 thread (SoA)',
+        DBG_THREADS_STANDBY: '{0} ready, used by the stress test',
         PERF_THREADS_MULTI: '{0} (multi-core)',
         PERF_THREADS_SINGLE: '1 (main thread)',
         UNITS_TOTAL: '{0} / {1} ({2} total)',
@@ -606,6 +614,11 @@ function updateAllStaticTexts() {
     // Обновляем статус звука
     if (typeof soundEngine !== 'undefined' && soundEngine.updateSoundUI) {
         soundEngine.updateSoundUI();
+    }
+
+    // Названия точек сбора в оповещениях («Альфа» / "Alpha") — на текущем языке
+    if (typeof relocalizeResourceNodes === 'function') {
+        relocalizeResourceNodes();
     }
 
     // Обновляем панель ресурсов и производство

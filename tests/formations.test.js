@@ -197,3 +197,57 @@ describe('setFormation / updateFormationUI', () => {
         expect(() => game.setFormation('wedge')).not.toThrow();
     });
 });
+
+// BUG-021: строй разворачивается по направлению движения отряда
+describe('orientFormationOffset: строй смотрит по ходу движения', () => {
+    const DIRECTIONS = {
+        'на восток (+x)': 0,
+        'на юг (+z)': Math.PI / 2,
+        'на запад (−x)': Math.PI,
+        'на север (−z)': -Math.PI / 2,
+        'по диагонали': Math.PI / 4,
+        'под произвольным углом': 2.2
+    };
+
+    // Разложение мирового смещения на «вперёд по ходу» и «вбок»
+    function decompose(world, angle) {
+        const fx = Math.cos(angle), fz = Math.sin(angle);
+        return { forward: world.x * fx + world.z * fz, side: -world.x * fz + world.z * fx };
+    }
+
+    for (const [name, angle] of Object.entries(DIRECTIONS)) {
+        it(`шеренга стоит поперёк движения ${name}`, () => {
+            const S = game.SPACING;
+            const placed = game.getFormationOffsets(7, 'line')
+                .map(o => decompose(game.orientFormationOffset(o, angle, { x: 0, z: 0 }), angle));
+
+            for (const p of placed) expect(p.forward).toBeCloseTo(0, 9);
+            const sides = placed.map(p => p.side);
+            expect(Math.max(...sides) - Math.min(...sides)).toBeCloseTo(6 * S, 9);
+        });
+
+        it(`клин идёт вершиной вперёд при движении ${name}`, () => {
+            const placed = game.getFormationOffsets(7, 'wedge')
+                .map(o => decompose(game.orientFormationOffset(o, angle, { x: 0, z: 0 }), angle));
+
+            expect(placed[0].forward).toBeCloseTo(0, 9);
+            expect(placed[0].side).toBeCloseTo(0, 9);
+            for (const p of placed.slice(1)) expect(p.forward).toBeLessThan(-1e-9);
+        });
+    }
+
+    it('поворот сохраняет расстояния между местами в строю', () => {
+        const offsets = game.getFormationOffsets(8, 'circle');
+        const world = offsets.map(o => game.orientFormationOffset(o, 1.1, { x: 0, z: 0 }));
+
+        offsets.forEach((o, i) => expect(Math.hypot(world[i].x, world[i].z)).toBeCloseTo(Math.hypot(o.x, o.y), 9));
+    });
+
+    it('пишет результат в переданный объект и возвращает его (без аллокаций в приказе)', () => {
+        const out = { x: 99, z: 99 };
+
+        expect(game.orientFormationOffset({ x: 0, y: 2 }, 0, out)).toBe(out);
+        expect(out.x).toBeCloseTo(2, 9);
+        expect(out.z).toBeCloseTo(0, 9);
+    });
+});

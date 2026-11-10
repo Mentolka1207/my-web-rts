@@ -52,7 +52,7 @@ function loadGame() {
         FlowFieldGenerator, invalidateFlowFieldCache,
         flowFieldGen, enemyFlowFieldGen,
         SpatialGrid, spatialGrid,
-        SPACING, getFormationOffsets, setFormation, updateFormationUI,
+        SPACING, getFormationOffsets, orientFormationOffset, setFormation, updateFormationUI,
         getCurrentFormation: () => currentFormation
     })`, ctx);
     // Сам глобальный объект «страницы»: позволяет подменять document, playSelectSound и т.п.

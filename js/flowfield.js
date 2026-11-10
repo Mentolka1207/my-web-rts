@@ -10,6 +10,9 @@ function invalidateFlowFieldCache() {
     globalGridRevision++;
 }
 
+const FLOW_NEIGHBOR_DC = [1, -1, 0, 0];
+const FLOW_NEIGHBOR_DR = [0, 0, 1, -1];
+
 class FlowFieldGenerator {
     constructor(gridWidth, gridHeight, cellSize) {
         this.width = gridWidth;
@@ -32,6 +35,8 @@ class FlowFieldGenerator {
         this.flowVectorsX = new Float32Array(this.totalCells);
         this.flowVectorsY = new Float32Array(this.totalCells);
         this.queue = new Int32Array(this.totalCells);
+        // Клетки, закрытые только для поиска пути (кристаллы): см. blockCells
+        this.softBlocked = new Uint8Array(this.totalCells);
 
         // LRU-кэш рассчитанных полей по целевым координатам (до 16 полей)
         this.cache = new Map();
@@ -63,6 +68,7 @@ class FlowFieldGenerator {
         this.flowVectorsX = new Float32Array(this.totalCells);
         this.flowVectorsY = new Float32Array(this.totalCells);
         this.queue = new Int32Array(this.totalCells);
+        this.softBlocked = new Uint8Array(this.totalCells);
 
         this.cache.clear();
         this.currentTargetCol = -1;
@@ -70,6 +76,32 @@ class FlowFieldGenerator {
         this.cachedGridRevision = 0;
         this.pendingTarget = null;
         this.lastComputeTime = 0;
+    }
+
+    // Клетки, которые поиск пути обходит, хотя в сетке grid они свободны: кристаллы точек сбора.
+    // Кристалл — твёрдый цилиндр посреди свободной клетки. Пока поле вело прямо через неё, юнит упирался
+    // в кристалл по линии потока и стоял: коллизия выталкивала его ровно назад, без скольжения вбок
+    // (так застревали враги волны на пути через центр карты). Сама цель может быть в такой клетке.
+    // В отличие от стены, в такой клетке можно стоять (юнит на кольце захвата), поэтому поле в ней
+    // не нулевое: оно выводит юнита к ближайшей клетке маршрута.
+    blockCells(cells) {
+        if (!Array.isArray(cells)) return;
+        let changed = false;
+        for (let i = 0; i < cells.length; i++) {
+            const c = cells[i];
+            if (!c || c.row < 0 || c.row >= this.height || c.col < 0 || c.col >= this.width) continue;
+            if (this.costField[c.row][c.col] !== 255) {
+                this.costField[c.row][c.col] = 255;
+                this.softBlocked[c.row * this.width + c.col] = 1;
+                changed = true;
+            }
+        }
+        if (changed) {
+            // Уже посчитанные поля строились по старой проходимости
+            this.cache.clear();
+            this.currentTargetCol = -1;
+            this.currentTargetRow = -1;
+        }
     }
 
     generateIntegrationField(targetCol, targetRow) {
@@ -87,12 +119,11 @@ class FlowFieldGenerator {
             const r = (packed / this.width) | 0;
             const currentCost = this.integrationFlat[packed];
 
-            const nC = [c + 1, c - 1, c, c];
-            const nR = [r, r, r + 1, r - 1];
-
+            // Соседи по 4 сторонам без временных массивов: на карте 1024 (65 536 клеток) прежние два
+            // массива на клетку давали 130 тысяч аллокаций на каждый приказ игрока
             for (let i = 0; i < 4; i++) {
-                const nc = nC[i];
-                const nr = nR[i];
+                const nc = c + FLOW_NEIGHBOR_DC[i];
+                const nr = r + FLOW_NEIGHBOR_DR[i];
                 if (nc < 0 || nc >= this.width || nr < 0 || nr >= this.height) continue;
                 const stepCost = this.costField[nr][nc];
                 if (stepCost === 255) continue;
@@ -119,7 +150,7 @@ class FlowFieldGenerator {
             const rowOff = r * this.width;
             for (let c = 0; c < this.width; c++) {
                 const idx = rowOff + c;
-                if (this.costField[r][c] === 255) {
+                if (this.costField[r][c] === 255 && !this.softBlocked[idx]) {
                     this.flowVectorsX[idx] = 0;
                     this.flowVectorsY[idx] = 0;
                     this.flowField[r][c].set(0, 0);
@@ -179,6 +210,13 @@ class FlowFieldGenerator {
         this.updateTarget(target.col, target.row);
     }
 
+    // Неизменяемый снимок поля текущей цели ({ width, flowX, flowY, integration }).
+    // Юнит хранит ссылку на снимок своего приказа и не зависит от следующих приказов игрока.
+    getActiveField() {
+        if (this.currentTargetCol < 0 || this.currentTargetRow < 0) return null;
+        return this.cache.get(`${this.currentTargetCol}_${this.currentTargetRow}`) || null;
+    }
+
     // Обновление целевой точки с проверкой LRU кэша
     updateTarget(targetCol, targetRow, force = false) {
         targetCol = Math.max(0, Math.min(this.width - 1, targetCol));
@@ -199,6 +237,9 @@ class FlowFieldGenerator {
 
         // 2. Попадание в LRU кэш: копирование плоских буферов (< 0.05 мс)
         if (!force && cached && cached.revision === globalGridRevision) {
+            // LRU: попадание переносит запись в конец очереди на вытеснение
+            this.cache.delete(cacheKey);
+            this.cache.set(cacheKey, cached);
             this.integrationFlat.set(cached.integration);
             this.flowVectorsX.set(cached.flowX);
             this.flowVectorsY.set(cached.flowY);
@@ -223,13 +264,17 @@ class FlowFieldGenerator {
         this.generateIntegrationField(targetCol, targetRow);
         this.generateFlowField();
 
-        // Сохранение в кэш
+        // Сохранение в кэш. Пересчёт той же цели (force или новая ревизия сетки) заменяет старую запись
+        this.cache.delete(cacheKey);
         if (this.cache.size >= this.maxCacheSize) {
             const firstKey = this.cache.keys().next().value;
             this.cache.delete(firstKey);
         }
 
         this.cache.set(cacheKey, {
+            width: this.width,
+            targetCol: targetCol,
+            targetRow: targetRow,
             integration: new Uint16Array(this.integrationFlat),
             flowX: new Float32Array(this.flowVectorsX),
             flowY: new Float32Array(this.flowVectorsY),

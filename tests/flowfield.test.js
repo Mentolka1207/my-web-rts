@@ -518,3 +518,155 @@ describe('глобальные поля реальной карты', () => {
         }
     });
 });
+
+// Регрессия BUG-007 (bugs.md): отряд хранит поле потока своего приказа
+describe('снимок поля приказа (getActiveField)', () => {
+    it('до первого расчёта снимка нет', () => {
+        const gen = new game.FlowFieldGenerator(game.GRID_SIZE, game.GRID_SIZE, game.CELL_SIZE);
+        expect(gen.getActiveField()).toBeNull();
+    });
+
+    it('снимок описывает текущую цель и совпадает с рабочими буферами', () => {
+        const gen = game.flowFieldGen;
+        gen.updateTarget(5, 5, true);
+        const snap = gen.getActiveField();
+        expect(snap).toMatchObject({ width: gen.width, targetCol: 5, targetRow: 5 });
+        expect(Array.from(snap.flowX)).toEqual(Array.from(gen.flowVectorsX));
+        expect(Array.from(snap.integration)).toEqual(Array.from(gen.integrationFlat));
+        expect(snap.integration[5 * gen.width + 5]).toBe(0);
+    });
+
+    it('следующий приказ не меняет снимок предыдущего', () => {
+        const gen = game.flowFieldGen;
+        gen.updateTarget(5, 5, true);
+        const first = gen.getActiveField();
+        const flowXBefore = Array.from(first.flowX);
+        const flowYBefore = Array.from(first.flowY);
+
+        gen.updateTarget(15, 12, true);
+        const second = gen.getActiveField();
+
+        expect(second).not.toBe(first);
+        expect(second.targetCol).toBe(15);
+        expect(Array.from(first.flowX)).toEqual(flowXBefore);
+        expect(Array.from(first.flowY)).toEqual(flowYBefore);
+        expect(first.integration[5 * gen.width + 5]).toBe(0);
+    });
+
+    it('снимок переживает вытеснение из LRU-кэша', () => {
+        const gen = game.flowFieldGen;
+        gen.updateTarget(5, 5, true);
+        const first = gen.getActiveField();
+        const before = Array.from(first.flowX);
+        for (let i = 0; i < gen.maxCacheSize + 2; i++) gen.updateTarget(2 + i, 18, true);
+        expect(gen.cache.has('5_5')).toBe(false);
+        expect(Array.from(first.flowX)).toEqual(before);
+    });
+});
+
+// Регрессия BUG-024 (bugs.md): маршруты обходят клетки кристаллов точек сбора
+describe('blockCells: клетки, закрытые только для поиска пути', () => {
+    const OPEN = [
+        '.......',
+        '.......',
+        '.......',
+        '.......',
+        '.......'
+    ];
+    const at = (gen, col, row) => ({ x: gen.flowField[row][col].x, y: gen.flowField[row][col].y });
+
+    it('без блокировки поле ведёт по прямой через клетку', () => {
+        const gen = buildField(game, OPEN, { col: 0, row: 2 });
+
+        expect(at(gen, 4, 2)).toEqual({ x: -1, y: 0 });
+        expect(gen.integrationField[2][3]).toBe(3);
+    });
+
+    it('маршрут обходит закрытую клетку: соседи не ведут в неё, она сама недостижима', () => {
+        const gen = buildField(game, OPEN);
+        gen.blockCells([{ col: 3, row: 2 }]);
+        gen.updateTarget(0, 2);
+
+        expect(gen.integrationField[2][3]).toBe(65535);
+        // клетка справа от закрытой больше не идёт строго влево
+        const right = at(gen, 4, 2);
+        expect(right.x === -1 && right.y === 0).toBe(false);
+        // ни одна свободная клетка не указывает в закрытую
+        for (let r = 0; r < 5; r++) for (let c = 0; c < 7; c++) {
+            if (c === 3 && r === 2) continue;
+            const f = at(gen, c, r);
+            const into = (c + Math.sign(f.x) === 3) && (r + Math.sign(f.y) === 2) && (f.x !== 0 || f.y !== 0);
+            expect(into, `клетка (${c}, ${r}) ведёт в закрытую`).toBe(false);
+        }
+    });
+
+    it('мимо закрытой клетки нельзя срезать угол по диагонали', () => {
+        const gen = buildField(game, OPEN);
+        gen.blockCells([{ col: 3, row: 2 }]);
+        gen.updateTarget(0, 2);
+
+        // из (4, 1) диагональ вниз-влево шла бы через угол закрытой клетки (3, 2) — её нет
+        const f = at(gen, 4, 1);
+        expect(f.x < 0 && f.y > 0).toBe(false);
+    });
+
+    it('в закрытой клетке можно стоять: поле выводит из неё к маршруту', () => {
+        const gen = buildField(game, OPEN);
+        gen.blockCells([{ col: 3, row: 2 }]);
+        gen.updateTarget(0, 2);
+
+        const f = at(gen, 3, 2);
+        expect(f.x !== 0 || f.y !== 0).toBe(true);
+        expect(f.x).toBeLessThan(0); // в сторону цели
+    });
+
+    it('в настоящей стене поле по-прежнему нулевое', () => {
+        const gen = buildField(game, [
+            '.....',
+            '..#..',
+            '.....'
+        ], { col: 0, row: 1 });
+
+        expect(at(gen, 2, 1)).toEqual({ x: 0, y: 0 });
+    });
+
+    it('цель может лежать в закрытой клетке (приказ на сам кристалл)', () => {
+        const gen = buildField(game, OPEN);
+        gen.blockCells([{ col: 3, row: 2 }]);
+        gen.updateTarget(3, 2);
+
+        expect(gen.integrationField[2][3]).toBe(0);
+        expect(gen.integrationField[2][2]).toBe(1);
+        expect(at(gen, 2, 2)).toEqual({ x: 1, y: 0 });
+        expect(at(gen, 6, 2)).toEqual({ x: -1, y: 0 });
+    });
+
+    it('сбрасывает кэш: поле, посчитанное до блокировки, не переиспользуется', () => {
+        const gen = buildField(game, OPEN, { col: 0, row: 2 });
+        expect(gen.integrationField[2][3]).toBe(3);
+
+        gen.blockCells([{ col: 3, row: 2 }]);
+        gen.updateTarget(0, 2); // та же цель
+
+        expect(gen.integrationField[2][3]).toBe(65535);
+        expect(gen.getActiveField().integration[2 * gen.width + 3]).toBe(65535);
+    });
+
+    it('resize снимает блокировку (новая карта — новые кристаллы)', () => {
+        const gen = buildField(game, OPEN);
+        gen.blockCells([{ col: 3, row: 2 }]);
+
+        gen.resize(7, 5, game.CELL_SIZE);
+        gen.updateTarget(0, 2);
+
+        expect(gen.integrationField[2][3]).toBe(3);
+    });
+
+    it('клетки за пределами сетки и мусор во входных данных игнорируются', () => {
+        const gen = buildField(game, OPEN, { col: 0, row: 2 });
+
+        expect(() => gen.blockCells([{ col: 99, row: 2 }, { col: -1, row: 0 }, null])).not.toThrow();
+        expect(() => gen.blockCells(undefined)).not.toThrow();
+        expect(gen.integrationField[2][3]).toBe(3);
+    });
+});

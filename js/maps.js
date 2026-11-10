@@ -393,8 +393,17 @@ function setDifficulty(diffId, persist = true) {
     if (selectEl) selectEl.value = diffId;
 }
 
+// Перестроить карту по текущим карте, размеру и сиду и обновить сцену за главным меню
+function applySelectedMap() {
+    if (typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
+        applyMapToGrid(currentMapId);
+    }
+    if (typeof refreshMenuBackdrop === 'function') refreshMenuBackdrop();
+}
+
 function selectMap(mapId, persist = true) {
     if (!MAP_CATALOG[mapId]) mapId = 'canyon';
+    const changed = currentMapId !== mapId;
     currentMapId = mapId;
     if (persist && typeof playerSettings !== 'undefined') {
         playerSettings.mapId = mapId;
@@ -402,6 +411,9 @@ function selectMap(mapId, persist = true) {
     }
     const selectEl = document.getElementById('map-select');
     if (selectEl) selectEl.value = mapId;
+    // Выбор в меню сразу показывает карту за меню — как смена размера и сида. Раньше сцена менялась
+    // только после «Играть». При загрузке настроек (persist = false) карту строит setMapSize.
+    if (persist && changed && currentMapSize !== null) applySelectedMap();
 }
 
 let currentMapSize = null;
@@ -435,18 +447,14 @@ function setMapSeed(newSeed, rerender = true) {
     }
     isCustomSeed = true;
     syncSeedUI();
-    if (rerender && typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
-        applyMapToGrid(currentMapId);
-    }
+    if (rerender) applySelectedMap();
 }
 
 function rerollMapSeed(rerender = true) {
     currentMapSeed = Math.floor(Math.random() * 900000) + 100000;
     isCustomSeed = false;
     syncSeedUI();
-    if (rerender && typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
-        applyMapToGrid(currentMapId);
-    }
+    if (rerender) applySelectedMap();
     return currentMapSeed;
 }
 
@@ -507,9 +515,7 @@ function setMapSize(sizeId, persist = true) {
     const selectEl = document.getElementById('map-size-select');
     if (selectEl) selectEl.value = sizeId;
 
-    if (typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
-        applyMapToGrid(currentMapId);
-    }
+    applySelectedMap();
 }
 
 /**
@@ -757,6 +763,12 @@ function applyMapToGrid(mapId) {
     grid[HQ_ROW][HQ_COL] = 1;
     grid[ENEMY_HQ_ROW][ENEMY_HQ_COL] = 1;
 
+    // 2.4. Пул симуляции (стресс-тест) получает новую сетку и размеры мира. Без этого воркеры жили
+    //      со стартовыми 44×44 из config.js и стягивали всех юнитов в квадрат ±20 в центре карты.
+    if (typeof simWorkerPool !== 'undefined' && typeof simWorkerPool.resize === 'function') {
+        simWorkerPool.resize(grid, MAP_WORLD_SIZE, CELL_SIZE);
+    }
+
     // 2.5. Ресайз SpatialGrid и Flow Fields под новый размер
     if (typeof spatialGrid !== 'undefined' && spatialGrid && typeof spatialGrid.resize === 'function') {
         spatialGrid.resize(MAP_WORLD_SIZE, 4.0);
@@ -766,6 +778,15 @@ function applyMapToGrid(mapId) {
     }
     if (typeof enemyFlowFieldGen !== 'undefined' && enemyFlowFieldGen && typeof enemyFlowFieldGen.resize === 'function') {
         enemyFlowFieldGen.resize(GRID_SIZE, GRID_SIZE, CELL_SIZE);
+    }
+    // Маршруты обходят клетки кристаллов (см. FlowFieldGenerator.blockCells)
+    if (Array.isArray(mapDef.nodes)) {
+        if (typeof flowFieldGen !== 'undefined' && flowFieldGen && typeof flowFieldGen.blockCells === 'function') {
+            flowFieldGen.blockCells(mapDef.nodes);
+        }
+        if (typeof enemyFlowFieldGen !== 'undefined' && enemyFlowFieldGen && typeof enemyFlowFieldGen.blockCells === 'function') {
+            enemyFlowFieldGen.blockCells(mapDef.nodes);
+        }
     }
 
     // 3. Синхронизируем Three.js камеру, свет, туман, землю и периметр

@@ -123,4 +123,48 @@ function pickVisibleFreeCell(page) {
     });
 }
 
-module.exports = { test, expect: base.expect, openGame, startMatch, state, a11y, advanceSim, worldToScreen, rightClickWorld, pickVisibleFreeCell, LANG_RU };
+// Перемотка симуляции на dt игровых секунд тестовым хуком: тот же шаг, что делает animate(), но без ожидания
+// кадров (программный WebGL рисует единицы кадров в секунду, бой на минуту шёл бы четверть часа).
+function fastForward(page, dt) {
+    return page.evaluate((sec) => {
+        const ticks = Math.round(sec * 30);
+        for (let i = 0; i < ticks && !gameOver; i++) {
+            stepSimulation(1 / 30, simElapsedTime);
+            simElapsedTime += 1 / 30;
+        }
+    }, dt);
+}
+
+// Приказ ПКМ выделенным юнитам в точку мира (x, z): камера наводится на точку, клик — в центр экрана
+function orderSelectedTo(page, x, z, y = 0) {
+    return page.evaluate(([wx, wz, wy]) => {
+        camPivot.set(wx, 0, wz);
+        applyCameraTransform();
+        camera.updateMatrixWorld(true);
+        const v = new THREE.Vector3(wx, wy, wz).project(camera);
+        issueMoveOrderAtPoint((v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight);
+    }, [x, z, y]);
+}
+
+// Тихое поле боя: волны отложены, стартовые враги убраны
+function clearBattlefield(page) {
+    return page.evaluate(() => {
+        waveTimer = 99999;
+        enemies.forEach(e => { e.hp = 0; });
+        stepSimulation(1 / 30, simElapsedTime);
+    });
+}
+
+// Центр свободной клетки рядом с точкой мира
+function freeSpotNear(page, x, z) {
+    return page.evaluate(([wx, wz]) => {
+        const g = worldToGrid(wx, wz);
+        const c = findFreeCellNear(g.col, g.row);
+        return gridToWorld(c.col, c.row);
+    }, [x, z]);
+}
+
+module.exports = {
+    test, expect: base.expect, openGame, startMatch, state, a11y, advanceSim, worldToScreen, rightClickWorld,
+    pickVisibleFreeCell, fastForward, orderSelectedTo, clearBattlefield, freeSpotNear, LANG_RU
+};

@@ -56,6 +56,19 @@ if (typeof document !== 'undefined') {
     }
 }
 
+// Поворот смещения строя из локальных осей в мировые. Локально x — вдоль фронта (вправо от
+// направления движения), y — вперёд по ходу (отрицательный y — позади ведущего). angle — направление
+// движения отряда, Math.atan2(dz, dx). Раньше поворот шёл на −angle: строй вставал правильно только
+// при движении по диагонали карты, а при движении вдоль осей шеренга вытягивалась в колонну,
+// клин разворачивался боком.
+function orientFormationOffset(offset, angle, out) {
+    const fx = Math.cos(angle);
+    const fz = Math.sin(angle);
+    out.x = offset.x * fz + offset.y * fx;
+    out.z = -offset.x * fx + offset.y * fz;
+    return out;
+}
+
 function getFormationOffsets(numUnits, type) {
     const offsets = [];
     if (type === 'line') {

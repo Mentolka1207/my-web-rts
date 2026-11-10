@@ -40,6 +40,9 @@ for (let i = 0; i < MAX_LASERS; i++) {
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
     const line = new THREE.Line(geo, allyLaserMat);
     line.visible = false;
+    // Концы луча меняются при каждом выстреле, а bounding sphere геометрии считается один раз:
+    // с отсечением по ней лучи вдали от первой точки выстрела не рисовались (режим без инстансинга)
+    line.frustumCulled = false;
     scene.add(line);
     laserGeometries.push(geo);
     laserMeshes.push(line);
@@ -103,7 +106,9 @@ function fireLaser(fromPos, toPos, isAlly, laserType) {
 
     const line = laserMeshes[idx];
     line.material = isAlly ? allyLaserMat : enemyLaserMat;
-    line.visible = true;
+    // При GPU-инстансинге луч рисует instancedRenderer.updateLasers одним общим мешем. Линия поверх него
+    // была вторым таким же лучом и лишним draw call на каждый выстрел.
+    line.visible = !(typeof instancedRenderer !== 'undefined' && instancedRenderer.initialized && instancedRenderer.enabled);
 
     laserData[idx].active = true;
     laserData[idx].life = 0.08;

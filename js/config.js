@@ -95,6 +95,12 @@ if (typeof THREE !== 'undefined') {
     }
 }
 
+// Игровое время в секундах: идёт только в бою и стоит на паузе (simElapsedTime из main.js).
+// По нему считаются кулдауны способностей и длительность матча.
+function getGameTime() {
+    return (typeof simElapsedTime !== 'undefined') ? simElapsedTime : performance.now() / 1000;
+}
+
 // --- СТАТИСТИКА МАТЧА (MATCH STATS) ---
 const matchStats = {
     startTime: 0,
