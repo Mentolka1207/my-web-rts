@@ -139,7 +139,7 @@ self.onmessage = function (e) {
                 const r = globalBuffer[uOff + 4];
                 const speed = globalBuffer[uOff + 5];
                 const hp = globalBuffer[uOff + 6];
-                const maxHp = globalBuffer[uOff + 7];
+                const attCd = globalBuffer[uOff + 7];
                 const team = globalBuffer[uOff + 8];
                 const uType = globalBuffer[uOff + 9];
                 let state = globalBuffer[uOff + 10];
@@ -243,7 +243,7 @@ self.onmessage = function (e) {
                             state = 3; // ATTACK
                             vx = 0; vz = 0;
 
-                            const cooldown = (uType === 2) ? 1.6 : (uType === 1 ? 0.75 : 1.0);
+                            const cooldown = attCd > 0 ? attCd : 1.0;
                             if (currentTime - lastAtt >= cooldown) {
                                 lastAtt = currentTime;
                                 if (nearestEnemyIdx >= 0) {
@@ -402,7 +402,7 @@ self.onmessage = function (e) {
                 sliceResultBuffer[outOffset++] = r;
                 sliceResultBuffer[outOffset++] = speed;
                 sliceResultBuffer[outOffset++] = hp;
-                sliceResultBuffer[outOffset++] = maxHp;
+                sliceResultBuffer[outOffset++] = attCd;
                 sliceResultBuffer[outOffset++] = team;
                 sliceResultBuffer[outOffset++] = uType;
                 sliceResultBuffer[outOffset++] = state;
@@ -418,6 +418,7 @@ self.onmessage = function (e) {
                 {
                     type: 'STEP_SLICE_DONE',
                     workerId: workerId,
+                    epoch: msg.epoch || 0,
                     sliceStart: sliceStart,
                     sliceCount: sliceCount,
                     buffer: sliceResultBuffer.buffer,

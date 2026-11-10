@@ -74,6 +74,9 @@ function createUnit(col, row, type = 'standard') {
         state: States.IDLE,
         personalTarget: null,
         targetEnemy: null,
+        orderTarget: null,   // цель фокус-атаки по приказу игрока
+        flowField: null,     // снимок поля потока своего приказа
+        finalApproach: false,
         hp: effectiveHp,
         maxHp: effectiveHp,
         speed: stats.speed,
@@ -198,19 +201,14 @@ function updateUnitVisuals(unit, currentTime, delta) {
         data.selectionRing.rotation.z = currentTime * 1.5;
     }
 
-    // Тактические визуальные эффекты активных способностей
+    // Тактические визуальные эффекты активных способностей (таймеры — в updateUnitAbilityTimers)
     if (unit.type === 'scout') {
         if (unit.abilityActive) {
-            unit.abilityTimer -= delta;
             if (data.enginePlume) {
                 data.enginePlume.scale.set(2.2, 4.2, 2.2);
             }
             if (typeof spawnTrailParticle === 'function') {
                 spawnTrailParticle(unit.mesh.position.x, unit.mesh.position.y + 0.12, unit.mesh.position.z);
-            }
-            if (unit.abilityTimer <= 0) {
-                unit.abilityActive = false;
-                unit.speed = DRONE_TYPES.scout.speed;
             }
         }
     } else if (unit.type === 'tank') {
@@ -223,10 +221,6 @@ function updateUnitVisuals(unit, currentTime, delta) {
         }
     } else if (unit.type === 'standard') {
         if (unit.shield > 0) {
-            unit.shieldTimer -= delta;
-            if (unit.shieldTimer <= 0) {
-                unit.shield = 0;
-            }
             if (data.shieldMesh) {
                 data.shieldMesh.visible = true;
                 data.shieldMesh.rotation.y += delta * 1.5;
@@ -234,6 +228,46 @@ function updateUnitVisuals(unit, currentTime, delta) {
         } else if (data.shieldMesh) {
             data.shieldMesh.visible = false;
         }
+    }
+}
+
+// Таймеры действия способностей союзного юнита: отсчёт форсажа и щита. Вызывается каждый тик симуляции
+// для всех союзников, отдельно от анимаций моделей.
+function updateUnitAbilityTimers(unit, delta) {
+    if (unit.hp <= 0) return;
+    if (unit.type === 'scout') {
+        if (unit.abilityActive) {
+            unit.abilityTimer -= delta;
+            if (unit.abilityTimer <= 0) {
+                unit.abilityActive = false;
+                unit.speed = DRONE_TYPES.scout.speed;
+            }
+        }
+    } else if (unit.type === 'standard') {
+        if (unit.shield > 0) {
+            unit.shieldTimer -= delta;
+            if (unit.shieldTimer <= 0) unit.shield = 0;
+        }
+    }
+}
+
+// Урон по врагу с учётом энергощита (Босс-Левиафан): пока щит цел, он поглощает попадание целиком.
+// Общая точка для прямого выстрела и осадного сплэша.
+function applyDamageToEnemy(target, amount) {
+    if (target.shield && target.shield > 0) {
+        if (typeof playHitSound === 'function') playHitSound(true);
+        target.shield -= amount;
+        if (target.shieldMesh) target.shieldMesh.material.opacity = 0.85;
+        if (target.shield <= 0) {
+            target.shield = 0;
+            if (target.shieldMesh) target.shieldMesh.visible = false;
+            if (typeof spawnExplosion === 'function') spawnExplosion(target.mesh.position, 18);
+            if (typeof showTacticalAlert === 'function') {
+                showTacticalAlert(typeof t === 'function' ? t('ALERT_BOSS_SHIELD_DOWN') : '⚡ ЩИТ ЛЕВИАФАНА ПРОБИТ!', false);
+            }
+        }
+    } else {
+        target.hp -= amount;
     }
 }
 
@@ -262,11 +296,15 @@ function toggleTankSiege(unit, currentTime) {
         unit.speed = 0;
         unit.velocity.set(0, 0, 0);
         unit.personalTarget = null;
+        unit.finalApproach = false;
         unit.state = States.IDLE;
         unit.attackRange = DRONE_TYPES.tank.attackRange * 2.0;
+        // Обзор не меньше дальности огня: иначе танк замечает врага только с 7 и «дальность ×2» (8) не работает
+        unit.visionRange = Math.max(DRONE_TYPES.tank.visionRange, unit.attackRange + 0.5);
     } else {
         unit.speed = DRONE_TYPES.tank.speed;
         unit.attackRange = DRONE_TYPES.tank.attackRange;
+        unit.visionRange = DRONE_TYPES.tank.visionRange;
     }
     return true;
 }
@@ -288,7 +326,8 @@ function activateDroneShield(unit, currentTime) {
 
 // Групповая активация способности для выделенных юнитов игрока
 function triggerAbilityForSelected(abilityType) {
-    const curTime = (typeof clock !== 'undefined') ? clock.elapsedTime : performance.now() / 1000;
+    // Игровое время (стоит на паузе), то же, что у таймеров действия способностей
+    const curTime = (typeof getGameTime === 'function') ? getGameTime() : performance.now() / 1000;
     let activated = 0;
     let siegedOn = 0;
     let siegedOff = 0;

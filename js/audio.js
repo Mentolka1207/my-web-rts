@@ -13,6 +13,7 @@ class SoundEngine {
 
         this.isMuted = false;
         this.isMusicMuted = false;
+        this.tabHidden = false;
         this.initialized = false;
 
         // Буфер белого шума для взрывов и гидромеханики
@@ -63,7 +64,7 @@ class SoundEngine {
     // Инициализация аудиоконтекста (вызывается по первому клику/действию пользователя)
     init() {
         if (this.initialized) {
-            if (this.ctx && this.ctx.state === 'suspended') {
+            if (this.ctx && this.ctx.state === 'suspended' && !this.tabHidden) {
                 this.ctx.resume().catch(() => {});
             }
             return;
@@ -84,19 +85,25 @@ class SoundEngine {
             this.compressor.release.setValueAtTime(0.25, this.ctx.currentTime);
             this.compressor.connect(this.ctx.destination);
 
+            // Громкости из настроек приходят до первого жеста пользователя, когда контекста ещё нет
+            // (setMasterVolume и др. только запоминают значение). Шины создаются уже с ними: раньше здесь
+            // стояли полные 0.85 / 0.8 / 0.28, и сохранённая громкость (в том числе 0) не действовала,
+            // пока игрок не открывал и не закрывал окно настроек.
+            const vol = (v) => (typeof v === 'number' && isFinite(v)) ? Math.max(0, Math.min(1, v)) : 1;
+
             // Мастер-шина
             this.masterGain = this.ctx.createGain();
-            this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
+            this.masterGain.gain.setValueAtTime(this.isMuted ? 0 : vol(this.masterVolume) * 0.85, this.ctx.currentTime);
             this.masterGain.connect(this.compressor);
 
             // Шина звуковых эффектов (SFX)
             this.sfxGain = this.ctx.createGain();
-            this.sfxGain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+            this.sfxGain.gain.setValueAtTime(vol(this.sfxVolume) * 0.8, this.ctx.currentTime);
             this.sfxGain.connect(this.masterGain);
 
             // Шина музыки и фонового эмбиента
             this.musicGain = this.ctx.createGain();
-            this.musicGain.gain.setValueAtTime(0.28, this.ctx.currentTime);
+            this.musicGain.gain.setValueAtTime(vol(this.musicVolume) * 0.28, this.ctx.currentTime);
             this.musicGain.connect(this.masterGain);
 
             // Предварительная генерация шума для взрывов (1.5 сек белого шума)
@@ -120,7 +127,19 @@ class SoundEngine {
 
     ensureContext() {
         if (!this.initialized) this.init();
-        if (this.ctx && this.ctx.state === 'suspended') {
+        // В скрытой вкладке контекст остаётся приостановленным (см. setTabHidden)
+        if (this.ctx && this.ctx.state === 'suspended' && !this.tabHidden) {
+            this.ctx.resume().catch(() => {});
+        }
+    }
+
+    // Вкладка скрыта — звук молчит: игра уже на авто-паузе, а эмбиент продолжал гудеть в фоне
+    setTabHidden(hidden) {
+        this.tabHidden = !!hidden;
+        if (!this.ctx) return;
+        if (hidden) {
+            if (this.ctx.state === 'running' && this.ctx.suspend) this.ctx.suspend().catch(() => {});
+        } else if (this.ctx.state === 'suspended') {
             this.ctx.resume().catch(() => {});
         }
     }
@@ -715,12 +734,15 @@ class SoundEngine {
 
             gain.gain.setValueAtTime(0.22, t);
 
-            // Медленная модуляция громкости (биения)
+            // Медленная модуляция громкости (биения): LFO → глубина → громкость тона.
+            // Раньше LFO был подключён к параметру собственного усилителя, который никуда не вёл,
+            // и биений не было.
             const lfo = this.ctx.createOscillator();
             const lfoGain = this.ctx.createGain();
             lfo.frequency.setValueAtTime(0.08 + idx * 0.03, t);
             lfoGain.gain.setValueAtTime(0.08, t);
-            lfo.connect(lfoGain.gain);
+            lfo.connect(lfoGain);
+            lfoGain.connect(gain.gain);
 
             osc.connect(gain);
             gain.connect(this.ambientGain);
@@ -760,12 +782,20 @@ class SoundEngine {
 
         if (this.ambientGain && this.ctx) {
             const t = this.ctx.currentTime;
-            this.ambientGain.gain.setTargetAtTime(0.001, t, 1.5);
+            // Затухают и останавливаются именно эти узлы. Раньше таймер через 2 с читал this.ambientNodes:
+            // если за это время эмбиент запускали снова («Играть снова» сразу после итога боя), он глушил
+            // новые осцилляторы — матч шёл без эмбиента, а старые осцилляторы работали вечно.
+            const fadingGain = this.ambientGain;
+            const fadingNodes = this.ambientNodes;
+            this.ambientGain = null;
+            this.ambientNodes = [];
+            fadingGain.gain.cancelScheduledValues(t);
+            fadingGain.gain.setTargetAtTime(0.001, t, 0.4);
             setTimeout(() => {
-                this.ambientNodes.forEach(n => {
+                fadingNodes.forEach(n => {
                     try { n.osc.stop(); n.lfo.stop(); } catch (e) {}
                 });
-                this.ambientNodes.length = 0;
+                try { fadingGain.disconnect(); } catch (e) {}
             }, 2000);
         }
     }
@@ -829,6 +859,11 @@ function unlockAudioContextOnUserGesture() {
     window.removeEventListener('click', unlockAudioContextOnUserGesture);
     window.removeEventListener('keydown', unlockAudioContextOnUserGesture);
     window.removeEventListener('touchstart', unlockAudioContextOnUserGesture);
+}
+
+// Скрытая вкладка не звучит; при возврате звук продолжается
+if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', () => soundEngine.setTabHidden(document.hidden));
 }
 
 window.addEventListener('click', unlockAudioContextOnUserGesture, { once: true });

@@ -140,6 +140,11 @@ function syncResourceNodes(nodeDefs) {
         const removed = resourceNodes.pop();
         if (removed && removed.group) {
             scene.remove(removed.group);
+            // Собственные материалы и геометрии узла (общие геометрии кристаллов не трогаем)
+            removed.group.traverse(obj => {
+                if (obj.material && obj.material.dispose) obj.material.dispose();
+                if (obj.geometry && obj.geometry.type === 'PlaneGeometry') obj.geometry.dispose();
+            });
         }
     }
 
@@ -152,9 +157,11 @@ function syncResourceNodes(nodeDefs) {
         const wp = gridToWorld(def.col, def.row);
         node.pos.set(wp.x, 0, wp.z);
         node.group.position.set(wp.x, 0, wp.z);
+        node.nameKey = def.nameKey || null;
         node.name = (typeof t === 'function' && def.nameKey) ? t(def.nameKey) : (def.name || def.id);
         node.owner = 'neutral';
         node.captureProgress = 0;
+        if (node.barFg) node.barFg.scale.x = 0.02;
         if (node.crystalMat && node.crystalMat.emissive) {
             node.crystalMat.emissive.setHex(0xffaa00);
         }
@@ -170,6 +177,14 @@ function syncResourceNodes(nodeDefs) {
         if (!node.group.parent) {
             scene.add(node.group);
         }
+    }
+}
+
+// Смена языка: имена точек берутся из словаря заново (иначе оповещения называли их на старом языке)
+function relocalizeResourceNodes() {
+    if (typeof t !== 'function') return;
+    for (let i = 0; i < resourceNodes.length; i++) {
+        if (resourceNodes[i].nameKey) resourceNodes[i].name = t(resourceNodes[i].nameKey);
     }
 }
 
@@ -244,8 +259,11 @@ function updateResourceNodes(delta, currentTime) {
                         matchStats.nodesCaptured++;
                     }
                     showTacticalAlert(typeof t === 'function' ? t('ALERT_NODE_CAPTURED', node.name) : `🟢 Точка «${node.name}» под нашим контролем! (+${NODE_ENERGY_BONUS}⚡/сек)`, false);
-                } else if (prevOwner === 'player' || node.owner === 'enemy') {
+                } else if (node.owner === 'enemy') {
                     showTacticalAlert(typeof t === 'function' ? t('ALERT_NODE_LOST', node.name) : `🔴 Враг захватил точку «${node.name}»!`, true);
+                } else if (prevOwner === 'player') {
+                    // Точка стала нейтральной: враг её ещё не захватил, но доход с неё уже потерян
+                    showTacticalAlert(typeof t === 'function' ? t('ALERT_NODE_CONTESTED', node.name) : `⚠️ Контроль над точкой «${node.name}» потерян!`, true);
                 }
             }
         }

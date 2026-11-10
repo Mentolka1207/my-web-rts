@@ -8,6 +8,18 @@
 
 const MAX_SIM_ENTITIES = 15000;
 
+// Коды состояний FSM в плоском буфере. В игровых объектах состояние — строка из States
+// (js/config.js), в Float32Array строку положить нельзя: она превращается в NaN.
+const SIM_STATE_NAMES = ['IDLE', 'MOVE', 'CHASE', 'ATTACK'];
+function simStateToCode(state) {
+    if (typeof state === 'number') return (state >= 0 && state <= 3) ? state : 0;
+    const idx = SIM_STATE_NAMES.indexOf(state);
+    return idx === -1 ? 0 : idx;
+}
+function simCodeToState(code) {
+    return SIM_STATE_NAMES[code] || SIM_STATE_NAMES[0];
+}
+
 // Scratch векторы для лазеров симуляции (Zero-Allocation)
 const _simV1 = (typeof THREE !== 'undefined') ? new THREE.Vector3() : { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } };
 const _simV2 = (typeof THREE !== 'undefined') ? new THREE.Vector3() : { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } };
@@ -144,7 +156,7 @@ self.onmessage = function (e) {
                 const r = globalBuffer[uOff + 4];
                 const speed = globalBuffer[uOff + 5];
                 const hp = globalBuffer[uOff + 6];
-                const maxHp = globalBuffer[uOff + 7];
+                const attCd = globalBuffer[uOff + 7];
                 const team = globalBuffer[uOff + 8];
                 const uType = globalBuffer[uOff + 9];
                 let state = globalBuffer[uOff + 10];
@@ -245,7 +257,7 @@ self.onmessage = function (e) {
                             state = 3; // ATTACK
                             vx = 0; vz = 0;
 
-                            const cooldown = (uType === 2) ? 1.6 : (uType === 1 ? 0.75 : 1.0);
+                            const cooldown = attCd > 0 ? attCd : 1.0;
                             if (currentTime - lastAtt >= cooldown) {
                                 lastAtt = currentTime;
                                 if (nearestEnemyIdx >= 0) {
@@ -312,7 +324,7 @@ self.onmessage = function (e) {
                                 const minD = r + oRad;
 
                                 const diffX = x - ox;
-                                diffZ = z - oz;
+                                const diffZ = z - oz;
                                 const dSq = diffX * diffX + diffZ * diffZ;
 
                                 if (dSq < minD * minD && dSq > 0.000001) {
@@ -397,7 +409,7 @@ self.onmessage = function (e) {
                 sliceResultBuffer[outOffset++] = r;
                 sliceResultBuffer[outOffset++] = speed;
                 sliceResultBuffer[outOffset++] = hp;
-                sliceResultBuffer[outOffset++] = maxHp;
+                sliceResultBuffer[outOffset++] = attCd;
                 sliceResultBuffer[outOffset++] = team;
                 sliceResultBuffer[outOffset++] = uType;
                 sliceResultBuffer[outOffset++] = state;
@@ -412,6 +424,7 @@ self.onmessage = function (e) {
                 {
                     type: 'STEP_SLICE_DONE',
                     workerId: workerId,
+                    epoch: msg.epoch || 0,
                     sliceStart: sliceStart,
                     sliceCount: sliceCount,
                     buffer: sliceResultBuffer.buffer,
@@ -697,6 +710,8 @@ class SimulationWorkerPool {
         this.lastStepDuration = 0;
         this.stepStartTime = 0;
         this.stepCount = 0;
+        // Номер поколения шага: ответы воркеров с другим номером устарели (сброс, рестарт, смена карты)
+        this.stepEpoch = 0;
 
         // Память для быстрого фоллбэка на главном потоке (Single-Thread Linked-List SoA)
         this.syncHead = null;
@@ -710,6 +725,7 @@ class SimulationWorkerPool {
         this.damageEventsQueue.length = 0;
         this.laserEventsQueue.length = 0;
         this.isBusy = false;
+        this.stepEpoch++;
         if (this.syncHead) this.syncHead.fill(-1);
     }
 
@@ -745,6 +761,8 @@ class SimulationWorkerPool {
         this.workers.length = 0;
         this.isMultiThreaded = false;
         this.isBusy = false;
+        this.pendingSlices = 0;
+        this.stepEpoch++;
     }
 
     init(grid, worldSize = 256, cellSize = 4) {
@@ -838,6 +856,9 @@ class SimulationWorkerPool {
         const bRows = Math.ceil(this.worldSize / 6.0);
         this.syncHead = new Int32Array(bCols * bRows);
 
+        // Шаг, отправленный до смены карты, считался по старой сетке — его результат не применяем
+        this.clear();
+
         if (this.isMultiThreaded) {
             for (let i = 0; i < this.workers.length; i++) {
                 this.workers[i].postMessage({
@@ -871,17 +892,18 @@ class SimulationWorkerPool {
             this.globalBuffer[offset++] = vx;
             this.globalBuffer[offset++] = vz;
             this.globalBuffer[offset++] = u.radius || 0.5;
-            this.globalBuffer[offset++] = u.speed || 6.0;
+            // 0 — законная скорость (танк в осаде): «|| 6.0» превращал её в 6
+            this.globalBuffer[offset++] = (typeof u.speed === 'number') ? u.speed : 6.0;
             this.globalBuffer[offset++] = u.hp;
-            this.globalBuffer[offset++] = u.maxHp || u.hp;
+            this.globalBuffer[offset++] = u.attackCooldown || 1.0;
             this.globalBuffer[offset++] = 0; // ally
             this.globalBuffer[offset++] = (u.type === 'scout') ? 1 : ((u.type === 'tank') ? 2 : 0);
-            this.globalBuffer[offset++] = u.state || 0;
+            this.globalBuffer[offset++] = simStateToCode(u.state);
             this.globalBuffer[offset++] = pt ? pt.x : 0;
             this.globalBuffer[offset++] = pt ? pt.z : 0;
             this.globalBuffer[offset++] = u.attackRange || 8.0;
             this.globalBuffer[offset++] = u.damage || 15.0;
-            this.globalBuffer[offset++] = u.lastAttackTime || -99.0;
+            this.globalBuffer[offset++] = (typeof u.lastAttackTime === 'number') ? u.lastAttackTime : -99.0;
         }
 
         const numEnemies = enemies.length;
@@ -900,17 +922,17 @@ class SimulationWorkerPool {
             this.globalBuffer[offset++] = vx;
             this.globalBuffer[offset++] = vz;
             this.globalBuffer[offset++] = e.radius || 0.5;
-            this.globalBuffer[offset++] = e.speed || 4.5;
+            this.globalBuffer[offset++] = (typeof e.speed === 'number') ? e.speed : 4.5;
             this.globalBuffer[offset++] = e.hp;
-            this.globalBuffer[offset++] = e.maxHp || e.hp;
+            this.globalBuffer[offset++] = e.attackCooldown || 1.0;
             this.globalBuffer[offset++] = 1; // enemy
             this.globalBuffer[offset++] = (e.type === 'scout') ? 1 : ((e.type === 'tank') ? 2 : ((e.type === 'boss') ? 3 : 0));
-            this.globalBuffer[offset++] = e.state || 0;
+            this.globalBuffer[offset++] = simStateToCode(e.state);
             this.globalBuffer[offset++] = pt ? pt.x : 0;
             this.globalBuffer[offset++] = pt ? pt.z : 0;
             this.globalBuffer[offset++] = e.attackRange || 8.0;
             this.globalBuffer[offset++] = e.damage || 12.0;
-            this.globalBuffer[offset++] = e.lastAttackTime || -99.0;
+            this.globalBuffer[offset++] = (typeof e.lastAttackTime === 'number') ? e.lastAttackTime : -99.0;
         }
 
         return this.activeUnits.length;
@@ -923,6 +945,7 @@ class SimulationWorkerPool {
         if (totalUnits === 0) return true;
 
         this.isBusy = true;
+        this.stepEpoch++;
         this.stepStartTime = performance.now();
         this.pendingSlices = this.threadCount;
         this.sliceResults.length = 0;
@@ -944,6 +967,7 @@ class SimulationWorkerPool {
             if (count > 0) {
                 this.workers[i].postMessage({
                     type: 'STEP_SLICE',
+                    epoch: this.stepEpoch,
                     globalBuffer: sendBuffer,
                     totalUnits: totalUnits,
                     sliceStart: start,
@@ -966,6 +990,9 @@ class SimulationWorkerPool {
         if (!msg) return;
 
         if (msg.type === 'STEP_SLICE_DONE') {
+            // Ответ на шаг, который уже отменён (стресс-тест остановлен, рестарт, смена карты):
+            // его индексы относятся к старому списку юнитов
+            if (msg.epoch !== this.stepEpoch || !this.isBusy) return;
             this.sliceResults.push(msg);
 
             if (msg.damageEvents && msg.damageEvents.length > 0) {
@@ -1012,7 +1039,7 @@ class SimulationWorkerPool {
                 const vz = data[inOff++];
                 inOff += 2; // radius, speed
                 const hp = data[inOff++];
-                inOff += 3; // maxHp, team, uType
+                inOff += 3; // attackCooldown, team, uType
                 const state = data[inOff++];
                 inOff += 4; // tx, tz, attRange, dmg
                 const lastAtt = data[inOff++];
@@ -1026,7 +1053,7 @@ class SimulationWorkerPool {
                         u.mesh.rotation.y = THREE.MathUtils.lerpAngle(u.mesh.rotation.y, Math.atan2(-vz, vx), 10 * delta);
                     }
                 }
-                u.state = state;
+                u.state = simCodeToState(state);
                 u.lastAttackTime = lastAtt;
             }
         }
@@ -1243,7 +1270,7 @@ class SimulationWorkerPool {
                     state = 3; // ATTACK
                     vx = 0; vz = 0;
 
-                    const cooldown = (uType === 2) ? 1.6 : (uType === 1 ? 0.75 : 1.0);
+                    const cooldown = u.attackCooldown || 1.0;
                     if (currentTime - lastAtt >= cooldown) {
                         lastAtt = currentTime;
                         if (nearestEnemyIdx >= 0) {
@@ -1310,7 +1337,7 @@ class SimulationWorkerPool {
                         const minD = r + oRad;
 
                         const diffX = x - ox;
-                        diffZ = z - oz;
+                        const diffZ = z - oz;
                         const dSq = diffX * diffX + diffZ * diffZ;
 
                         if (dSq < minD * minD && dSq > 0.000001) {
@@ -1341,7 +1368,7 @@ class SimulationWorkerPool {
                                 const minD = r + oRad;
 
                                 const diffX = x - ox;
-                                diffZ = z - oz;
+                                const diffZ = z - oz;
                                 const dSq = diffX * diffX + diffZ * diffZ;
 
                                 if (dSq < minD * minD && dSq > 0.000001) {
@@ -1396,7 +1423,7 @@ class SimulationWorkerPool {
                     u.mesh.rotation.y = THREE.MathUtils.lerpAngle(u.mesh.rotation.y, Math.atan2(-vz, vx), 10 * delta);
                 }
             }
-            u.state = state;
+            u.state = simCodeToState(state);
             u.lastAttackTime = lastAtt;
         }
 

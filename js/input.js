@@ -47,6 +47,14 @@ function refreshTouchModeButton() {
     btn.classList.toggle('is-warning', select);
 }
 
+// Событие пришло с панели интерфейса, кнопки или ссылки, а не с игрового поля.
+// У цели может не быть closest (document, window): такое событие относится к полю.
+function isUiEventTarget(target, includeControls = true) {
+    if (!target || typeof target.closest !== 'function') return false;
+    if (target.closest(UI_SELECTOR)) return true;
+    return includeControls && !!target.closest('button, a');
+}
+
 function updateMouseNDC(clientX, clientY) {
     mouse.x = (clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(clientY / window.innerHeight) * 2 + 1;
@@ -99,8 +107,10 @@ function updateDragSelection(currentX, currentY, additive) {
         _projVec.copy(unit.mesh.position).project(camera);
         const x = (_projVec.x * 0.5 + 0.5) * window.innerWidth;
         const y = (-_projVec.y * 0.5 + 0.5) * window.innerHeight;
+        // Юнит позади камеры проецируется зеркально и мог «попасть» в рамку
+        const inView = _projVec.z >= -1 && _projVec.z <= 1;
 
-        if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+        if (inView && x >= minX && x <= maxX && y >= minY && y <= maxY) {
             unit.selected = true;
             if (unit.mesh.userData.selectionRing) unit.mesh.userData.selectionRing.visible = true;
         } else if (!additive) {
@@ -153,15 +163,51 @@ function getEnemyUnderScreenPoint(clientX, clientY) {
     return closestEnemy;
 }
 
+// Проверка и корректировка целевой позиции отряда от застревания в стенах и кристаллах
+function sanitizeTargetPosition(targetX, targetZ, fallbackX, fallbackZ) {
+    const halfPlayable = (MAP_WORLD_SIZE * 0.5) - CELL_SIZE * 1.2;
+    let clampedX = THREE.MathUtils.clamp(targetX, -halfPlayable, halfPlayable);
+    let clampedZ = THREE.MathUtils.clamp(targetZ, -halfPlayable, halfPlayable);
+
+    const g = worldToGrid(clampedX, clampedZ);
+    const inObstacle = (g.col >= 0 && g.col < GRID_SIZE && g.row >= 0 && g.row < GRID_SIZE && grid[g.row][g.col] === 1);
+
+    let inResource = false;
+    if (typeof resourceNodes !== 'undefined') {
+        const minCoreDistSq = (RESOURCE_CORE_RADIUS + 0.3) * (RESOURCE_CORE_RADIUS + 0.3);
+        for (let i = 0; i < resourceNodes.length; i++) {
+            const rn = resourceNodes[i];
+            const dSq = (clampedX - rn.pos.x) * (clampedX - rn.pos.x) + (clampedZ - rn.pos.z) * (clampedZ - rn.pos.z);
+            if (dSq < minCoreDistSq) {
+                inResource = true;
+                break;
+            }
+        }
+    }
+
+    if (inObstacle || inResource) {
+        for (let k = 0.8; k >= 0.2; k -= 0.2) {
+            const testX = fallbackX + (clampedX - fallbackX) * k;
+            const testZ = fallbackZ + (clampedZ - fallbackZ) * k;
+            const tg = worldToGrid(testX, testZ);
+            if (tg.col > 0 && tg.col < GRID_SIZE - 1 && tg.row > 0 && tg.row < GRID_SIZE - 1 && grid[tg.row][tg.col] === 0) {
+                return { x: testX, z: testZ };
+            }
+        }
+        const free = findFreeCellNear(g.col, g.row);
+        const freeWorld = gridToWorld(free.col, free.row);
+        return { x: freeWorld.x, z: freeWorld.z };
+    }
+
+    return { x: clampedX, z: clampedZ };
+}
+
+const _formationSlot = { x: 0, z: 0 };
+
 function issueMoveOrderAtPoint(clientX, clientY) {
     const selectedUnits = [];
-    let sumX = 0, sumZ = 0;
     for (let i = 0; i < units.length; i++) {
-        if (units[i].selected && units[i].hp > 0) {
-            selectedUnits.push(units[i]);
-            sumX += units[i].mesh.position.x;
-            sumZ += units[i].mesh.position.z;
-        }
+        if (units[i].selected && units[i].hp > 0) selectedUnits.push(units[i]);
     }
     if (selectedUnits.length === 0) return;
 
@@ -172,11 +218,22 @@ function issueMoveOrderAtPoint(clientX, clientY) {
         if (typeof spawnOrderMarker === 'function') {
             spawnOrderMarker(enemyPos.x, enemyPos.z, true);
         }
+        // Поле потока к клетке цели: по нему отряд дойдёт до врага вне обзора и за стенами
+        const enemyGrid = worldToGrid(enemyPos.x, enemyPos.z);
+        flowFieldGen.updateTarget(
+            THREE.MathUtils.clamp(enemyGrid.col, 1, GRID_SIZE - 2),
+            THREE.MathUtils.clamp(enemyGrid.row, 1, GRID_SIZE - 2)
+        );
+        const attackField = (typeof flowFieldGen.getActiveField === 'function') ? flowFieldGen.getActiveField() : null;
         for (let i = 0; i < selectedUnits.length; i++) {
             const u = selectedUnits[i];
             u.targetEnemy = targetEnemy;
+            // Явный приказ: цель не сбрасывается из-за дальности обзора (см. FSM в main.js)
+            u.orderTarget = targetEnemy;
+            u.flowField = attackField;
             u.state = States.CHASE;
             u.personalTarget = null;
+            u.finalApproach = false;
         }
         return;
     }
@@ -202,71 +259,48 @@ function issueMoveOrderAtPoint(clientX, clientY) {
         targetPoint = { x: freeWorld.x, y: 0, z: freeWorld.z };
     }
 
+    // Танк в осадном режиме стоит на якоре: приказ движения его не касается. Раньше он получал цель,
+    // вечно висел в состоянии MOVE со скоростью 0, а после снятия осады сам уезжал к давно забытой точке.
+    const movers = [];
+    let sumX = 0, sumZ = 0;
+    for (let i = 0; i < selectedUnits.length; i++) {
+        const u = selectedUnits[i];
+        if (u.isSieged) continue;
+        movers.push(u);
+        sumX += u.mesh.position.x;
+        sumZ += u.mesh.position.z;
+    }
+    if (movers.length === 0) {
+        if (typeof showTacticalAlert === 'function') {
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_SIEGE_NO_MOVE') : '⚓ Танки в осаде не двигаются. Сними осаду [R].', false);
+        }
+        return;
+    }
+
     if (typeof spawnOrderMarker === 'function') {
         spawnOrderMarker(targetPoint.x, targetPoint.z, false);
     }
 
-    const count = selectedUnits.length;
+    const count = movers.length;
     const groupCenterX = sumX / count;
     const groupCenterZ = sumZ / count;
 
     const angle = Math.atan2(targetPoint.z - groupCenterZ, targetPoint.x - groupCenterX);
     const offsets = getFormationOffsets(count, currentFormation);
     flowFieldGen.updateTarget(targetGrid.col, targetGrid.row);
+    // Снимок поля именно этого приказа: следующий приказ другой группе его не перезапишет
+    const orderField = (typeof flowFieldGen.getActiveField === 'function') ? flowFieldGen.getActiveField() : null;
     if (typeof simWorkerPool !== 'undefined') {
         simWorkerPool.updateFlowFields(flowFieldGen, enemyFlowFieldGen);
     }
 
-    const cosA = Math.cos(-angle);
-    const sinA = Math.sin(-angle);
-
-// Проверка и корректировка целевой позиции отряда от застревания в стенах и кристаллах
-function sanitizeTargetPosition(targetX, targetZ, fallbackX, fallbackZ) {
-    const halfPlayable = (MAP_WORLD_SIZE * 0.5) - CELL_SIZE * 1.2;
-    let clampedX = THREE.MathUtils.clamp(targetX, -halfPlayable, halfPlayable);
-    let clampedZ = THREE.MathUtils.clamp(targetZ, -halfPlayable, halfPlayable);
-
-    const g = worldToGrid(clampedX, clampedZ);
-    const inObstacle = (g.col >= 0 && g.col < GRID_SIZE && g.row >= 0 && g.row < GRID_SIZE && grid[g.row][g.col] === 1);
-
-    let inResource = false;
-    if (typeof resourceNodes !== 'undefined') {
-        const minCoreDistSq = (RESOURCE_CORE_RADIUS + 0.3) * (RESOURCE_CORE_RADIUS + 0.3);
-        for (let i = 0; i < resourceNodes.length; i++) {
-            const rn = resourceNodes[i];
-            const dSq = (clampedX - rn.pos.x) * (clampedX - rn.pos.x) + (clampedZ - rn.pos.z) * (clampedZ - rn.pos.z);
-            if (dSq < minCoreDistSq) {
-                inResource = true;
-                break;
-            }
-        }
-    }
-
-    if (inObstacle || inResource) {
-        for (let t = 0.8; t >= 0.2; t -= 0.2) {
-            const testX = fallbackX + (clampedX - fallbackX) * t;
-            const testZ = fallbackZ + (clampedZ - fallbackZ) * t;
-            const tg = worldToGrid(testX, testZ);
-            if (tg.col > 0 && tg.col < GRID_SIZE - 1 && tg.row > 0 && tg.row < GRID_SIZE - 1 && grid[tg.row][tg.col] === 0) {
-                return { x: testX, z: testZ };
-            }
-        }
-        const free = findFreeCellNear(g.col, g.row);
-        const freeWorld = gridToWorld(free.col, free.row);
-        return { x: freeWorld.x, z: freeWorld.z };
-    }
-
-    return { x: clampedX, z: clampedZ };
-}
-
     for (let i = 0; i < count; i++) {
-        const unit = selectedUnits[i];
-        const offset = offsets[i];
-        const rotatedX = offset.x * cosA - offset.y * sinA;
-        const rotatedZ = offset.x * sinA + offset.y * cosA;
+        const unit = movers[i];
+        // Строй разворачивается по направлению движения отряда (js/formations.js)
+        orientFormationOffset(offsets[i], angle, _formationSlot);
 
-        const candidateX = targetPoint.x + rotatedX;
-        const candidateZ = targetPoint.z + rotatedZ;
+        const candidateX = targetPoint.x + _formationSlot.x;
+        const candidateZ = targetPoint.z + _formationSlot.z;
         const safePos = sanitizeTargetPosition(candidateX, candidateZ, targetPoint.x, targetPoint.z);
 
         if (!unit.personalTarget) {
@@ -275,6 +309,9 @@ function sanitizeTargetPosition(targetX, targetZ, fallbackX, fallbackZ) {
         unit.personalTarget.set(safePos.x, 0.75, safePos.z);
         unit.state = States.MOVE;
         unit.targetEnemy = null;
+        unit.orderTarget = null;
+        unit.flowField = orderField;
+        unit.finalApproach = false;
     }
 }
 
@@ -287,7 +324,7 @@ function clampCameraBounds() {
 
 // --- 1. ОБРАБОТКА МЫШИ (ДЕСКТОП + КОЛЁСИКО) ---
 window.addEventListener('mousedown', (e) => {
-    if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
+    if (isUiEventTarget(e.target)) return;
 
     // Зажатие колёсика мыши (MMB / button === 1) — режим перемещения карты
     if (e.button === 1) {
@@ -348,9 +385,12 @@ window.addEventListener('mouseup', (e) => {
 
     // Отпускание ЛКМ
     if (e.button === 0) {
+        // Клик считается кликом по полю, только если и нажатие было на поле: нажатие на панели HUD
+        // с отпусканием над полем раньше снимало выделение со всей армии
+        const startedOnField = isSelecting;
         isSelecting = false;
         selectionBoxEl.style.display = 'none';
-        if (!isDragging && !e.target.closest(UI_SELECTOR) && !e.target.closest('button, a')) {
+        if (startedOnField && !isDragging && !isUiEventTarget(e.target)) {
             const clickedUnit = getUnitUnderScreenPoint(e.clientX, e.clientY);
             const now = performance.now();
             const isDoubleClick = (now - lastUnitClickTime < DOUBLE_CLICK_TIME_MS) && (lastClickedUnit && lastClickedUnit === clickedUnit);
@@ -393,13 +433,13 @@ window.addEventListener('mouseup', (e) => {
 // ПКМ — приказ перемещения / атаки
 window.addEventListener('contextmenu', (e) => {
     e.preventDefault();
-    if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
+    if (isUiEventTarget(e.target)) return;
     issueMoveOrderAtPoint(e.clientX, e.clientY);
 });
 
 // Вращение колёсика мыши (Зум и Touchpad горизонтальный скролл)
 window.addEventListener('wheel', (e) => {
-    if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
+    if (isUiEventTarget(e.target)) return;
     e.preventDefault();
 
     // Горизонтальный скролл (например, тачпад или наклон колеса)
@@ -410,8 +450,10 @@ window.addEventListener('wheel', (e) => {
         return;
     }
 
-    // Вертикальный зум колёсиком
-    camZoomDist += e.deltaY * 0.04;
+    // Вертикальный зум колёсиком. Шаг масштабируется вместе с картой: при постоянном шаге 4 единицы
+    // на карте 1024 (зум 45…850) от стартового вида до общего плана нужно было 145 щелчков колеса
+    // против 34 на карте 256.
+    camZoomDist += e.deltaY * 0.04 * (BASE_CAM_DIST / 85);
     camZoomDist = THREE.MathUtils.clamp(camZoomDist, MIN_ZOOM_DIST, MAX_ZOOM_DIST);
     applyCameraTransform();
 }, { passive: false });
@@ -454,9 +496,17 @@ function handleTap(clientX, clientY) {
     }
 }
 
+// true, пока идёт касание, начатое на игровом поле (а не на панели HUD или кнопке)
+let fieldTouchActive = false;
+
 window.addEventListener('touchstart', (e) => {
-    if (e.target.closest(UI_SELECTOR) || e.target.closest('button, a')) return;
-    e.preventDefault();
+    if (isUiEventTarget(e.target)) {
+        if (e.touches.length === 1) fieldTouchActive = false;
+        return;
+    }
+    fieldTouchActive = true;
+    // Неотменяемое касание (браузер уже начал свой жест) отменять нельзя — Chrome пишет ошибку в консоль
+    if (e.cancelable) e.preventDefault();
 
     if (e.touches.length === 1) {
         const t = e.touches[0];
@@ -491,8 +541,8 @@ window.addEventListener('touchstart', (e) => {
 }, { passive: false });
 
 window.addEventListener('touchmove', (e) => {
-    if (e.target.closest(UI_SELECTOR)) return;
-    e.preventDefault();
+    if (isUiEventTarget(e.target, false)) return;
+    if (e.cancelable) e.preventDefault();
 
     if (e.touches.length === 1) {
         const t = e.touches[0];
@@ -539,7 +589,11 @@ window.addEventListener('touchmove', (e) => {
 
 window.addEventListener('touchend', (e) => {
     if (e.touches.length === 0) {
-        if (!hasTouchMoved && (performance.now() - touchStartTime) < TAP_MAX_DURATION_MS) {
+        // Тап по кнопке HUD сразу после тапа по полю (< 320 мс) раньше считался ещё одним тапом по полю
+        // и отдавал приказ в точку под кнопкой: время и «не двигался» оставались от прошлого касания
+        const wasFieldTouch = fieldTouchActive;
+        fieldTouchActive = false;
+        if (wasFieldTouch && !hasTouchMoved && (performance.now() - touchStartTime) < TAP_MAX_DURATION_MS) {
             if (e.changedTouches.length > 0) {
                 const t = e.changedTouches[0];
                 handleTap(t.clientX, t.clientY);
@@ -559,6 +613,7 @@ window.addEventListener('touchend', (e) => {
 }, { passive: false });
 
 window.addEventListener('touchcancel', () => {
+    fieldTouchActive = false;
     isTouchPanning = false;
     isSelecting = false;
     isDragging = false;
@@ -609,8 +664,37 @@ function selectAllAlliedUnits() {
 
 // --- 3. КЛАВИАТУРА И ДВИЖЕНИЕ КАМЕРЫ (WASD / СТРЕЛКИ) ---
 const keys = {};
+// true, пока игрок перемещается по интерфейсу клавишей Tab; клик или касание возвращают управление игре
+let keyboardNavActive = false;
+let spaceHandledByGame = false;
+window.addEventListener('mousedown', () => { keyboardNavActive = false; }, true);
+window.addEventListener('touchstart', () => { keyboardNavActive = false; }, { capture: true, passive: true });
+
+// Отпустить все клавиши: окно потеряло фокус, и keyup уже не придёт (иначе камера ползёт сама)
+function releaseAllKeys() {
+    for (const code in keys) keys[code] = false;
+}
+
+// Поле ввода, список или редактируемый текст: клавиши принадлежат ему, а не игре
+function isTypingTarget(el) {
+    if (!el || !el.tagName) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable === true;
+}
+
 window.addEventListener('keydown', (e) => {
-    keys[e.code] = true;
+    if (e.key === 'Tab') keyboardNavActive = true;
+    // Набор сида или выбор карты стрелками не должен двигать камеру, включать способности и спавнить врагов
+    if (isTypingTarget(e.target)) return;
+    // Сочетания браузера и системы (Ctrl+R, Ctrl+F, Alt+←) — не игровые клавиши. Исключение — Ctrl/Cmd+A ниже.
+    const isSelectAll = e.code === 'KeyA' && (e.ctrlKey || e.metaKey);
+    if ((e.ctrlKey || e.metaKey || e.altKey) && !isSelectAll) return;
+
+    if (!isSelectAll) keys[e.code] = true;
+
+    // В главном меню и после итога боя игровые клавиши не действуют
+    const inMatch = (typeof gameStarted !== 'undefined' && gameStarted) && !(typeof gameOver !== 'undefined' && gameOver);
+    if (!inMatch) return;
 
     // Пауза по клавише Esc или P
     if (e.code === 'KeyP' || e.code === 'Escape') {
@@ -619,7 +703,7 @@ window.addEventListener('keydown', (e) => {
     }
 
     // Выбор всей армии: Ctrl+A / Cmd+A
-    if (e.code === 'KeyA' && (e.ctrlKey || e.metaKey)) {
+    if (isSelectAll) {
         e.preventDefault();
         selectAllAlliedUnits();
         return;
@@ -627,7 +711,12 @@ window.addEventListener('keydown', (e) => {
 
     // Центрирование камеры: Space на армию, H на базу игрока
     if (e.code === 'Space') {
+        // Игрок ходит по кнопкам HUD клавишей Tab: пробел нажимает кнопку в фокусе, как положено
+        if (keyboardNavActive && e.target && e.target.closest && e.target.closest('button, a')) return;
+        // Иначе пробел — это камера, даже если после клика мышью фокус остался на кнопке («Дрон», «Пауза»).
+        // keyup ниже тоже отменяется: часть браузеров нажимает кнопку в фокусе на отпускание пробела.
         e.preventDefault();
+        spaceHandledByGame = true;
         centerCameraOnSelection();
         return;
     }
@@ -664,7 +753,18 @@ window.addEventListener('keydown', (e) => {
         }
     }
 });
-window.addEventListener('keyup', (e) => keys[e.code] = false);
+window.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+    if (e.code === 'Space' && spaceHandledByGame) {
+        // Кнопка в фокусе срабатывает на отпускание пробела — отменяем, пробел уже ушёл в игру
+        spaceHandledByGame = false;
+        e.preventDefault();
+    }
+});
+window.addEventListener('blur', releaseAllKeys);
+if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAllKeys(); });
+}
 
 function updateCamera(delta) {
     const isSprint = keys['ShiftLeft'] || keys['ShiftRight'];

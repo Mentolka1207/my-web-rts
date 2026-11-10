@@ -16,6 +16,9 @@ function initStaticMinimap() {
     staticMinimapCtx.fillRect(0, 0, MINIMAP_PX, MINIMAP_PX);
 
     staticMinimapCtx.fillStyle = '#2b395c';
+    // Клетка стены на миникарте: ровно размер клетки сетки (минимум 1 px). Фиксированные 3 px
+    // на картах 512 и 1024 (клетка 1.3 и 0.66 px) сливали стены в сплошное пятно.
+    const cellPx = Math.max(1, MINIMAP_PX / GRID_SIZE);
     for (let r = 0; r < GRID_SIZE; r++) {
         for (let c = 0; c < GRID_SIZE; c++) {
             const isHQCell = (r === HQ_ROW && c === HQ_COL) || (r === ENEMY_HQ_ROW && c === ENEMY_HQ_COL);
@@ -23,18 +26,20 @@ function initStaticMinimap() {
                 const wp = gridToWorld(c, r);
                 const mx = ((wp.x + MAP_WORLD_SIZE * 0.5) / MAP_WORLD_SIZE) * MINIMAP_PX;
                 const my = ((wp.z + MAP_WORLD_SIZE * 0.5) / MAP_WORLD_SIZE) * MINIMAP_PX;
-                staticMinimapCtx.fillRect(mx - 1.5, my - 1.5, 3, 3);
+                staticMinimapCtx.fillRect(mx - cellPx * 0.5, my - cellPx * 0.5, cellPx, cellPx);
             }
         }
     }
 }
 initStaticMinimap();
 
+// Возвращает один и тот же объект (результат нужно использовать сразу): миникарта рисуется каждый кадр,
+// и новый объект на каждый юнит давал тысячи аллокаций в кадр на больших армиях
+const _minimapPoint = { mx: 0, my: 0 };
 function worldToMinimap(x, z) {
-    return {
-        mx: ((x + MAP_WORLD_SIZE * 0.5) / MAP_WORLD_SIZE) * MINIMAP_PX,
-        my: ((z + MAP_WORLD_SIZE * 0.5) / MAP_WORLD_SIZE) * MINIMAP_PX
-    };
+    _minimapPoint.mx = ((x + MAP_WORLD_SIZE * 0.5) / MAP_WORLD_SIZE) * MINIMAP_PX;
+    _minimapPoint.my = ((z + MAP_WORLD_SIZE * 0.5) / MAP_WORLD_SIZE) * MINIMAP_PX;
+    return _minimapPoint;
 }
 
 function updateMinimap() {
@@ -121,13 +126,37 @@ function updateMinimap() {
         }
     }
 
-    // Рамка обзора камеры
-    const viewHalf = (camZoomDist / BASE_CAM_DIST) * 16;
-    const center = worldToMinimap(camPivot.x, camPivot.z);
-    const halfPx = (viewHalf / MAP_WORLD_SIZE) * MINIMAP_PX;
+    // Рамка обзора камеры: проекция четырёх углов экрана на плоскость земли (трапеция).
+    // Раньше рисовался квадрат 32×32 из времён карты 44×44 — он был в несколько раз меньше видимого поля.
     minimapCtx.strokeStyle = 'rgba(255,255,255,0.6)';
     minimapCtx.lineWidth = 1;
-    minimapCtx.strokeRect(center.mx - halfPx, center.my - halfPx, halfPx * 2, halfPx * 2);
+    minimapCtx.beginPath();
+    let frameOk = true;
+    for (let i = 0; i < 4; i++) {
+        if (!screenCornerToGround(VIEW_CORNERS[i][0], VIEW_CORNERS[i][1], _viewCorner)) { frameOk = false; break; }
+        const mx = ((_viewCorner.x + MAP_WORLD_SIZE * 0.5) / MAP_WORLD_SIZE) * MINIMAP_PX;
+        const my = ((_viewCorner.z + MAP_WORLD_SIZE * 0.5) / MAP_WORLD_SIZE) * MINIMAP_PX;
+        if (i === 0) minimapCtx.moveTo(mx, my);
+        else minimapCtx.lineTo(mx, my);
+    }
+    if (frameOk) {
+        minimapCtx.closePath();
+        minimapCtx.stroke();
+    }
+}
+
+// Углы экрана в NDC по часовой стрелке
+const VIEW_CORNERS = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
+const _viewCorner = new THREE.Vector3();
+const _viewDir = new THREE.Vector3();
+
+// Точка на земле (y = 0) под углом экрана; false, если луч уходит выше горизонта
+function screenCornerToGround(ndcX, ndcY, out) {
+    _viewDir.set(ndcX, ndcY, 0.5).unproject(camera).sub(camera.position);
+    if (_viewDir.y >= -1e-6) return false;
+    const k = -camera.position.y / _viewDir.y;
+    out.set(camera.position.x + _viewDir.x * k, 0, camera.position.z + _viewDir.z * k);
+    return true;
 }
 
 function jumpCameraFromMinimapEvent(clientX, clientY) {

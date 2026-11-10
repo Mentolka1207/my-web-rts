@@ -8,6 +8,11 @@
 const MAX_INSTANCES_PER_TYPE = 6000;
 const MAX_HEALTHBAR_INSTANCES = 12000;
 const MAX_INSTANCED_LASERS = 120;
+const MAX_ABILITY_MARKERS = 512;
+
+// Постоянные оси: раньше на каждый выделенный юнит и каждый лазер в кадре создавался новый Vector3
+const _INSTANCING_UP = new THREE.Vector3(0, 1, 0);
+const _INSTANCING_FORWARD = new THREE.Vector3(0, 0, 1);
 
 // Утилита объединения геометрий (Zero-Dependency BufferGeometry Merger с поддержкой UV и Vertex Colors)
 function mergeGeometries(list) {
@@ -277,6 +282,8 @@ const instancedRenderer = {
 
     // Меши интерфейса и эффектов
     selectionRingsMesh: null,
+    siegeRingsMesh: null,
+    shieldBubblesMesh: null,
     healthBarsMesh: null,
     allyLasersMesh: null,
     enemyLasersMesh: null,
@@ -312,6 +319,11 @@ const instancedRenderer = {
         ringGeo.rotateX(-Math.PI / 2);
         this.selectionRingsMesh = new THREE.InstancedMesh(ringGeo, selectionRingMat, MAX_INSTANCES_PER_TYPE);
 
+        // Индикаторы способностей: кольцо осады танка и пузырь энергощита дрона. В инстансированном режиме
+        // модель юнита скрыта вместе со своими индикаторами, и включённая осада или щит на поле были не видны.
+        this.siegeRingsMesh = new THREE.InstancedMesh(siegeRingGeo, siegeRingMat, MAX_ABILITY_MARKERS);
+        this.shieldBubblesMesh = new THREE.InstancedMesh(droneShieldGeo, droneShieldMat, MAX_ABILITY_MARKERS);
+
         // Инстансированные полоски HP
         this.healthBarsMesh = createInstancedHealthBarMesh();
 
@@ -329,11 +341,24 @@ const instancedRenderer = {
             unitMeshes[i].castShadow = true;
             unitMeshes[i].receiveShadow = true;
             unitMeshes[i].count = 0;
+            // Инстансы двигаются каждый кадр, а Three.js считает bounding sphere InstancedMesh один раз,
+            // при первом кадре. С отсечением по этой устаревшей сфере юниты пропадали с экрана везде,
+            // кроме точки, где стояли при загрузке (оставались только тени и полоски HP).
+            unitMeshes[i].frustumCulled = false;
             targetScene.add(unitMeshes[i]);
         }
 
         this.selectionRingsMesh.count = 0;
+        // Та же причина: сфера считалась при count = 0 (пустая), и кольца выделения не рисовались никогда
+        this.selectionRingsMesh.frustumCulled = false;
         targetScene.add(this.selectionRingsMesh);
+
+        this.siegeRingsMesh.count = 0;
+        this.siegeRingsMesh.frustumCulled = false;
+        targetScene.add(this.siegeRingsMesh);
+        this.shieldBubblesMesh.count = 0;
+        this.shieldBubblesMesh.frustumCulled = false;
+        targetScene.add(this.shieldBubblesMesh);
 
         targetScene.add(this.healthBarsMesh);
         targetScene.add(this.allyLasersMesh);
@@ -352,6 +377,8 @@ const instancedRenderer = {
         this.allyTankMesh.count = 0;
         this.enemyTankMesh.count = 0;
         this.selectionRingsMesh.count = 0;
+        this.siegeRingsMesh.count = 0;
+        this.shieldBubblesMesh.count = 0;
         this.healthBarsMesh.count = 0;
         this.allyLasersMesh.count = 0;
         this.enemyLasersMesh.count = 0;
@@ -369,6 +396,8 @@ const instancedRenderer = {
         let enemyTankCount = 0;
 
         let selectedRingCount = 0;
+        let siegeRingCount = 0;
+        let shieldBubbleCount = 0;
         let healthBarCount = 0;
 
         const hpAttr = this.healthBarsMesh.geometry.attributes.aHpRatio;
@@ -384,7 +413,8 @@ const instancedRenderer = {
             const scale = (stats && stats.scale) ? stats.scale : 1.0;
 
             // Анимация парения
-            const hover = Math.sin(currentTime * 3.5 + (u.hoverOffset || 0)) * 0.04;
+            // Фаза парения лежит в userData модели; без неё все дроны качались синхронно
+            const hover = Math.sin(currentTime * 3.5 + ((u.mesh.userData && u.mesh.userData.hoverOffset) || 0)) * 0.04;
             this._pos.set(pos.x, 0.75 + hover, pos.z);
             this._scale.set(scale, scale, scale);
 
@@ -424,10 +454,28 @@ const instancedRenderer = {
             // Кольцо выделения
             if (isAlly && u.selected && selectedRingCount < MAX_INSTANCES_PER_TYPE) {
                 this._pos.set(pos.x, 0.04, pos.z);
-                this._quat.setFromAxisAngle(THREE.Vector3_UP || new THREE.Vector3(0, 1, 0), currentTime * 1.5);
+                this._quat.setFromAxisAngle(_INSTANCING_UP, currentTime * 1.5);
                 this._scale.set(scale, scale, scale);
                 this._mat.compose(this._pos, this._quat, this._scale);
                 this.selectionRingsMesh.setMatrixAt(selectedRingCount++, this._mat);
+            }
+
+            // Кольцо осадного режима танка (на земле, вращается)
+            if (isAlly && u.isSieged && siegeRingCount < MAX_ABILITY_MARKERS) {
+                this._pos.set(pos.x, 0.06, pos.z);
+                this._quat.setFromAxisAngle(_INSTANCING_UP, currentTime * 2.2);
+                this._scale.set(scale, scale, scale);
+                this._mat.compose(this._pos, this._quat, this._scale);
+                this.siegeRingsMesh.setMatrixAt(siegeRingCount++, this._mat);
+            }
+
+            // Пузырь энергощита дрона
+            if (isAlly && u.shield > 0 && shieldBubbleCount < MAX_ABILITY_MARKERS) {
+                this._pos.set(pos.x, 0.9, pos.z);
+                this._quat.setFromAxisAngle(_INSTANCING_UP, currentTime * 1.5);
+                this._scale.set(scale, scale, scale);
+                this._mat.compose(this._pos, this._quat, this._scale);
+                this.shieldBubblesMesh.setMatrixAt(shieldBubbleCount++, this._mat);
             }
 
             // Инстансированная полоска здоровья
@@ -472,6 +520,12 @@ const instancedRenderer = {
         this.selectionRingsMesh.count = selectedRingCount;
         if (selectedRingCount > 0) this.selectionRingsMesh.instanceMatrix.needsUpdate = true;
 
+        this.siegeRingsMesh.count = siegeRingCount;
+        if (siegeRingCount > 0) this.siegeRingsMesh.instanceMatrix.needsUpdate = true;
+
+        this.shieldBubblesMesh.count = shieldBubbleCount;
+        if (shieldBubbleCount > 0) this.shieldBubblesMesh.instanceMatrix.needsUpdate = true;
+
         this.healthBarsMesh.count = healthBarCount;
         if (healthBarCount > 0) {
             this.healthBarsMesh.instanceMatrix.needsUpdate = true;
@@ -497,7 +551,7 @@ const instancedRenderer = {
             const dist = this._laserDir.length();
             if (dist < 0.01) continue;
 
-            this._quat.setFromUnitVectors(new THREE.Vector3(0, 0, 1), this._laserDir.normalize());
+            this._quat.setFromUnitVectors(_INSTANCING_FORWARD, this._laserDir.normalize());
             this._scale.set(1, 1, dist);
             this._mat.compose(this._laserFrom, this._quat, this._scale);
 

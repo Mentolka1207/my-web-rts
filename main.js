@@ -94,7 +94,11 @@ function stepSimulation(delta, currentTime) {
     if (enemyHQ && enemyHQ.healthBar && enemyHQ.hp > 0) updateHealthBar(enemyHQ.healthBar, enemyHQ.hp, enemyHQ.maxHp);
 
     const totalSimUnits = units.length + enemies.length;
-    const useSimWorker = (typeof simWorkerPool !== 'undefined' && simWorkerPool.enabled && (simWorkerPool.isMultiThreaded || totalSimUnits >= 80));
+    // Упрощённая SoA-симуляция (пул воркеров или её синхронный вариант) считает только стресс-тест:
+    // в ней нет фокус-атаки, обхода стен, сплэша осады, залпов босса, марша волн на штаб и диверсий.
+    // Обычный матч всегда идёт через полный FSM ниже.
+    const useSimWorker = (typeof simWorkerPool !== 'undefined' && simWorkerPool.enabled &&
+        typeof benchmarkActive !== 'undefined' && benchmarkActive);
     let spatialTimeAcc = 0;
 
     if (useSimWorker) {
@@ -154,6 +158,17 @@ function stepSimulation(delta, currentTime) {
             if (dHQ < minDist) { minDist = dHQ; nearestEnemy = enemyHQ; }
         }
 
+        // Приказ фокус-атаки (ПКМ по врагу): пока цель жива, она важнее ближайшего врага
+        if (unit.orderTarget) {
+            if (unit.orderTarget.hp <= 0) {
+                unit.orderTarget = null;
+            } else if (unit.targetEnemy !== unit.orderTarget &&
+                       pos.distanceTo(unit.orderTarget.mesh.position) <= unit.visionRange) {
+                unit.targetEnemy = unit.orderTarget;
+                if (unit.state !== States.ATTACK) unit.state = States.CHASE;
+            }
+        }
+
         switch (unit.state) {
             case States.IDLE:
                 unit.velocity.set(0, 0, 0);
@@ -176,13 +191,28 @@ function stepSimulation(delta, currentTime) {
                     if (distToTarget <= stopThreshold) {
                         unit.state = States.IDLE;
                         unit.personalTarget = null;
+                        unit.finalApproach = false;
                         unit.velocity.set(0, 0, 0);
                         break;
                     }
 
                     const gridPos = worldToGrid(pos.x, pos.z);
                     if (gridPos.col >= 0 && gridPos.col < GRID_SIZE && gridPos.row >= 0 && gridPos.row < GRID_SIZE) {
-                        const flowVector = flowFieldGen.flowField[gridPos.row][gridPos.col];
+                        // Поле потока своего приказа: новый приказ другой группе не уводит этот отряд к чужой цели
+                        let flowX, flowY, cellsToGoal;
+                        const ownField = unit.flowField;
+                        if (ownField && ownField.width === GRID_SIZE && ownField.flowX.length === GRID_SIZE * GRID_SIZE) {
+                            const cellIdx = gridPos.row * GRID_SIZE + gridPos.col;
+                            flowX = ownField.flowX[cellIdx];
+                            flowY = ownField.flowY[cellIdx];
+                            cellsToGoal = ownField.integration[cellIdx];
+                        } else {
+                            const flowVector = flowFieldGen.flowField[gridPos.row][gridPos.col];
+                            flowX = flowVector.x;
+                            flowY = flowVector.y;
+                            cellsToGoal = flowFieldGen.integrationField[gridPos.row][gridPos.col];
+                        }
+
                         _v1.subVectors(unit.personalTarget, pos);
                         _v1.y = 0;
                         const distance = _v1.length();
@@ -190,11 +220,35 @@ function stepSimulation(delta, currentTime) {
                         else _v1.set(1, 0, 0);
 
                         const hasLOS = hasLineOfSight(pos.x, pos.z, unit.personalTarget.x, unit.personalTarget.z);
-                        if ((distance < 3.5 && hasLOS) || (flowVector.x === 0 && flowVector.y === 0)) {
-                            _v2.copy(_v1);
+                        // Финальный подход: юнит дошёл до клетки цели (или видит своё место рядом) и дальше идёт
+                        // прямо на место в строю. Признак запоминается: иначе место дальше ~1 клетки от точки
+                        // приказа (длинная шеренга) тянет юнита из клетки цели, а поле потока — обратно, и он
+                        // бесконечно дёргается на границе клеток.
+                        if (!unit.finalApproach && ((distance < 3.5 && hasLOS) || cellsToGoal <= 1 || (flowX === 0 && flowY === 0))) {
+                            unit.finalApproach = true;
+                            unit.approachTime = 0;
+                            // Запас времени на подход: если место занято или отрезано стеной — остановиться рядом
+                            unit.approachLimit = 3 + (distance / Math.max(unit.speed, 0.5)) * 2;
+                        }
+
+                        if (unit.finalApproach) {
+                            unit.approachTime += delta;
+                            if (unit.speed > 0 && unit.approachTime > unit.approachLimit) {
+                                unit.state = States.IDLE;
+                                unit.personalTarget = null;
+                                unit.finalApproach = false;
+                                unit.velocity.set(0, 0, 0);
+                                break;
+                            }
+                            if (hasLOS) _v2.copy(_v1);
+                            else findBypassDirection(pos.x, pos.z, unit.personalTarget.x, unit.personalTarget.z, _v2);
                         } else {
-                            _v3.set(flowVector.x, 0, flowVector.y);
-                            _v2.lerpVectors(_v3, _v1, 0.25).normalize();
+                            _v3.set(flowX, 0, flowY);
+                            // Подтягивание к своему месту в строю — только когда место видно по прямой.
+                            // Если между юнитом и местом стена, постоянная тяга «на цель» прижимала его к углу
+                            // стены поперёк потока: танк упирался в угол и стоял в MOVE до следующего приказа.
+                            if (hasLOS) _v2.lerpVectors(_v3, _v1, 0.25).normalize();
+                            else _v2.copy(_v3);
                         }
 
                         // Плавное торможение перед финишем для предотвращения толкучки и вибраций
@@ -213,6 +267,7 @@ function stepSimulation(delta, currentTime) {
 
             case States.CHASE:
                 if (!unit.targetEnemy || unit.targetEnemy.hp <= 0) {
+                    if (unit.orderTarget === unit.targetEnemy) unit.orderTarget = null;
                     unit.targetEnemy = null;
                     unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
                     unit.velocity.set(0, 0, 0);
@@ -221,11 +276,13 @@ function stepSimulation(delta, currentTime) {
 
                 const enemyPos = unit.targetEnemy.mesh.position;
                 const distToEnemy = pos.distanceTo(enemyPos);
+                // Цель по приказу игрока преследуется на любой дистанции; случайно замеченная — в пределах обзора
+                const isOrderedTarget = (unit.orderTarget === unit.targetEnemy);
 
                 if (distToEnemy <= unit.attackRange) {
                     unit.state = States.ATTACK;
                     unit.velocity.set(0, 0, 0);
-                } else if (distToEnemy > unit.visionRange) {
+                } else if (!isOrderedTarget && distToEnemy > unit.visionRange) {
                     unit.targetEnemy = null;
                     unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
                     unit.velocity.set(0, 0, 0);
@@ -237,7 +294,20 @@ function stepSimulation(delta, currentTime) {
                         _v1.y = 0;
                         _v1.normalize();
                     } else {
-                        findBypassDirection(pos.x, pos.z, enemyPos.x, enemyPos.z, _v1);
+                        let followsField = false;
+                        const chaseField = isOrderedTarget ? unit.flowField : null;
+                        if (chaseField && chaseField.width === GRID_SIZE && chaseField.flowX.length === GRID_SIZE * GRID_SIZE) {
+                            // Дальняя цель по приказу: идём к ней по полю потока приказа, а не в лоб через стены
+                            const cg = worldToGrid(pos.x, pos.z);
+                            if (cg.col >= 0 && cg.col < GRID_SIZE && cg.row >= 0 && cg.row < GRID_SIZE) {
+                                const ci = cg.row * GRID_SIZE + cg.col;
+                                if (chaseField.flowX[ci] !== 0 || chaseField.flowY[ci] !== 0) {
+                                    _v1.set(chaseField.flowX[ci], 0, chaseField.flowY[ci]);
+                                    followsField = true;
+                                }
+                            }
+                        }
+                        if (!followsField) findBypassDirection(pos.x, pos.z, enemyPos.x, enemyPos.z, _v1);
                     }
                     pos.addScaledVector(_v1, unit.speed * delta);
                     unit.velocity.copy(_v1).multiplyScalar(unit.speed);
@@ -248,6 +318,7 @@ function stepSimulation(delta, currentTime) {
             case States.ATTACK:
                 unit.velocity.set(0, 0, 0);
                 if (!unit.targetEnemy || unit.targetEnemy.hp <= 0) {
+                    if (unit.orderTarget === unit.targetEnemy) unit.orderTarget = null;
                     unit.targetEnemy = null;
                     unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
                     break;
@@ -267,22 +338,8 @@ function stepSimulation(delta, currentTime) {
                     if (currentTime - unit.lastAttackTime >= unit.attackCooldown) {
                         unit.lastAttackTime = currentTime;
 
-                        // Поглощение урона щитом (для Босса-Левиафана)
-                        if (unit.targetEnemy.shield && unit.targetEnemy.shield > 0) {
-                            if (typeof playHitSound === 'function') playHitSound(true);
-                            unit.targetEnemy.shield -= unit.damage;
-                            if (unit.targetEnemy.shieldMesh) {
-                                unit.targetEnemy.shieldMesh.material.opacity = 0.85;
-                            }
-                            if (unit.targetEnemy.shield <= 0) {
-                                unit.targetEnemy.shield = 0;
-                                if (unit.targetEnemy.shieldMesh) unit.targetEnemy.shieldMesh.visible = false;
-                                spawnExplosion(unit.targetEnemy.mesh.position, 18);
-                                showTacticalAlert('⚡ ЩИТ ЛЕВИАФАНА ПРОБИТ!', false);
-                            }
-                        } else {
-                            unit.targetEnemy.hp -= unit.damage;
-                        }
+                        // Урон с учётом щита цели (Босс-Левиафан) — js/units.js
+                        applyDamageToEnemy(unit.targetEnemy, unit.damage);
 
                         fireLaser(pos, attEnemyPos, true, unit.type === 'tank' ? 'heavy' : 'ally');
 
@@ -293,7 +350,8 @@ function stepSimulation(delta, currentTime) {
                                 const other = enemies[oIdx];
                                 if (other !== unit.targetEnemy && other.hp > 0) {
                                     if (other.mesh.position.distanceTo(attEnemyPos) <= 2.2) {
-                                        other.hp -= Math.floor(unit.damage * 0.5);
+                                        // Сплэш тоже идёт через щит: раньше он бил Левиафана по корпусу мимо щита
+                                        applyDamageToEnemy(other, Math.floor(unit.damage * 0.5));
                                         spawnHitFlash(other.mesh.position, true);
                                     }
                                 }
@@ -316,6 +374,10 @@ function stepSimulation(delta, currentTime) {
         engineProfiler.fsmTime = performance.now() - fsmT0;
     }
     }
+
+    // 7.5. Таймеры способностей (форсаж, щит) — игровая логика, идёт всегда, в том числе когда
+    //      анимации моделей ниже пропускаются (инстансинг при 500+ юнитах)
+    for (let i = 0; i < units.length; i++) updateUnitAbilityTimers(units[i], delta);
 
     // 8. Визуальные эффекты дронов (пропеллеры, сопла, пульсация)
     const isInstanced = (typeof instancedRenderer !== 'undefined' && instancedRenderer.enabled);
@@ -361,7 +423,9 @@ function stepSimulation(delta, currentTime) {
             if (e.mesh.parent) e.mesh.parent.remove(e.mesh);
             enemies.splice(i, 1);
             const reward = e.reward || ENEMY_KILL_REWARD;
-            energy += reward;
+            // Армии стресс-теста энергию не приносят: иначе тест 5000×5000 оставлял игроку десятки тысяч ⚡
+            // на продолжение обычного матча (и на рекорд)
+            if (typeof benchmarkActive === 'undefined' || !benchmarkActive) energy += reward;
             if (typeof matchStats !== 'undefined' && (typeof benchmarkActive === 'undefined' || !benchmarkActive)) {
                 matchStats.energyHarvested += reward;
                 matchStats.enemiesKilled++;
@@ -430,7 +494,7 @@ function stepSimulation(delta, currentTime) {
                     let minX, maxX, minZ, maxZ;
 
                     if (isHQCell) {
-                        const hqObj = (nr === HQ_ROW) ? playerHQ : enemyHQ;
+                        const hqObj = (nr === HQ_ROW && nc === HQ_COL) ? playerHQ : enemyHQ;
                         if (hqObj && hqObj.mesh) {
                             const hqCenter = hqObj.mesh.position;
                             const hw = 1.8; // База штаба 3.6 x 3.6
@@ -444,7 +508,9 @@ function stepSimulation(delta, currentTime) {
                         }
                     } else {
                         const wallPos = gridToWorld(nc, nr);
-                        const hw = 0.98; // Монолит 1.96 x 1.96
+                        // Половина ширины монолита стены: меш рисуется шириной CELL_SIZE * 0.98 (js/terrain.js).
+                        // Раньше здесь стояло 0.98 для клетки 2×2 — при клетке 4×4 юниты входили в стену на метр.
+                        const hw = CELL_SIZE * 0.49;
                         minX = wallPos.x - hw; maxX = wallPos.x + hw;
                         minZ = wallPos.z - hw; maxZ = wallPos.z + hw;
                     }
@@ -531,13 +597,16 @@ function animate(timestamp) {
             if (gameStarted && !gameOver && !simPaused) {
                 stepSimulation(FIXED_TIMESTEP, simElapsedTime);
             }
-            if (!simPaused) {
+            // Игровое время идёт только в бою: не в меню, не на паузе и не после итога матча
+            if (gameStarted && !gameOver && !simPaused) {
                 simElapsedTime += FIXED_TIMESTEP;
                 simTickCount++;
             }
             simAccumulator -= FIXED_TIMESTEP;
             maxSimulationTicks--;
         }
+        // Долг по тикам не копим: после долгого кадра игра не должна «догонять» ускоренной перемоткой
+        if (simAccumulator > FIXED_TIMESTEP) simAccumulator = FIXED_TIMESTEP;
 
         // 11. Обновление визуальных эффектов и миникарты
         updateVFX(rawDelta);
@@ -554,7 +623,9 @@ function animate(timestamp) {
             engineProfiler.alliesCount = units.length;
             engineProfiler.enemiesCount = enemies.length;
             engineProfiler.totalUnits = units.length + enemies.length;
-            engineProfiler.selectedCount = units.filter(u => u.selected && u.hp > 0).length;
+            let selectedNow = 0;
+            for (let i = 0; i < units.length; i++) if (units[i].selected && units[i].hp > 0) selectedNow++;
+            engineProfiler.selectedCount = selectedNow;
             if (typeof renderer !== 'undefined' && renderer.info) {
                 engineProfiler.drawCalls = renderer.info.render.calls;
                 engineProfiler.triangles = renderer.info.render.triangles;
@@ -571,6 +642,10 @@ function animate(timestamp) {
         }
         if (typeof updatePerfPanel === 'function') {
             updatePerfPanel(timestamp);
+        }
+        // Таймеры способностей на панели: без этого вызова отсчёт обновлялся только при клике по юниту
+        if (typeof updateAbilityUI === 'function' && gameStarted && !gameOver) {
+            updateAbilityUI(simElapsedTime);
         }
         // 12.5. GPU Instanced Rendering синхронизация (InstancedMesh)
         if (typeof instancedRenderer !== 'undefined' && instancedRenderer.enabled) {

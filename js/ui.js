@@ -103,7 +103,18 @@ if (typeof document !== 'undefined' && document.addEventListener) {
 }
 
 // Полный детерминированный сброс игрового состояния для старта и рестарта матча
-function resetMatchState() {
+// rerollSeed: взять новый случайный сид карты (если игрок не задал свой). Так делает «Играть снова».
+// Старт из меню играет ровно ту карту, которая показана за меню и чей сид стоит в поле.
+function resetMatchState(rerollSeed = false) {
+    // 0. Рестарт или новый матч во время стресс-теста: тест прекращается. Иначе флаг оставался включённым,
+    //    проверка победы/поражения молчала, а «завершение теста» стирало армию посреди нового матча.
+    if (typeof benchmarkActive !== 'undefined' && benchmarkActive) {
+        benchmarkActive = false;
+        benchmarkTargetCount = 0;
+        if (typeof updateBenchmarkUI === 'function') updateBenchmarkUI();
+    }
+    if (typeof simWorkerPool !== 'undefined') simWorkerPool.clear();
+
     // 1. Очистка всех юнитов с Three.js сцены
     for (let i = 0; i < units.length; i++) {
         if (units[i].mesh) scene.remove(units[i].mesh);
@@ -157,8 +168,8 @@ function resetMatchState() {
         });
     }
 
-    // 5. Применение выбранной карты (новый случайный сид, если не зафиксирован вручную)
-    if (typeof isCustomSeed !== 'undefined' && !isCustomSeed && typeof rerollMapSeed === 'function') {
+    // 5. Применение выбранной карты (при рестарте — новый случайный сид, если не зафиксирован вручную)
+    if (rerollSeed && typeof isCustomSeed !== 'undefined' && !isCustomSeed && typeof rerollMapSeed === 'function') {
         rerollMapSeed(false);
     }
     if (typeof applyMapToGrid === 'function' && typeof currentMapId !== 'undefined') {
@@ -170,8 +181,12 @@ function resetMatchState() {
     waveTimer = (typeof getWaveInterval === 'function') ? getWaveInterval() : (typeof WAVE_INTERVAL !== 'undefined' ? WAVE_INTERVAL : 60);
     waveWarningGiven = false;
 
+    if (typeof retaliationCooldown !== 'undefined') retaliationCooldown = 0;
+
     if (typeof matchStats !== 'undefined') {
         matchStats.startTime = performance.now();
+        // Длительность боя считается по игровому времени: пауза и открытые окна в неё не входят
+        matchStats.startGameTime = (typeof getGameTime === 'function') ? getGameTime() : 0;
         matchStats.enemiesKilled = 0;
         matchStats.bossesKilled = 0;
         matchStats.unitsProduced = 0;
@@ -197,6 +212,32 @@ function resetMatchState() {
     gameOver = false;
     isGamePaused = false;
     gameStarted = true;
+}
+
+// Фон главного меню: сцена за полупрозрачным меню показывает выбранную карту. После смены карты,
+// размера или сида стартовый отряд переставляется на базу новой карты, камера смотрит в центр карты.
+// Раньше отряд оставался в координатах прежней сетки (при загрузке — сетки 22×22 из config.js),
+// то есть висел посреди новой карты, иногда внутри стен.
+function refreshMenuBackdrop() {
+    if (gameStarted) return;
+    for (let i = 0; i < units.length; i++) {
+        if (units[i].mesh) scene.remove(units[i].mesh);
+    }
+    units.length = 0;
+    for (let i = 0; i < enemies.length; i++) {
+        if (enemies[i].mesh) scene.remove(enemies[i].mesh);
+    }
+    enemies.length = 0;
+    if (typeof spatialGrid !== 'undefined') spatialGrid.clear();
+    if (typeof instancedRenderer !== 'undefined') instancedRenderer.clear();
+    if (typeof simWorld !== 'undefined') simWorld.clear();
+    if (typeof clearAllVFX === 'function') clearAllVFX();
+    if (typeof initStartingUnits === 'function') initStartingUnits();
+
+    camPivot.set(0, 0, 0);
+    if (typeof BASE_CAM_DIST !== 'undefined') camZoomDist = BASE_CAM_DIST;
+    if (typeof clampCameraBounds === 'function') clampCameraBounds();
+    else if (typeof applyCameraTransform === 'function') applyCameraTransform();
 }
 
 function startGame() {
@@ -321,7 +362,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
 
 // Быстрый перезапуск боя без перезагрузки страницы
 function restartMatch() {
-    resetMatchState();
+    resetMatchState(true);
 
     // Скрытие оверлеев и окон
     hideAllModals();
@@ -357,17 +398,30 @@ function returnToMainMenu() {
     hideAllModals();
     const abPanel = document.getElementById('ability-panel');
     if (abPanel) abPanel.style.display = 'none';
+    hideTacticalAlert();
+    // Стресс-тест не переживает выход в меню
+    if (typeof benchmarkActive !== 'undefined' && benchmarkActive) {
+        benchmarkActive = false;
+        benchmarkTargetCount = 0;
+        if (typeof simWorkerPool !== 'undefined') simWorkerPool.clear();
+        if (typeof updateBenchmarkUI === 'function') updateBenchmarkUI();
+    }
     refreshStatefulLabels();
 
     const menuEl = document.getElementById('main-menu-overlay');
     if (menuEl) menuEl.style.display = 'flex';
     if (typeof syncSeedUI === 'function') syncSeedUI();
+    // За меню — карта следующего матча со стартовым отрядом, а не застывшее поле прошлого боя.
+    // Сид не задан вручную — следующий матч получает новый, и он сразу виден в поле и за меню.
+    if (typeof isCustomSeed !== 'undefined' && !isCustomSeed && typeof rerollMapSeed === 'function') rerollMapSeed(true);
+    else refreshMenuBackdrop();
     const playBtn = document.getElementById('play-btn');
     if (playBtn) playBtn.focus({ preventScroll: true });
 }
 
 // Тактические всплывающие оповещения (неоновые баннеры)
 let alertTimeout = null;
+let alertHideTimeout = null;
 function showTacticalAlert(text, isDanger = false) {
     if (typeof playAlertSound === 'function') playAlertSound(isDanger);
     const el = document.getElementById('tactical-alert');
@@ -379,11 +433,21 @@ function showTacticalAlert(text, isDanger = false) {
     el.style.display = 'block';
     el.style.opacity = '1';
 
+    // Сбрасываем оба таймера: иначе «хвост» затухания прошлого оповещения (400 мс) прятал новое
     clearTimeout(alertTimeout);
+    clearTimeout(alertHideTimeout);
     alertTimeout = setTimeout(() => {
         el.style.opacity = '0';
-        setTimeout(() => { el.style.display = 'none'; }, 400);
+        alertHideTimeout = setTimeout(() => { el.style.display = 'none'; }, 400);
     }, 4500);
+}
+
+// Убрать оповещение сразу (выход в меню)
+function hideTacticalAlert() {
+    clearTimeout(alertTimeout);
+    clearTimeout(alertHideTimeout);
+    const el = document.getElementById('tactical-alert');
+    if (el) el.style.display = 'none';
 }
 
 // Завершение игры: взрыв побеждённого штаба и экран победы/поражения
@@ -410,7 +474,9 @@ function triggerGameOver(playerWon) {
         titleEl.classList.toggle('is-defeat', !playerWon);
     }
 
-    const durationSec = Math.max(0, Math.floor((performance.now() - (matchStats.startTime || performance.now())) / 1000));
+    const durationSec = (typeof getGameTime === 'function' && typeof matchStats.startGameTime === 'number')
+        ? Math.max(0, Math.floor(getGameTime() - matchStats.startGameTime))
+        : Math.max(0, Math.floor((performance.now() - (matchStats.startTime || performance.now())) / 1000));
     const wavesDefeated = playerWon ? waveNumber : Math.max(0, waveNumber - 1);
 
     // Запись результатов в профиль
@@ -458,14 +524,17 @@ function openSettingsModal() {
     if (!modal) return;
 
     // Синхронизируем значения полей
+    // Громкость 0 — законное значение: «|| 1.0» показывал вместо неё 100% и при закрытии окна сохранял 100%
+    const volumePercent = (v) => Math.round((typeof v === 'number' && isFinite(v) ? v : 1.0) * 100);
+
     const masterSlider = document.getElementById('slider-master-vol');
-    if (masterSlider) masterSlider.value = Math.round((playerSettings.masterVolume || 1.0) * 100);
+    if (masterSlider) masterSlider.value = volumePercent(playerSettings.masterVolume);
 
     const sfxSlider = document.getElementById('slider-sfx-vol');
-    if (sfxSlider) sfxSlider.value = Math.round((playerSettings.sfxVolume || 1.0) * 100);
+    if (sfxSlider) sfxSlider.value = volumePercent(playerSettings.sfxVolume);
 
     const musicSlider = document.getElementById('slider-music-vol');
-    if (musicSlider) musicSlider.value = Math.round((playerSettings.musicVolume || 1.0) * 100);
+    if (musicSlider) musicSlider.value = volumePercent(playerSettings.musicVolume);
 
     const shadowsSelect = document.getElementById('select-shadows');
     if (shadowsSelect) shadowsSelect.value = playerSettings.shadows ? 'on' : 'off';
@@ -713,9 +782,15 @@ function refreshProfilerToggles() {
         instBtn.className = 'dbg-toggle-btn ' + (on ? 'instanced' : 'individual');
         instBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
-    // Симуляция всегда идёт в главном потоке; воркер (js/sim_worker.js) — прототип, шаг в нём не вызывается
+    // Обычный матч считается в главном потоке; пул воркеров включается только в стресс-тесте
     const simModeEl = document.getElementById('dbg-sim-mode');
-    if (simModeEl) simModeEl.textContent = tr('DBG_SIM_MAIN', 'главный поток');
+    if (simModeEl && !isWorkerSimActive()) simModeEl.textContent = tr('DBG_SIM_MAIN', 'главный поток');
+}
+
+// Симуляцию сейчас считают Web Workers? Только во время стресс-теста и только если пул поднялся.
+function isWorkerSimActive() {
+    return typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded &&
+        typeof benchmarkActive !== 'undefined' && benchmarkActive;
 }
 
 window.addEventListener('keydown', (e) => {
@@ -788,7 +863,7 @@ function updateDebugOverlay(delta) {
         const simModeEl = document.getElementById('dbg-sim-mode');
         const threadsEl = document.getElementById('dbg-threads');
         if (simModeEl) {
-            if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
+            if (isWorkerSimActive()) {
                 simModeEl.textContent = typeof t === 'function' ? t('DBG_SIM_WORKERS', simWorkerPool.threadCount) : `${simWorkerPool.threadCount} Web Workers`;
                 setLevelClass(simModeEl, 'good');
             } else {
@@ -797,10 +872,14 @@ function updateDebugOverlay(delta) {
             }
         }
         if (threadsEl) {
-            if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
+            if (isWorkerSimActive()) {
                 const totalHw = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : simWorkerPool.threadCount;
                 threadsEl.textContent = typeof t === 'function' ? t('DBG_THREADS_MULTI', simWorkerPool.threadCount, totalHw) : `${simWorkerPool.threadCount} / ${totalHw}`;
                 setLevelClass(threadsEl, 'good');
+            } else if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
+                // Пул готов, но в обычном матче не используется
+                threadsEl.textContent = typeof t === 'function' ? t('DBG_THREADS_STANDBY', simWorkerPool.threadCount) : `${simWorkerPool.threadCount} (standby)`;
+                setLevelClass(threadsEl, null);
             } else {
                 threadsEl.textContent = typeof t === 'function' ? t('DBG_THREADS_SINGLE') : '1';
                 setLevelClass(threadsEl, null);
@@ -831,7 +910,9 @@ function togglePerfPanel() {
 
 window.addEventListener('keydown', (e) => {
     // e.code не зависит от раскладки (на русской раскладке это клавиша «Ё»)
-    if (e.code === 'Backquote' && !e.repeat) {
+    // В поле ввода (сид карты) это обычный символ
+    const typing = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
+    if (e.code === 'Backquote' && !e.repeat && !typing) {
         e.preventDefault();
         togglePerfPanel();
     }
@@ -875,7 +956,7 @@ function updatePerfPanel(timestamp) {
 
     const threadsEl = document.getElementById('perf-threads');
     if (threadsEl) {
-        if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
+        if (isWorkerSimActive()) {
             threadsEl.textContent = typeof t === 'function' ? t('PERF_THREADS_MULTI', simWorkerPool.threadCount) : String(simWorkerPool.threadCount);
             setLevelClass(threadsEl, 'good');
         } else {
@@ -899,12 +980,14 @@ function updateAbilityUI(currentTime) {
         return;
     }
 
-    const curTime = currentTime !== undefined ? currentTime : ((typeof clock !== 'undefined') ? clock.elapsedTime : performance.now() / 1000);
+    // Игровое время: то же, по которому способности ставят метку применения (js/units.js)
+    const curTime = currentTime !== undefined ? currentTime : ((typeof getGameTime === 'function') ? getGameTime() : performance.now() / 1000);
 
     // Троттлинг обновлений текста и DOM (не чаще раза в 60 мс для экономии CPU)
     if (currentTime !== undefined && (curTime - lastAbilityUIUpdate < 0.06)) return;
     lastAbilityUIUpdate = curTime;
 
+    const secUnit = typeof t === 'function' ? t('SEC_SHORT') : 'с';
     const sel = units.filter(u => u.selected && u.hp > 0);
     if (sel.length === 0) {
         panel.style.display = 'none';
@@ -936,7 +1019,7 @@ function updateAbilityUI(currentTime) {
                 const maxActiveTime = Math.max(...scouts.map(u => u.abilityTimer));
                 btnOverdrive.className = 'ability-btn active';
                 const actLabel = typeof t === 'function' ? t('ABILITY_ACTIVE') : 'АКТИВНО';
-                statusOverdrive.textContent = `${actLabel} (${Math.max(0, maxActiveTime).toFixed(1)}s)`;
+                statusOverdrive.textContent = `${actLabel} (${Math.max(0, maxActiveTime).toFixed(1)}${secUnit})`;
             } else {
                 let minCdRem = 0;
                 for (let i = 0; i < scouts.length; i++) {
@@ -945,7 +1028,7 @@ function updateAbilityUI(currentTime) {
                 }
                 if (minCdRem > 0.1) {
                     btnOverdrive.className = 'ability-btn cooldown';
-                    statusOverdrive.textContent = `${minCdRem.toFixed(1)}s`;
+                    statusOverdrive.textContent = `${minCdRem.toFixed(1)}${secUnit}`;
                 } else {
                     btnOverdrive.className = 'ability-btn ready';
                     statusOverdrive.textContent = typeof t === 'function' ? t('ABILITY_READY') : 'ГОТОВО';
@@ -973,7 +1056,7 @@ function updateAbilityUI(currentTime) {
             if (minCdRem > 0.1) {
                 btnSiege.className = anySieged ? 'ability-btn active cooldown' : 'ability-btn cooldown';
                 const cdLabel = typeof t === 'function' ? t('ABILITY_CD') : 'КД';
-                statusSiege.textContent = `${cdLabel} (${minCdRem.toFixed(1)}s)`;
+                statusSiege.textContent = `${cdLabel} (${minCdRem.toFixed(1)}${secUnit})`;
             } else if (anySieged) {
                 btnSiege.className = 'ability-btn active';
                 statusSiege.textContent = typeof t === 'function' ? t('ABILITY_SIEGE_ON') : 'ОСАДА (ВКЛ)';
@@ -997,8 +1080,10 @@ function updateAbilityUI(currentTime) {
             if (anyShield) {
                 const maxShieldTime = Math.max(...drones.map(u => u.shieldTimer));
                 btnShield.className = 'ability-btn active';
-                const shieldLabel = typeof t === 'function' ? t('ALERT_SHIELD', '').replace(/[()!0-9\s]/g, '') : 'ЩИТ';
-                statusShield.textContent = `${shieldLabel || 'SHIELD'} (${Math.max(0, maxShieldTime).toFixed(1)}s)`;
+                // Раньше подпись вырезалась из текста оповещения ALERT_SHIELD и выходила слипшейся:
+                // «🛡️ЭНЕРГОЩИТактивированДронов (6.0s)»
+                const shieldLabel = typeof t === 'function' ? t('ABILITY_ACTIVE') : 'АКТИВНО';
+                statusShield.textContent = `${shieldLabel} (${Math.max(0, maxShieldTime).toFixed(1)}${secUnit})`;
             } else {
                 let minCdRem = 0;
                 for (let i = 0; i < drones.length; i++) {
@@ -1007,7 +1092,7 @@ function updateAbilityUI(currentTime) {
                 }
                 if (minCdRem > 0.1) {
                     btnShield.className = 'ability-btn cooldown';
-                    statusShield.textContent = `${minCdRem.toFixed(1)}s`;
+                    statusShield.textContent = `${minCdRem.toFixed(1)}${secUnit}`;
                 } else {
                     btnShield.className = 'ability-btn ready';
                     statusShield.textContent = typeof t === 'function' ? t('ABILITY_READY') : 'ГОТОВО';

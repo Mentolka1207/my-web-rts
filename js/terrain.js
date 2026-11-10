@@ -495,6 +495,7 @@ function updateTerrainForMapSize(worldSize, gridSize, cellSize) {
     if (gridHelper) {
         scene.remove(gridHelper);
         if (gridHelper.geometry) gridHelper.geometry.dispose();
+        if (gridHelper.material) gridHelper.material.dispose();
         gridHelper = new THREE.GridHelper(worldSize, gridSize, 0x00ffcc, 0x19243c);
         gridHelper.position.y = 0.015;
         scene.add(gridHelper);

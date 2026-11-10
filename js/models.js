@@ -555,8 +555,10 @@ function createTankUnit(isAlly) {
     plume.scale.set(1.4, 1.4, 1.4);
     group.add(plume);
 
+    // Высоты колец заданы в локальных единицах модели, а модель танка масштабируется ×1.4:
+    // при прежних −0.65 / −0.68 кольца уходили под землю и в режиме без инстансинга не были видны
     const selectionRing = new THREE.Mesh(droneSelectionRingGeo, selectionRingMat);
-    selectionRing.position.y = -0.65; selectionRing.visible = false;
+    selectionRing.position.y = -0.37; selectionRing.visible = false;
     group.add(selectionRing);
 
     const shieldMesh = new THREE.Mesh(droneShieldGeo, droneShieldMat.clone());
@@ -564,7 +566,7 @@ function createTankUnit(isAlly) {
     group.add(shieldMesh);
 
     const siegeMesh = new THREE.Mesh(siegeRingGeo, siegeRingMat.clone());
-    siegeMesh.position.y = -0.68; siegeMesh.visible = false;
+    siegeMesh.position.y = -0.34; siegeMesh.visible = false;
     group.add(siegeMesh);
 
     group.userData = {
