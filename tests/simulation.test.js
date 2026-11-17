@@ -149,7 +149,7 @@ describe('ответы воркеров', () => {
 
 describe('код воркера', () => {
     // Строки без комментариев и пустых строк: файлы различаются только пояснениями
-    const normalize = (code) => code.split('\n')
+    const normalize = (code) => code.replace(/\r\n/g, '\n').split('\n')
         .map(line => line.replace(/\s+\/\/.*$/, '').trimEnd())
         .filter(line => line.trim() !== '' && !/^\s*\/\//.test(line))
         .join('\n');

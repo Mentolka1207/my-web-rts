@@ -178,6 +178,20 @@ function checkAIRetaliation(delta) {
     }
 }
 
+// Урон врага по штабу игрока: учитывает тип врага и множитель сложности (как и урон по юнитам в createEnemy)
+function getEnemyHQDamage(enemy) {
+    if (enemy && typeof enemy.damage === 'number' && isFinite(enemy.damage) && enemy.damage > 0) {
+        return enemy.damage;
+    }
+    const baseStats = (typeof ENEMY_TYPES !== 'undefined' && enemy && ENEMY_TYPES[enemy.type])
+        ? ENEMY_TYPES[enemy.type]
+        : { damage: (enemy && enemy.type === 'boss') ? 38 : 12 };
+    const dmgMult = (typeof DIFFICULTY_CONFIGS !== 'undefined' && typeof currentDifficulty !== 'undefined' && DIFFICULTY_CONFIGS[currentDifficulty])
+        ? DIFFICULTY_CONFIGS[currentDifficulty].enemyDamageMult
+        : 1.0;
+    return Math.round(baseStats.damage * dmgMult);
+}
+
 // Поведение и логика FSM для всех вражеских юнитов
 function updateEnemiesAI(currentTime, delta) {
     for (let i = 0; i < enemies.length; i++) {
@@ -313,7 +327,7 @@ function updateEnemiesAI(currentTime, delta) {
 
                 if (currentTime - enemy.lastAttackTime >= enemy.attackCooldown) {
                     enemy.lastAttackTime = currentTime;
-                    playerHQ.hp -= (enemy.type === 'boss' ? 30 : 12);
+                    playerHQ.hp = Math.max(0, playerHQ.hp - getEnemyHQDamage(enemy));
                     fireLaser(pos, hqPos, false);
                     if (currentTime - lastHQAlertTime > 8.0 && typeof showTacticalAlert === 'function') {
                         lastHQAlertTime = currentTime;
@@ -356,7 +370,8 @@ function updateEnemiesAI(currentTime, delta) {
                         // Точка патруля — на кольце захвата вокруг кристалла, а не внутри него: цель в ±1 от центра
                         // лежала в самом кристалле (радиус 1.35), и патрульный толкался в него до истечения таймера
                         const roamAngle = ((typeof rtsPRNG !== 'undefined') ? rtsPRNG.random() : Math.random()) * Math.PI * 2;
-                        const roamRadius = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.range(2.1, 2.5) : 2.1 + Math.random() * 0.4;
+                        const maxRoamR = Math.max(2.5, (typeof CAPTURE_RADIUS !== 'undefined' ? CAPTURE_RADIUS : 2.8) - 0.4);
+                        const roamRadius = (typeof rtsPRNG !== 'undefined') ? rtsPRNG.range(2.1, maxRoamR) : 2.1 + Math.random() * (maxRoamR - 2.1);
                         if (!enemy.roamTarget) enemy.roamTarget = new THREE.Vector3();
                         enemy.roamTarget.set(targetNode.pos.x + Math.cos(roamAngle) * roamRadius, 0.75, targetNode.pos.z + Math.sin(roamAngle) * roamRadius);
                     } else {

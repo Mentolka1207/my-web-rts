@@ -5,13 +5,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "e2e:desktop": "playwright test --project=desktop"
+    "e2e:desktop": "playwright test --project=desktop",
+    "e2e:ci": "playwright test --project=desktop --project=mobile"
   },
   "type": "commonjs",
   "private": true,
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "^1.65.0",
     "vitest": "^5.0.5"
   }
 }

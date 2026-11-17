@@ -3,12 +3,39 @@
 // =============================================================================
 
 const NODE_ENERGY_BONUS = 3;
-const CAPTURE_RADIUS = 2.8;
-const CAPTURE_RADIUS_SQ = CAPTURE_RADIUS * CAPTURE_RADIUS;
+const CAPTURE_CELL_MULT = 1.2;
+
+function getCaptureRadius(cellSize = (typeof CELL_SIZE !== 'undefined' ? CELL_SIZE : 4)) {
+    return Math.max(2.8, +(cellSize * CAPTURE_CELL_MULT).toFixed(4));
+}
+
+let CAPTURE_RADIUS = getCaptureRadius();
+let CAPTURE_RADIUS_SQ = CAPTURE_RADIUS * CAPTURE_RADIUS;
 
 const nodeBaseGeo = new THREE.CylinderGeometry(1.2, 1.45, 0.24, 8);
-const nodeRingGeo = new THREE.RingGeometry(CAPTURE_RADIUS - 0.18, CAPTURE_RADIUS, 32);
+let nodeRingGeo = new THREE.RingGeometry(CAPTURE_RADIUS - 0.2, CAPTURE_RADIUS, 36);
 nodeRingGeo.rotateX(-Math.PI / 2);
+
+function updateCaptureRadius(cellSize = (typeof CELL_SIZE !== 'undefined' ? CELL_SIZE : 4)) {
+    const nextRadius = getCaptureRadius(cellSize);
+    if (Math.abs(nextRadius - CAPTURE_RADIUS) < 1e-4 && nodeRingGeo && nodeRingGeo.parameters && Math.abs(nodeRingGeo.parameters.outerRadius - nextRadius) < 1e-4) {
+        return CAPTURE_RADIUS;
+    }
+    CAPTURE_RADIUS = nextRadius;
+    CAPTURE_RADIUS_SQ = CAPTURE_RADIUS * CAPTURE_RADIUS;
+    const oldGeo = nodeRingGeo;
+    nodeRingGeo = new THREE.RingGeometry(CAPTURE_RADIUS - 0.2, CAPTURE_RADIUS, 36);
+    nodeRingGeo.rotateX(-Math.PI / 2);
+    if (typeof resourceNodes !== 'undefined' && Array.isArray(resourceNodes)) {
+        for (let i = 0; i < resourceNodes.length; i++) {
+            if (resourceNodes[i] && resourceNodes[i].ringMesh) {
+                resourceNodes[i].ringMesh.geometry = nodeRingGeo;
+            }
+        }
+    }
+    if (oldGeo && oldGeo.dispose) oldGeo.dispose();
+    return CAPTURE_RADIUS;
+}
 const nodeInnerRingGeo = new THREE.RingGeometry(1.4, 1.55, 24);
 nodeInnerRingGeo.rotateX(-Math.PI / 2);
 
@@ -108,6 +135,7 @@ function createResourceNode(col, row, name) {
         crystalMesh: crystalMesh,
         coreMesh: coreMesh,
         satellitesGroup: satellitesGroup,
+        ringMesh: ringMesh,
         innerRingMesh: innerRingMesh,
         ringMat: ringMat,
         crystalMat: crystalMat,
@@ -126,6 +154,7 @@ const resourceNodes = RESOURCE_NODE_COORDS.map(c => createResourceNode(c.col, c.
 // Синхронизация количества и позиций ресурсных точек под масштабы карт (3, 5, 7, 11 точек)
 function syncResourceNodes(nodeDefs) {
     if (!Array.isArray(nodeDefs) || typeof gridToWorld !== 'function') return;
+    updateCaptureRadius(typeof CELL_SIZE !== 'undefined' ? CELL_SIZE : 4);
 
     // 1. Создаём недостающие узлы
     while (resourceNodes.length < nodeDefs.length) {
@@ -152,6 +181,9 @@ function syncResourceNodes(nodeDefs) {
     for (let i = 0; i < nodeDefs.length; i++) {
         const def = nodeDefs[i];
         const node = resourceNodes[i];
+        if (node.ringMesh && node.ringMesh.geometry !== nodeRingGeo) {
+            node.ringMesh.geometry = nodeRingGeo;
+        }
         node.col = def.col;
         node.row = def.row;
         const wp = gridToWorld(def.col, def.row);

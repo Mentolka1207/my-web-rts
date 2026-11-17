@@ -203,12 +203,14 @@
                     <h3 class="dbg-section-title" data-i18n="DBG_SEC_INSTANCING">Инстансинг и симуляция</h3>
                     <button id="dbg-instancing-btn" class="dbg-toggle-btn instanced" type="button" onclick="toggleInstancingMode()"
                         data-i18n-title="DBG_INST_ON_TIP">⚡ GPU-инстансинг: вкл</button>
+                    <div class="debug-row"><span data-i18n="DBG_SIM_MODEL">Модель симуляции:</span> <span id="dbg-sim-model" class="dbg-val" data-i18n="DBG_SIM_MODEL_FULL">полный FSM матча</span></div>
                     <div class="debug-row"><span data-i18n="DBG_SIM_CORE">Где идёт симуляция:</span> <span id="dbg-sim-mode" class="dbg-val" data-i18n="DBG_SIM_MAIN">главный поток</span></div>
                     <div class="debug-row"><span data-i18n="DBG_THREADS">Многопоточность (Web Workers):</span> <span id="dbg-threads" class="dbg-val">--</span></div>
                 </div>
 
                 <div class="dbg-section">
                     <h3 class="dbg-section-title" data-i18n="DBG_SEC_BENCH">Стресс-тест в узких проходах</h3>
+                    <p id="dbg-bench-note" class="dbg-note" data-i18n="DBG_BENCH_NOTE">Стресс-тест считает упрощённую SoA-модель в пуле Web Workers. Полный игровой FSM обычного матча выполняется в главном потоке, поэтому FPS бенчмарка — верхняя граница, а не измерение игры.</p>
                     <div class="dbg-bench-row">
                         <button class="dbg-btn-bench" type="button" onclick="runBenchmark(100)">100</button>
                         <button class="dbg-btn-bench" type="button" onclick="runBenchmark(500)">500</button>

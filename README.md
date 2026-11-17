@@ -13,7 +13,7 @@
 
 - **Flow Fields** — глобальные векторные поля вместо A* на каждого юнита
 - **Spatial Hash** — быстрый поиск целей и расталкивание
-- **GPU Instancing** — тысячи юнитов при минимальном количестве draw calls
+- **GPU Instancing** — юниты, полоски HP и лазеры рисуются общими `InstancedMesh` (замеры draw calls — в [`docs/benchmarks.md`](docs/benchmarks.md))
 - **Web Worker Pool** — многопоточная симуляция стресс-теста (F3, до 5000×5000 юнитов); обычный матч считает полный FSM в главном потоке
 - **Процедурные карты** — шум Перлина, разные масштабы арены
 - **Формации** — шеренга, клин, кольцо
@@ -80,10 +80,20 @@ node e2e/serve.js
 
 ---
 
+## Производительность
+
+Все цифры — только из [`docs/benchmarks.md`](docs/benchmarks.md): там железо, браузер, коммит и протокол замера.
+
+> **Стресс-тест (F3) измеряет не игру.** Стресс-тест считает упрощённую SoA-модель в пуле Web Workers. Полный игровой FSM обычного матча выполняется в главном потоке, поэтому FPS бенчмарка — верхняя граница, а не измерение игры.
+>
+> *The stress test runs a simplified SoA model in a Web Worker pool. A normal match runs the full game FSM on the main thread, so benchmark FPS is an upper bound, not a measurement of the game.*
+
+---
+
 ## Технологии
 
 - Vanilla JavaScript + Three.js
-- Data-Oriented Design (SoA)
+- Data-Oriented Design (SoA) — в стресс-тесте
 - Fixed Timestep + детерминированный PRNG
 - Vitest + Playwright
 - Дизайн-система на токенах (WCAG AA)
@@ -95,7 +105,8 @@ node e2e/serve.js
 ```bash
 npm ci              # зависимости для тестов
 npm test            # юнит-тесты (Vitest)
-npm run e2e         # e2e-тесты (Playwright, нужен Chromium: npx playwright install chromium)
+npm run e2e         # e2e-тесты (Playwright: npx playwright install chromium webkit)
+npm run e2e:desktop # только Chromium (так же гоняет CI, плюс проект mobile)
 ```
 
 Подробнее:

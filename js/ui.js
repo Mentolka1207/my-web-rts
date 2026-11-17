@@ -785,6 +785,19 @@ function refreshProfilerToggles() {
     // Обычный матч считается в главном потоке; пул воркеров включается только в стресс-тесте
     const simModeEl = document.getElementById('dbg-sim-mode');
     if (simModeEl && !isWorkerSimActive()) simModeEl.textContent = tr('DBG_SIM_MAIN', 'главный поток');
+    updateSimModelLabel();
+}
+
+// Какая модель считается прямо сейчас: полный FSM матча или упрощённая SoA стресс-теста (T-02).
+// SoA-путь включается только при benchmarkActive — с пулом воркеров или синхронным фоллбэком.
+function updateSimModelLabel() {
+    const el = document.getElementById('dbg-sim-model');
+    if (!el) return;
+    const soa = typeof benchmarkActive !== 'undefined' && benchmarkActive;
+    const key = soa ? 'DBG_SIM_MODEL_SOA' : 'DBG_SIM_MODEL_FULL';
+    el.dataset.i18n = key;
+    el.textContent = typeof t === 'function' ? t(key) : (soa ? 'упрощённая SoA (стресс-тест)' : 'полный FSM матча');
+    setLevelClass(el, soa ? 'warn' : null);
 }
 
 // Симуляцию сейчас считают Web Workers? Только во время стресс-теста и только если пул поднялся.
@@ -860,6 +873,7 @@ function updateDebugOverlay(delta) {
             setLevelClass(pairsEl, (typeof spatialGrid !== 'undefined' && spatialGrid.collisionMode === 'naive') ? 'warn' : null);
         }
 
+        updateSimModelLabel();
         const simModeEl = document.getElementById('dbg-sim-mode');
         const threadsEl = document.getElementById('dbg-threads');
         if (simModeEl) {

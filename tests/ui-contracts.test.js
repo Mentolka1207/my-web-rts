@@ -82,4 +82,15 @@ describe('i18n: ключи разметки есть в обоих языках'
         const missing = [...new Set(keys)].filter(k => !(k in TRANSLATIONS.ru) || !(k in TRANSLATIONS.en));
         expect(missing).toEqual([]);
     });
+
+    it('T-02: оговорка о стресс-тесте и модель симуляции есть в профайлере, i18n и README', () => {
+        expect(html).toContain('id="dbg-bench-note"');
+        expect(html).toContain('id="dbg-sim-model"');
+        for (const key of ['DBG_BENCH_NOTE', 'DBG_SIM_MODEL', 'DBG_SIM_MODEL_FULL', 'DBG_SIM_MODEL_SOA']) {
+            expect(TRANSLATIONS.ru[key]).toBeTruthy();
+            expect(TRANSLATIONS.en[key]).toBeTruthy();
+        }
+        const readme = read('README.md');
+        expect(readme).toContain('Стресс-тест считает упрощённую SoA-модель в пуле Web Workers');
+    });
 });
