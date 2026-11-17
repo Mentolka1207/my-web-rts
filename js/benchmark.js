@@ -85,9 +85,6 @@ function clearAllUnitsForBenchmark() {
     if (typeof particleSystem !== 'undefined') {
         particleSystem.clear();
     }
-    if (typeof simWorld !== 'undefined') {
-        simWorld.clear();
-    }
     if (typeof simWorkerPool !== 'undefined') {
         simWorkerPool.clear();
     }
@@ -207,15 +204,8 @@ function runBenchmark(countOrAllies, maybeEnemies) {
             scene.add(mesh);
         }
 
-        let simId = -1;
-        if (typeof simWorld !== 'undefined') {
-            const typeNum = (uType === 'standard') ? 0 : (uType === 'scout' ? 1 : (uType === 'tank' ? 2 : 3));
-            simId = simWorld.spawn(0, typeNum, basePos.x + offsetX, basePos.z + offsetZ, stats.hp, stats.hp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
-        }
-
         units.push({
             mesh: mesh,
-            simId: simId,
             type: uType,
             selected: false,
             state: States.MOVE,
@@ -274,15 +264,8 @@ function runBenchmark(countOrAllies, maybeEnemies) {
             scene.add(mesh);
         }
 
-        let simId = -1;
-        if (typeof simWorld !== 'undefined') {
-            const typeNum = (eType === 'standard') ? 0 : (eType === 'scout' ? 1 : (eType === 'tank' ? 2 : 3));
-            simId = simWorld.spawn(1, typeNum, basePos.x + offsetX, basePos.z + offsetZ, stats.hp, stats.hp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
-        }
-
         enemies.push({
             mesh: mesh,
-            simId: simId,
             type: eType,
             state: States.MOVE,
             targetAlly: null,
@@ -312,6 +295,7 @@ function runBenchmark(countOrAllies, maybeEnemies) {
         enemyFlowFieldGen.updateTarget(HQ_COL, HQ_ROW);
     }
     if (typeof simWorkerPool !== 'undefined') {
+        simWorkerPool.ensureWorkers();
         simWorkerPool.updateFlowFields(flowFieldGen, enemyFlowFieldGen);
     }
 
@@ -330,6 +314,9 @@ function stopBenchmark() {
     benchmarkActive = false;
     benchmarkTargetCount = 0;
     clearAllUnitsForBenchmark();
+    if (typeof simWorkerPool !== 'undefined') {
+        simWorkerPool.terminate();
+    }
     // Армии теста бьют по штабам. Без восстановления HP сразу после теста срабатывал экран
     // победы/поражения, и «матч» записывался в рекорды.
     restoreHeadquartersForBenchmark();

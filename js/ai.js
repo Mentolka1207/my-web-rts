@@ -418,9 +418,13 @@ function updateEnemiesAI(currentTime, delta) {
             } else {
                 // Патрульный гнался за союзником (цель патруля сброшена) и потерял его: раньше он навсегда
                 // застывал в MOVE без цели. Возвращаем в патруль.
-                enemy.state = States.IDLE;
-                enemy.velocity.set(0, 0, 0);
-                if (!(enemy.roamCooldown > 0)) enemy.roamCooldown = 1.0;
+                if (typeof recoverIdleEnemyPatrol === 'function') {
+                    recoverIdleEnemyPatrol(enemy);
+                } else {
+                    enemy.state = States.IDLE;
+                    enemy.velocity.set(0, 0, 0);
+                    if (!(enemy.roamCooldown > 0)) enemy.roamCooldown = 1.0;
+                }
             }
         }
 

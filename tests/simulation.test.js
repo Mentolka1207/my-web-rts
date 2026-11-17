@@ -18,9 +18,10 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 let game, sim;
 beforeEach(() => {
     game = loadGame();
+    vm.runInContext(read('js/sim_worker.js'), game.context, { filename: 'js/sim_worker.js' });
     vm.runInContext(read('js/simulation.js'), game.context, { filename: 'js/simulation.js' });
     sim = vm.runInContext(`({
-        SimulationWorkerPool, SIM_WORKER_CODE, SIM_STATE_NAMES, simStateToCode, simCodeToState, States
+        SimulationWorkerPool, SIM_WORKER_CODE, SIM_STATE_NAMES, simStateToCode, simCodeToState, States, initSimWorkerScope
     })`, game.context);
 });
 
@@ -147,19 +148,40 @@ describe('ответы воркеров', () => {
     });
 });
 
-describe('код воркера', () => {
+describe('код воркера и ленивый старт пула', () => {
     // Строки без комментариев и пустых строк: файлы различаются только пояснениями
     const normalize = (code) => code.replace(/\r\n/g, '\n').split('\n')
         .map(line => line.replace(/\s+\/\/.*$/, '').trimEnd())
         .filter(line => line.trim() !== '' && !/^\s*\/\//.test(line))
         .join('\n');
 
-    it('встроенный Blob-воркер и js/sim_worker.js (запасной путь) — один и тот же код', () => {
+    it('Blob-воркер собирается из initSimWorkerScope (js/sim_worker.js) без строкового дубля', () => {
+        const simSrc = read('js/simulation.js');
+        expect(simSrc).not.toContain("case 'STEP_SLICE':");
+        expect(simSrc).not.toContain('class SimulationWorld');
         expect(normalize(sim.SIM_WORKER_CODE)).toBe(normalize(read('js/sim_worker.js')));
     });
 
     it('в коде воркера нет присваивания необъявленной переменной diffZ', () => {
         expect(read('js/sim_worker.js')).not.toMatch(/^\s*diffZ\s*=/m);
         expect(sim.SIM_WORKER_CODE).not.toMatch(/^\s*diffZ\s*=/m);
+    });
+
+    it('init и ensureWorkers безопасно работают в окружении без Web Worker', () => {
+        const pool = new sim.SimulationWorkerPool(64);
+        pool.init(emptyGrid(), 256, 4);
+        expect(pool.isMultiThreaded).toBe(false);
+        expect(pool.worldSize).toBe(256);
+        expect(pool.ensureWorkers()).toBe(false);
+        expect(pool.isMultiThreaded).toBe(false);
+    });
+
+    it('initSimWorkerScope инициализирует переданный worker-контекст и отвечает READY на INIT', () => {
+        const posted = [];
+        const mockSelf = { postMessage: (msg) => posted.push(msg), onmessage: null };
+        sim.initSimWorkerScope(mockSelf);
+        expect(typeof mockSelf.onmessage).toBe('function');
+        mockSelf.onmessage({ data: { type: 'INIT', workerId: 2, totalWorkers: 4, worldSize: 256, cellSize: 4, gridSize: 64 } });
+        expect(posted).toEqual([{ type: 'READY', workerId: 2 }]);
     });
 });

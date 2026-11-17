@@ -60,15 +60,8 @@ function createUnit(col, row, type = 'standard') {
 
     const hpBar = attachHealthBar(mesh, true, 0.7 * stats.scale);
 
-    let simId = -1;
-    if (typeof simWorld !== 'undefined') {
-        const typeNum = (type === 'standard') ? 0 : (type === 'scout' ? 1 : (type === 'tank' ? 2 : 3));
-        simId = simWorld.spawn(0, typeNum, pos.x, pos.z, effectiveHp, effectiveHp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, stats.damage, stats.attackCooldown);
-    }
-
     units.push({
         mesh: mesh,
-        simId: simId,
         type: type,
         selected: false,
         state: States.IDLE,
@@ -119,15 +112,8 @@ function createEnemy(x, z, type = 'standard', isWaveUnit = false, sabotageNode =
     const effectiveDamage = Math.round(stats.damage * enemyDmgMult);
     const effectiveShield = stats.shield ? Math.round(stats.shield * enemyHpMult) : 0;
 
-    let simId = -1;
-    if (typeof simWorld !== 'undefined') {
-        const typeNum = (type === 'standard') ? 0 : (type === 'scout' ? 1 : (type === 'tank' ? 2 : 3));
-        simId = simWorld.spawn(1, typeNum, x, z, effectiveHp, effectiveHp, stats.speed, stats.radius, stats.visionRange, stats.attackRange, effectiveDamage, stats.attackCooldown);
-    }
-
     enemies.push({
         mesh: mesh,
-        simId: simId,
         type: type,
         state: States.IDLE,
         hp: effectiveHp,

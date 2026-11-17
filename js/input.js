@@ -290,9 +290,6 @@ function issueMoveOrderAtPoint(clientX, clientY) {
     flowFieldGen.updateTarget(targetGrid.col, targetGrid.row);
     // Снимок поля именно этого приказа: следующий приказ другой группе его не перезапишет
     const orderField = (typeof flowFieldGen.getActiveField === 'function') ? flowFieldGen.getActiveField() : null;
-    if (typeof simWorkerPool !== 'undefined') {
-        simWorkerPool.updateFlowFields(flowFieldGen, enemyFlowFieldGen);
-    }
 
     for (let i = 0; i < count; i++) {
         const unit = movers[i];

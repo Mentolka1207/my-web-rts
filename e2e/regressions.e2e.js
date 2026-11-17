@@ -209,6 +209,24 @@ test.describe('BUG-012 стресс-тест не ломает матч', () => 
         expect(await state(page)).toMatchObject({ started: true, over: false, allies: 5, enemies: 3 });
         expect(s.states.every(v => typeof v === 'string')).toBe(true);
     });
+
+    test('воркеры не запускаются в обычном матче, работают только в стресс-тесте и закрываются после сброса', async ({ page }) => {
+        await openGame(page);
+        await startMatch(page);
+        const idle = await page.evaluate(() => ({ count: simWorkerPool.workers.length, multi: simWorkerPool.isMultiThreaded }));
+        expect(idle).toEqual({ count: 0, multi: false });
+
+        await page.evaluate(() => runBenchmark(100));
+        await page.waitForFunction(() => simWorkerPool.stepCount > 0);
+        const active = await page.evaluate(() => ({ count: simWorkerPool.workers.length, multi: simWorkerPool.isMultiThreaded, steps: simWorkerPool.stepCount }));
+        expect(active.multi).toBe(true);
+        expect(active.count).toBeGreaterThanOrEqual(2);
+        expect(active.steps).toBeGreaterThan(0);
+
+        await page.evaluate(() => stopBenchmark());
+        const stopped = await page.evaluate(() => ({ count: simWorkerPool.workers.length, multi: simWorkerPool.isMultiThreaded }));
+        expect(stopped).toEqual({ count: 0, multi: false });
+    });
 });
 
 test('BUG-013 громкость 0 сохраняется и показывается как 0%', async ({ page }) => {

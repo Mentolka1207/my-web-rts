@@ -43,6 +43,7 @@ function loadGame() {
     runFile(ctx, 'js/spatialhash.js');
     runFile(ctx, 'js/formations.js');
     runFile(ctx, 'js/flowfield.js');
+    runFile(ctx, 'js/fsm.js');
 
     const game = vm.runInContext(`({
         THREE,
@@ -51,6 +52,7 @@ function loadGame() {
         grid, worldToGrid, gridToWorld, hasLineOfSight, findBypassDirection,
         FlowFieldGenerator, invalidateFlowFieldCache,
         flowFieldGen, enemyFlowFieldGen,
+        FSM_STATES, createFSMEvents, clearFSMEvents, stepUnitFSM, recoverIdleEnemyPatrol,
         SpatialGrid, spatialGrid,
         SPACING, getFormationOffsets, orientFormationOffset, setFormation, updateFormationUI,
         getCurrentFormation: () => currentFormation

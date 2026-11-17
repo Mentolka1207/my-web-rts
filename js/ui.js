@@ -113,7 +113,7 @@ function resetMatchState(rerollSeed = false) {
         benchmarkTargetCount = 0;
         if (typeof updateBenchmarkUI === 'function') updateBenchmarkUI();
     }
-    if (typeof simWorkerPool !== 'undefined') simWorkerPool.clear();
+    if (typeof simWorkerPool !== 'undefined') simWorkerPool.terminate();
 
     // 1. Очистка всех юнитов с Three.js сцены
     for (let i = 0; i < units.length; i++) {
@@ -128,7 +128,6 @@ function resetMatchState(rerollSeed = false) {
 
     if (typeof spatialGrid !== 'undefined') spatialGrid.clear();
     if (typeof instancedRenderer !== 'undefined') instancedRenderer.clear();
-    if (typeof simWorld !== 'undefined') simWorld.clear();
 
     // 2. Сброс снарядов, следов и декалей
     if (typeof clearAllVFX === 'function') clearAllVFX();
@@ -230,7 +229,6 @@ function refreshMenuBackdrop() {
     enemies.length = 0;
     if (typeof spatialGrid !== 'undefined') spatialGrid.clear();
     if (typeof instancedRenderer !== 'undefined') instancedRenderer.clear();
-    if (typeof simWorld !== 'undefined') simWorld.clear();
     if (typeof clearAllVFX === 'function') clearAllVFX();
     if (typeof initStartingUnits === 'function') initStartingUnits();
 
@@ -403,7 +401,7 @@ function returnToMainMenu() {
     if (typeof benchmarkActive !== 'undefined' && benchmarkActive) {
         benchmarkActive = false;
         benchmarkTargetCount = 0;
-        if (typeof simWorkerPool !== 'undefined') simWorkerPool.clear();
+        if (typeof simWorkerPool !== 'undefined') simWorkerPool.terminate();
         if (typeof updateBenchmarkUI === 'function') updateBenchmarkUI();
     }
     refreshStatefulLabels();
@@ -890,8 +888,8 @@ function updateDebugOverlay(delta) {
                 const totalHw = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : simWorkerPool.threadCount;
                 threadsEl.textContent = typeof t === 'function' ? t('DBG_THREADS_MULTI', simWorkerPool.threadCount, totalHw) : `${simWorkerPool.threadCount} / ${totalHw}`;
                 setLevelClass(threadsEl, 'good');
-            } else if (typeof simWorkerPool !== 'undefined' && simWorkerPool.isMultiThreaded) {
-                // Пул готов, но в обычном матче не используется
+            } else if (typeof simWorkerPool !== 'undefined' && (simWorkerPool.isMultiThreaded || typeof Worker !== 'undefined')) {
+                // Пул поднимается только при запуске стресс-теста, в обычном матче спит
                 threadsEl.textContent = typeof t === 'function' ? t('DBG_THREADS_STANDBY', simWorkerPool.threadCount) : `${simWorkerPool.threadCount} (standby)`;
                 setLevelClass(threadsEl, null);
             } else {

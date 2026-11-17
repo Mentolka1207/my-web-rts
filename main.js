@@ -32,6 +32,51 @@ initStartingUnits();
 // Переиспользуемый плоский массив активных юнитов для коллизий (Zero-Allocation)
 const _allActiveUnits = [];
 
+// Переиспользуемый контекст и буфер событий для чистого FSM (js/fsm.js)
+const _fsmFindNearest = (pos, range, team) => spatialGrid.findNearest(pos, range, team);
+const _fsmCtx = {
+    grid: null,
+    gridSize: 0,
+    cellSize: 4,
+    halfWorld: 128,
+    flowField: null,
+    enemyHQ: null,
+    enemies: null,
+    findNearest: _fsmFindNearest,
+    hasLineOfSight: typeof hasLineOfSight === 'function' ? hasLineOfSight : null,
+    findBypassDirection: typeof findBypassDirection === 'function' ? findBypassDirection : null,
+    gameTime: 0,
+    events: typeof createFSMEvents === 'function' ? createFSMEvents() : { damage: [], laser: [], explosion: [], hitFlash: [] }
+};
+
+function applyFSMEvents(events) {
+    if (!events) return;
+    for (let i = 0; i < events.damage.length; i++) {
+        const ev = events.damage[i];
+        applyDamageToEnemy(ev.target, ev.amount);
+    }
+    for (let i = 0; i < events.laser.length; i++) {
+        const ev = events.laser[i];
+        fireLaser(ev.from, ev.to, ev.isAlly, ev.soundType);
+    }
+    for (let i = 0; i < events.explosion.length; i++) {
+        const ev = events.explosion[i];
+        spawnExplosion(ev.position, ev.count);
+    }
+    for (let i = 0; i < events.hitFlash.length; i++) {
+        const ev = events.hitFlash[i];
+        spawnHitFlash(ev.position, ev.isAlly);
+    }
+    if (typeof clearFSMEvents === 'function') {
+        clearFSMEvents(events);
+    } else {
+        events.damage.length = 0;
+        events.laser.length = 0;
+        events.explosion.length = 0;
+        events.hitFlash.length = 0;
+    }
+}
+
 // Таймер Three.js r186 (замена устаревшему THREE.Clock с сохранением обратной совместимости)
 const rtsTimer = (typeof THREE !== 'undefined' && THREE.Timer) ? new THREE.Timer() : null;
 const rtsClock = rtsTimer ? null : (typeof THREE !== 'undefined' && THREE.Clock ? new THREE.Clock() : null);
@@ -139,233 +184,28 @@ function stepSimulation(delta, currentTime) {
         }
         spatialTimeAcc = performance.now() - spatialT0;
 
-        // 6. FSM логика союзных юнитов игрока
+        // 6. FSM логика союзных юнитов игрока (чистый модуль js/fsm.js)
         const fsmT0 = performance.now();
+        _fsmCtx.grid = grid;
+        _fsmCtx.gridSize = GRID_SIZE;
+        _fsmCtx.cellSize = CELL_SIZE;
+        _fsmCtx.halfWorld = MAP_WORLD_SIZE * 0.5;
+        _fsmCtx.flowField = typeof flowFieldGen !== 'undefined' ? flowFieldGen : null;
+        _fsmCtx.enemyHQ = typeof enemyHQ !== 'undefined' ? enemyHQ : null;
+        _fsmCtx.enemies = enemies;
+        _fsmCtx.hasLineOfSight = typeof hasLineOfSight === 'function' ? hasLineOfSight : null;
+        _fsmCtx.findBypassDirection = typeof findBypassDirection === 'function' ? findBypassDirection : null;
+        _fsmCtx.gameTime = currentTime;
+        if (typeof clearFSMEvents === 'function') clearFSMEvents(_fsmCtx.events);
+
         for (let i = 0; i < units.length; i++) {
             const unit = units[i];
-        if (unit.hp <= 0) continue;
-        const pos = unit.mesh.position;
+            if (unit.hp <= 0) continue;
 
-        updateHealthBar(unit.healthBar, unit.hp, unit.maxHp, unit.shield || 0, unit.maxShield || 50);
-
-        // Быстрый поиск ближайшего врага через пространственный хеш
-        const query = spatialGrid.findNearest(pos, unit.visionRange, 'enemy');
-        let nearestEnemy = query.unit;
-        let minDist = query.dist;
-
-        if (enemyHQ.hp > 0) {
-            const dHQ = pos.distanceTo(enemyHQ.mesh.position);
-            if (dHQ < minDist) { minDist = dHQ; nearestEnemy = enemyHQ; }
+            updateHealthBar(unit.healthBar, unit.hp, unit.maxHp, unit.shield || 0, unit.maxShield || 50);
+            stepUnitFSM(unit, delta, _fsmCtx);
+            applyFSMEvents(_fsmCtx.events);
         }
-
-        // Приказ фокус-атаки (ПКМ по врагу): пока цель жива, она важнее ближайшего врага
-        if (unit.orderTarget) {
-            if (unit.orderTarget.hp <= 0) {
-                unit.orderTarget = null;
-            } else if (unit.targetEnemy !== unit.orderTarget &&
-                       pos.distanceTo(unit.orderTarget.mesh.position) <= unit.visionRange) {
-                unit.targetEnemy = unit.orderTarget;
-                if (unit.state !== States.ATTACK) unit.state = States.CHASE;
-            }
-        }
-
-        switch (unit.state) {
-            case States.IDLE:
-                unit.velocity.set(0, 0, 0);
-                if (nearestEnemy) {
-                    unit.targetEnemy = nearestEnemy;
-                    unit.state = States.CHASE;
-                }
-                break;
-
-            case States.MOVE:
-                if (nearestEnemy) {
-                    unit.targetEnemy = nearestEnemy;
-                    unit.state = States.CHASE;
-                    break;
-                }
-
-                if (unit.personalTarget) {
-                    const distToTarget = pos.distanceTo(unit.personalTarget);
-                    const stopThreshold = Math.max(0.4, unit.radius * 0.9);
-                    if (distToTarget <= stopThreshold) {
-                        unit.state = States.IDLE;
-                        unit.personalTarget = null;
-                        unit.finalApproach = false;
-                        unit.velocity.set(0, 0, 0);
-                        break;
-                    }
-
-                    const gridPos = worldToGrid(pos.x, pos.z);
-                    if (gridPos.col >= 0 && gridPos.col < GRID_SIZE && gridPos.row >= 0 && gridPos.row < GRID_SIZE) {
-                        // Поле потока своего приказа: новый приказ другой группе не уводит этот отряд к чужой цели
-                        let flowX, flowY, cellsToGoal;
-                        const ownField = unit.flowField;
-                        if (ownField && ownField.width === GRID_SIZE && ownField.flowX.length === GRID_SIZE * GRID_SIZE) {
-                            const cellIdx = gridPos.row * GRID_SIZE + gridPos.col;
-                            flowX = ownField.flowX[cellIdx];
-                            flowY = ownField.flowY[cellIdx];
-                            cellsToGoal = ownField.integration[cellIdx];
-                        } else {
-                            const flowVector = flowFieldGen.flowField[gridPos.row][gridPos.col];
-                            flowX = flowVector.x;
-                            flowY = flowVector.y;
-                            cellsToGoal = flowFieldGen.integrationField[gridPos.row][gridPos.col];
-                        }
-
-                        _v1.subVectors(unit.personalTarget, pos);
-                        _v1.y = 0;
-                        const distance = _v1.length();
-                        if (distance > 0.001) _v1.normalize();
-                        else _v1.set(1, 0, 0);
-
-                        const hasLOS = hasLineOfSight(pos.x, pos.z, unit.personalTarget.x, unit.personalTarget.z);
-                        // Финальный подход: юнит дошёл до клетки цели (или видит своё место рядом) и дальше идёт
-                        // прямо на место в строю. Признак запоминается: иначе место дальше ~1 клетки от точки
-                        // приказа (длинная шеренга) тянет юнита из клетки цели, а поле потока — обратно, и он
-                        // бесконечно дёргается на границе клеток.
-                        if (!unit.finalApproach && ((distance < 3.5 && hasLOS) || cellsToGoal <= 1 || (flowX === 0 && flowY === 0))) {
-                            unit.finalApproach = true;
-                            unit.approachTime = 0;
-                            // Запас времени на подход: если место занято или отрезано стеной — остановиться рядом
-                            unit.approachLimit = 3 + (distance / Math.max(unit.speed, 0.5)) * 2;
-                        }
-
-                        if (unit.finalApproach) {
-                            unit.approachTime += delta;
-                            if (unit.speed > 0 && unit.approachTime > unit.approachLimit) {
-                                unit.state = States.IDLE;
-                                unit.personalTarget = null;
-                                unit.finalApproach = false;
-                                unit.velocity.set(0, 0, 0);
-                                break;
-                            }
-                            if (hasLOS) _v2.copy(_v1);
-                            else findBypassDirection(pos.x, pos.z, unit.personalTarget.x, unit.personalTarget.z, _v2);
-                        } else {
-                            _v3.set(flowX, 0, flowY);
-                            // Подтягивание к своему месту в строю — только когда место видно по прямой.
-                            // Если между юнитом и местом стена, постоянная тяга «на цель» прижимала его к углу
-                            // стены поперёк потока: танк упирался в угол и стоял в MOVE до следующего приказа.
-                            if (hasLOS) _v2.lerpVectors(_v3, _v1, 0.25).normalize();
-                            else _v2.copy(_v3);
-                        }
-
-                        // Плавное торможение перед финишем для предотвращения толкучки и вибраций
-                        let currentSpeed = unit.speed;
-                        if (distance < 1.6) {
-                            currentSpeed *= Math.max(0.25, distance / 1.6);
-                        }
-
-                        const step = Math.min(currentSpeed * delta, distance);
-                        pos.addScaledVector(_v2, step);
-                        unit.velocity.copy(_v2).multiplyScalar(currentSpeed);
-                        unit.mesh.rotation.y = THREE.MathUtils.lerpAngle(unit.mesh.rotation.y, Math.atan2(-_v2.z, _v2.x), 10 * delta);
-                    }
-                }
-                break;
-
-            case States.CHASE:
-                if (!unit.targetEnemy || unit.targetEnemy.hp <= 0) {
-                    if (unit.orderTarget === unit.targetEnemy) unit.orderTarget = null;
-                    unit.targetEnemy = null;
-                    unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
-                    unit.velocity.set(0, 0, 0);
-                    break;
-                }
-
-                const enemyPos = unit.targetEnemy.mesh.position;
-                const distToEnemy = pos.distanceTo(enemyPos);
-                // Цель по приказу игрока преследуется на любой дистанции; случайно замеченная — в пределах обзора
-                const isOrderedTarget = (unit.orderTarget === unit.targetEnemy);
-
-                if (distToEnemy <= unit.attackRange) {
-                    unit.state = States.ATTACK;
-                    unit.velocity.set(0, 0, 0);
-                } else if (!isOrderedTarget && distToEnemy > unit.visionRange) {
-                    unit.targetEnemy = null;
-                    unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
-                    unit.velocity.set(0, 0, 0);
-                } else {
-                    // CHASE с учётом препятствий: если прямая заблокирована стеной, обходим угол
-                    const los = hasLineOfSight(pos.x, pos.z, enemyPos.x, enemyPos.z);
-                    if (los) {
-                        _v1.subVectors(enemyPos, pos);
-                        _v1.y = 0;
-                        _v1.normalize();
-                    } else {
-                        let followsField = false;
-                        const chaseField = isOrderedTarget ? unit.flowField : null;
-                        if (chaseField && chaseField.width === GRID_SIZE && chaseField.flowX.length === GRID_SIZE * GRID_SIZE) {
-                            // Дальняя цель по приказу: идём к ней по полю потока приказа, а не в лоб через стены
-                            const cg = worldToGrid(pos.x, pos.z);
-                            if (cg.col >= 0 && cg.col < GRID_SIZE && cg.row >= 0 && cg.row < GRID_SIZE) {
-                                const ci = cg.row * GRID_SIZE + cg.col;
-                                if (chaseField.flowX[ci] !== 0 || chaseField.flowY[ci] !== 0) {
-                                    _v1.set(chaseField.flowX[ci], 0, chaseField.flowY[ci]);
-                                    followsField = true;
-                                }
-                            }
-                        }
-                        if (!followsField) findBypassDirection(pos.x, pos.z, enemyPos.x, enemyPos.z, _v1);
-                    }
-                    pos.addScaledVector(_v1, unit.speed * delta);
-                    unit.velocity.copy(_v1).multiplyScalar(unit.speed);
-                    unit.mesh.rotation.y = THREE.MathUtils.lerpAngle(unit.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
-                }
-                break;
-
-            case States.ATTACK:
-                unit.velocity.set(0, 0, 0);
-                if (!unit.targetEnemy || unit.targetEnemy.hp <= 0) {
-                    if (unit.orderTarget === unit.targetEnemy) unit.orderTarget = null;
-                    unit.targetEnemy = null;
-                    unit.state = unit.personalTarget ? States.MOVE : States.IDLE;
-                    break;
-                }
-
-                const attEnemyPos = unit.targetEnemy.mesh.position;
-                const distToAttEnemy = pos.distanceTo(attEnemyPos);
-
-                if (distToAttEnemy > unit.attackRange) {
-                    unit.state = States.CHASE;
-                } else {
-                    _v1.subVectors(attEnemyPos, pos);
-                    _v1.y = 0;
-                    _v1.normalize();
-                    unit.mesh.rotation.y = THREE.MathUtils.lerpAngle(unit.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
-
-                    if (currentTime - unit.lastAttackTime >= unit.attackCooldown) {
-                        unit.lastAttackTime = currentTime;
-
-                        // Урон с учётом щита цели (Босс-Левиафан) — js/units.js
-                        applyDamageToEnemy(unit.targetEnemy, unit.damage);
-
-                        fireLaser(pos, attEnemyPos, true, unit.type === 'tank' ? 'heavy' : 'ally');
-
-                        // Осадный сплэш-урон Танка по площади в радиусе 2.2
-                        if (unit.isSieged) {
-                            spawnExplosion(attEnemyPos, 8);
-                            for (let oIdx = 0; oIdx < enemies.length; oIdx++) {
-                                const other = enemies[oIdx];
-                                if (other !== unit.targetEnemy && other.hp > 0) {
-                                    if (other.mesh.position.distanceTo(attEnemyPos) <= 2.2) {
-                                        // Сплэш тоже идёт через щит: раньше он бил Левиафана по корпусу мимо щита
-                                        applyDamageToEnemy(other, Math.floor(unit.damage * 0.5));
-                                        spawnHitFlash(other.mesh.position, true);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                break;
-        }
-
-        if (unit.mesh.userData) {
-            unit.mesh.userData.velocity.copy(unit.velocity);
-        }
-    }
 
     // 7. FSM логика врагов и Босса
     updateEnemiesAI(currentTime, delta);
@@ -396,9 +236,6 @@ function stepSimulation(delta, currentTime) {
         if (u.hp <= 0) {
             spawnExplosion(u.mesh.position, 10);
             spawnScorch(u.mesh.position);
-            if (u.simId !== undefined && typeof simWorld !== 'undefined') {
-                simWorld.kill(u.simId);
-            }
             if (u.mesh.userData) {
                 if (u.mesh.userData.shieldMesh && u.mesh.userData.shieldMesh.material) u.mesh.userData.shieldMesh.material.dispose();
                 if (u.mesh.userData.siegeMesh && u.mesh.userData.siegeMesh.material) u.mesh.userData.siegeMesh.material.dispose();
@@ -414,9 +251,6 @@ function stepSimulation(delta, currentTime) {
             const isBoss = e.type === 'boss';
             spawnExplosion(e.mesh.position, isBoss ? 36 : 10);
             spawnScorch(e.mesh.position);
-            if (e.simId !== undefined && typeof simWorld !== 'undefined') {
-                simWorld.kill(e.simId);
-            }
             if (e.mesh.userData && e.mesh.userData.shieldMesh && e.mesh.userData.shieldMesh.material) {
                 e.mesh.userData.shieldMesh.material.dispose();
             }

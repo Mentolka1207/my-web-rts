@@ -22,6 +22,7 @@ const STATIC_ASSETS = [
     './js/spatialhash.js',
     './js/formations.js',
     './js/flowfield.js',
+    './js/fsm.js',
     './js/simulation.js',
     './js/sim_worker.js',
     './js/scene.js',

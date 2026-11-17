@@ -1,9 +1,8 @@
 // =============================================================================
-// js/simulation.js — Data-Oriented Architecture (SoA) & Multi-Core Worker Pool
-// Плоские типизированные массивы (Float32Array, Int32Array, Uint8Array)
-// для математической модели мира, физики, коллизий и состояний FSM.
-// Поддержка параллельного пула Web Worker (multi-threading на N ядер CPU)
-// с автоматическим фоллбэком на высокопроизводительный SoA в главном потоке.
+// js/simulation.js — Benchmark Sandbox (SoA & Multi-Core Web Worker Pool)
+// Изолированный стенд стресс-теста на плоских типизированных массивах (Float32Array,
+// Int32Array) и пуле Web Workers (до 15,000 юнитов) с синхронным SoA-фоллбэком.
+// Обычный матч сюда не ходит (см. js/fsm.js и AGENTS.md §2.3, Вариант A).
 // =============================================================================
 
 const MAX_SIM_ENTITIES = 15000;
@@ -24,660 +23,14 @@ function simCodeToState(code) {
 const _simV1 = (typeof THREE !== 'undefined') ? new THREE.Vector3() : { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } };
 const _simV2 = (typeof THREE !== 'undefined') ? new THREE.Vector3() : { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; } };
 
-// Исходный код воркера для мгновенного создания Blob Worker (zero CORS / zero network delay)
-const SIM_WORKER_CODE = `
-let workerId = 0;
-let totalWorkers = 1;
-let workerGrid = null;
-let gridSize = 64;
-let worldSize = 256;
-let cellSize = 4;
-let halfWorld = 128;
-let maxBound = 120;
-
-let allyFlowX = null;
-let allyFlowY = null;
-let enemyFlowX = null;
-let enemyFlowY = null;
-
-let bCellSize = 6.0;
-let bCols = 0;
-let bRows = 0;
-let bTotal = 0;
-let bHead = null;
-let bNext = null;
-
-let sliceResultBuffer = null;
-const damageEvents = [];
-const laserEvents = [];
-
-self.onmessage = function (e) {
-    const msg = e.data;
-    if (!msg) return;
-
-    switch (msg.type) {
-        case 'INIT': {
-            workerId = msg.workerId || 0;
-            totalWorkers = msg.totalWorkers || 1;
-            gridSize = msg.gridSize || 64;
-            worldSize = msg.worldSize || 256;
-            cellSize = msg.cellSize || 4;
-            halfWorld = worldSize * 0.5;
-            maxBound = halfWorld - (cellSize * 1.05);
-
-            workerGrid = msg.grid || null;
-
-            bCellSize = msg.bCellSize || 6.0;
-            bCols = Math.ceil(worldSize / bCellSize);
-            bRows = Math.ceil(worldSize / bCellSize);
-            bTotal = bCols * bRows;
-
-            bHead = new Int32Array(bTotal);
-            bNext = new Int32Array(15000);
-
-            self.postMessage({ type: 'READY', workerId: workerId });
-            break;
-        }
-
-        case 'SET_FLOW': {
-            allyFlowX = msg.allyFlowX ? new Float32Array(msg.allyFlowX) : null;
-            allyFlowY = msg.allyFlowY ? new Float32Array(msg.allyFlowY) : null;
-            enemyFlowX = msg.enemyFlowX ? new Float32Array(msg.enemyFlowX) : null;
-            enemyFlowY = msg.enemyFlowY ? new Float32Array(msg.enemyFlowY) : null;
-            break;
-        }
-
-        case 'RESIZE': {
-            gridSize = msg.gridSize || gridSize;
-            worldSize = msg.worldSize || worldSize;
-            cellSize = msg.cellSize || cellSize;
-            halfWorld = worldSize * 0.5;
-            maxBound = halfWorld - (cellSize * 1.05);
-            workerGrid = msg.grid || workerGrid;
-            bCols = Math.ceil(worldSize / bCellSize);
-            bRows = Math.ceil(worldSize / bCellSize);
-            bTotal = bCols * bRows;
-            bHead = new Int32Array(bTotal);
-            break;
-        }
-
-        case 'STEP_SLICE': {
-            const globalBuffer = new Float32Array(msg.globalBuffer);
-            const totalUnits = msg.totalUnits;
-            const sliceStart = msg.sliceStart;
-            const sliceCount = msg.sliceCount;
-            const delta = msg.delta || 0.033;
-            const currentTime = msg.currentTime || 0;
-            const hq = msg.hqData || null;
-            const collisionMode = msg.collisionMode || 'spatial';
-
-            const neededLen = sliceCount * 16;
-            if (!sliceResultBuffer || sliceResultBuffer.length < neededLen) {
-                sliceResultBuffer = new Float32Array(neededLen);
-            }
-
-            damageEvents.length = 0;
-            laserEvents.length = 0;
-
-            bHead.fill(-1);
-            if (bNext.length < totalUnits) {
-                bNext = new Int32Array(Math.max(15000, totalUnits * 2));
-            }
-
-            for (let i = 0; i < totalUnits; i++) {
-                const off = i * 16;
-                const hp = globalBuffer[off + 6];
-                if (hp <= 0) continue;
-
-                const ux = globalBuffer[off];
-                const uz = globalBuffer[off + 1];
-
-                const bc = ((ux + halfWorld) / bCellSize) | 0;
-                const br = ((uz + halfWorld) / bCellSize) | 0;
-
-                if (bc >= 0 && bc < bCols && br >= 0 && br < bRows) {
-                    const bIdx = br * bCols + bc;
-                    bNext[i] = bHead[bIdx];
-                    bHead[bIdx] = i;
-                } else {
-                    bNext[i] = -1;
-                }
-            }
-
-            let outOffset = 0;
-            const sliceEnd = sliceStart + sliceCount;
-
-            for (let i = sliceStart; i < sliceEnd; i++) {
-                const uOff = i * 16;
-                let x = globalBuffer[uOff];
-                let z = globalBuffer[uOff + 1];
-                let vx = globalBuffer[uOff + 2];
-                let vz = globalBuffer[uOff + 3];
-                const r = globalBuffer[uOff + 4];
-                const speed = globalBuffer[uOff + 5];
-                const hp = globalBuffer[uOff + 6];
-                const attCd = globalBuffer[uOff + 7];
-                const team = globalBuffer[uOff + 8];
-                const uType = globalBuffer[uOff + 9];
-                let state = globalBuffer[uOff + 10];
-                const tx = globalBuffer[uOff + 11];
-                const tz = globalBuffer[uOff + 12];
-                const attRange = globalBuffer[uOff + 13];
-                const dmg = globalBuffer[uOff + 14];
-                let lastAtt = globalBuffer[uOff + 15];
-
-                if (hp > 0) {
-                    const bc = Math.max(0, Math.min(bCols - 1, ((x + halfWorld) / bCellSize) | 0));
-                    const br = Math.max(0, Math.min(bRows - 1, ((z + halfWorld) / bCellSize) | 0));
-
-                    let nearestEnemyIdx = -1;
-                    let nearestDistSq = attRange * attRange * 4.0;
-                    let targetX = 0;
-                    let targetZ = 0;
-
-                    if (collisionMode === 'naive') {
-                        const maxTest = Math.min(totalUnits, 500);
-                        for (let j = 0; j < maxTest; j++) {
-                            if (j === i) continue;
-                            const cOff = j * 16;
-                            const candTeam = globalBuffer[cOff + 8];
-                            const candHp = globalBuffer[cOff + 6];
-
-                            if (candTeam !== team && candHp > 0) {
-                                const ex = globalBuffer[cOff];
-                                const ez = globalBuffer[cOff + 1];
-                                const dX = ex - x;
-                                const dZ = ez - z;
-                                const dSq = dX * dX + dZ * dZ;
-
-                                if (dSq < nearestDistSq) {
-                                    nearestDistSq = dSq;
-                                    nearestEnemyIdx = j;
-                                    targetX = ex;
-                                    targetZ = ez;
-                                }
-                            }
-                        }
-                    } else {
-                        for (let dr = -1; dr <= 1; dr++) {
-                            const nbr = br + dr;
-                            if (nbr < 0 || nbr >= bRows) continue;
-                            const rowOff = nbr * bCols;
-
-                            for (let dc = -1; dc <= 1; dc++) {
-                                const nbc = bc + dc;
-                                if (nbc < 0 || nbc >= bCols) continue;
-
-                                let candIdx = bHead[rowOff + nbc];
-                                while (candIdx !== -1) {
-                                    const cOff = candIdx * 16;
-                                    const candTeam = globalBuffer[cOff + 8];
-                                    const candHp = globalBuffer[cOff + 6];
-
-                                    if (candTeam !== team && candHp > 0) {
-                                        const ex = globalBuffer[cOff];
-                                        const ez = globalBuffer[cOff + 1];
-                                        const dX = ex - x;
-                                        const dZ = ez - z;
-                                        const dSq = dX * dX + dZ * dZ;
-
-                                        if (dSq < nearestDistSq) {
-                                            nearestDistSq = dSq;
-                                            nearestEnemyIdx = candIdx;
-                                            targetX = ex;
-                                            targetZ = ez;
-                                        }
-                                    }
-                                    candIdx = bNext[candIdx];
-                                }
-                            }
-                        }
-                    }
-
-                    if (hq) {
-                        const targetHQX = (team === 0) ? hq.enemyX : hq.playerX;
-                        const targetHQZ = (team === 0) ? hq.enemyZ : hq.playerZ;
-                        const targetHQHp = (team === 0) ? hq.enemyHp : hq.playerHp;
-                        if (targetHQHp > 0) {
-                            const dX = targetHQX - x;
-                            const dZ = targetHQZ - z;
-                            const dSq = dX * dX + dZ * dZ;
-                            if (dSq < nearestDistSq) {
-                                nearestDistSq = dSq;
-                                nearestEnemyIdx = -99;
-                                targetX = targetHQX;
-                                targetZ = targetHQZ;
-                            }
-                        }
-                    }
-
-                    if (nearestEnemyIdx !== -1) {
-                        const dist = Math.sqrt(nearestDistSq);
-                        if (dist <= attRange) {
-                            state = 3; // ATTACK
-                            vx = 0; vz = 0;
-
-                            const cooldown = attCd > 0 ? attCd : 1.0;
-                            if (currentTime - lastAtt >= cooldown) {
-                                lastAtt = currentTime;
-                                if (nearestEnemyIdx >= 0) {
-                                    damageEvents.push(nearestEnemyIdx, dmg, team);
-                                } else if (nearestEnemyIdx === -99) {
-                                    damageEvents.push(-99, dmg, team);
-                                }
-                                laserEvents.push(x, z, targetX, targetZ, team, uType);
-                            }
-                        } else {
-                            state = 2; // CHASE
-                            const dx = (targetX - x) / dist;
-                            const dz = (targetZ - z) / dist;
-                            vx = dx * speed;
-                            vz = dz * speed;
-                        }
-                    } else if (tx !== 0 || tz !== 0) {
-                        state = 1; // MOVE
-                        let dirX = 0, dirZ = 0;
-
-                        const flowX = (team === 0) ? allyFlowX : enemyFlowX;
-                        const flowY = (team === 0) ? allyFlowY : enemyFlowY;
-                        if (flowX && flowY && cellSize > 0) {
-                            const gc = Math.floor((x + halfWorld) / cellSize);
-                            const gr = Math.floor((z + halfWorld) / cellSize);
-                            if (gc >= 0 && gc < gridSize && gr >= 0 && gr < gridSize) {
-                                const cIdx = gr * gridSize + gc;
-                                dirX = flowX[cIdx] || 0;
-                                dirZ = flowY[cIdx] || 0;
-                            }
-                        }
-
-                        if (dirX === 0 && dirZ === 0) {
-                            const dx = tx - x;
-                            const dz = tz - z;
-                            const d = Math.hypot(dx, dz);
-                            if (d > 0.4) {
-                                dirX = dx / d;
-                                dirZ = dz / d;
-                            }
-                        }
-
-                        if (dirX !== 0 || dirZ !== 0) {
-                            vx = dirX * speed;
-                            vz = dirZ * speed;
-                        } else {
-                            state = 0; // IDLE
-                            vx = 0; vz = 0;
-                        }
-                    } else {
-                        state = 0; // IDLE
-                        vx = 0; vz = 0;
-                    }
-
-                    let sepX = 0, sepZ = 0;
-                    if (collisionMode === 'naive') {
-                        const maxSep = Math.min(totalUnits, 300);
-                        for (let j = 0; j < maxSep; j++) {
-                            if (j !== i) {
-                                const oOff = j * 16;
-                                const ox = globalBuffer[oOff];
-                                const oz = globalBuffer[oOff + 1];
-                                const oRad = globalBuffer[oOff + 4];
-                                const minD = r + oRad;
-
-                                const diffX = x - ox;
-                                const diffZ = z - oz;
-                                const dSq = diffX * diffX + diffZ * diffZ;
-
-                                if (dSq < minD * minD && dSq > 0.000001) {
-                                    const d = Math.sqrt(dSq);
-                                    const push = (minD - d) * 0.5;
-                                    sepX += (diffX / d) * push;
-                                    sepZ += (diffZ / d) * push;
-                                }
-                            }
-                        }
-                    } else {
-                        for (let dr = -1; dr <= 1; dr++) {
-                            const nbr = br + dr;
-                            if (nbr < 0 || nbr >= bRows) continue;
-                            const rowOff = nbr * bCols;
-
-                            for (let dc = -1; dc <= 1; dc++) {
-                                const nbc = bc + dc;
-                                if (nbc < 0 || nbc >= bCols) continue;
-
-                                let otherIdx = bHead[rowOff + nbc];
-                                while (otherIdx !== -1) {
-                                    if (otherIdx !== i) {
-                                        const oOff = otherIdx * 16;
-                                        const ox = globalBuffer[oOff];
-                                        const oz = globalBuffer[oOff + 1];
-                                        const oRad = globalBuffer[oOff + 4];
-                                        const minD = r + oRad;
-
-                                        const diffX = x - ox;
-                                        const diffZ = z - oz;
-                                        const dSq = diffX * diffX + diffZ * diffZ;
-
-                                        if (dSq < minD * minD && dSq > 0.000001) {
-                                            const d = Math.sqrt(dSq);
-                                            const push = (minD - d) * 0.5;
-                                            sepX += (diffX / d) * push;
-                                            sepZ += (diffZ / d) * push;
-                                        }
-                                    }
-                                    otherIdx = bNext[otherIdx];
-                                }
-                            }
-                        }
-                    }
-
-                    x += (vx * delta) + sepX;
-                    z += (vz * delta) + sepZ;
-
-                    if (x < -maxBound) x = -maxBound;
-                    else if (x > maxBound) x = maxBound;
-                    if (z < -maxBound) z = -maxBound;
-                    else if (z > maxBound) z = maxBound;
-
-                    if (workerGrid && cellSize > 0) {
-                        const gc = Math.floor((x + halfWorld) / cellSize);
-                        const gr = Math.floor((z + halfWorld) / cellSize);
-                        if (gc >= 0 && gc < gridSize && gr >= 0 && gr < gridSize && workerGrid[gr] && workerGrid[gr][gc] === 1) {
-                            const cellCenterX = (gc + 0.5) * cellSize - halfWorld;
-                            const cellCenterZ = (gr + 0.5) * cellSize - halfWorld;
-                            const pushDirX = x - cellCenterX;
-                            const pushDirZ = z - cellCenterZ;
-                            const pLen = Math.hypot(pushDirX, pushDirZ) || 0.001;
-                            const pushX = pushDirX / pLen;
-                            const pushZ = pushDirZ / pLen;
-                            x = cellCenterX + pushX * (cellSize * 0.72);
-                            z = cellCenterZ + pushZ * (cellSize * 0.72);
-
-                            const dot = vx * (-pushX) + vz * (-pushZ);
-                            if (dot > 0) {
-                                vx += pushX * dot;
-                                vz += pushZ * dot;
-                            }
-                        }
-                    }
-                }
-
-                sliceResultBuffer[outOffset++] = x;
-                sliceResultBuffer[outOffset++] = z;
-                sliceResultBuffer[outOffset++] = vx;
-                sliceResultBuffer[outOffset++] = vz;
-                sliceResultBuffer[outOffset++] = r;
-                sliceResultBuffer[outOffset++] = speed;
-                sliceResultBuffer[outOffset++] = hp;
-                sliceResultBuffer[outOffset++] = attCd;
-                sliceResultBuffer[outOffset++] = team;
-                sliceResultBuffer[outOffset++] = uType;
-                sliceResultBuffer[outOffset++] = state;
-                sliceResultBuffer[outOffset++] = tx;
-                sliceResultBuffer[outOffset++] = tz;
-                sliceResultBuffer[outOffset++] = attRange;
-                sliceResultBuffer[outOffset++] = dmg;
-                sliceResultBuffer[outOffset++] = lastAtt;
-            }
-
-            self.postMessage(
-                {
-                    type: 'STEP_SLICE_DONE',
-                    workerId: workerId,
-                    epoch: msg.epoch || 0,
-                    sliceStart: sliceStart,
-                    sliceCount: sliceCount,
-                    buffer: sliceResultBuffer.buffer,
-                    damageEvents: damageEvents,
-                    laserEvents: laserEvents
-                },
-                [sliceResultBuffer.buffer]
-            );
-            sliceResultBuffer = null;
-            break;
-        }
-
-        default:
-            break;
-    }
-};
-`;
-
-// Структура массивов (Structure of Arrays) симуляции
-class SimulationWorld {
-    constructor(maxEntities = MAX_SIM_ENTITIES) {
-        this.maxEntities = maxEntities;
-        this.activeCount = 0;
-
-        // Позиции и ориентация в мире
-        this.posX = new Float32Array(maxEntities);
-        this.posY = new Float32Array(maxEntities);
-        this.posZ = new Float32Array(maxEntities);
-        this.rotY = new Float32Array(maxEntities);
-
-        // Скорости
-        this.velX = new Float32Array(maxEntities);
-        this.velZ = new Float32Array(maxEntities);
-
-        // Здоровье и щиты
-        this.hp = new Float32Array(maxEntities);
-        this.maxHp = new Float32Array(maxEntities);
-        this.shield = new Float32Array(maxEntities);
-        this.maxShield = new Float32Array(maxEntities);
-
-        // Характеристики
-        this.speed = new Float32Array(maxEntities);
-        this.radius = new Float32Array(maxEntities);
-        this.visionRange = new Float32Array(maxEntities);
-        this.attackRange = new Float32Array(maxEntities);
-        this.damage = new Float32Array(maxEntities);
-        this.attackCooldown = new Float32Array(maxEntities);
-        this.lastAttackTime = new Float32Array(maxEntities);
-
-        // Навигация и цели
-        this.targetX = new Float32Array(maxEntities);
-        this.targetZ = new Float32Array(maxEntities);
-        this.hasTarget = new Uint8Array(maxEntities);
-        this.targetEnemyId = new Int32Array(maxEntities);
-
-        // Метаданные и состояния FSM
-        this.state = new Uint8Array(maxEntities);       // 0: IDLE, 1: MOVE, 2: CHASE, 3: ATTACK
-        this.unitType = new Uint8Array(maxEntities);    // 0: standard, 1: scout, 2: tank, 3: boss
-        this.team = new Uint8Array(maxEntities);        // 0: ally, 1: enemy
-        this.selected = new Uint8Array(maxEntities);
-        this.isSieged = new Uint8Array(maxEntities);
-        this.abilityActive = new Uint8Array(maxEntities);
-        this.abilityTimer = new Float32Array(maxEntities);
-        this.active = new Uint8Array(maxEntities);
-
-        // Стек свободных индексов для O(1) аллокации
-        this.freeIndices = [];
-        for (let i = maxEntities - 1; i >= 0; i--) {
-            this.freeIndices.push(i);
-        }
-
-        // Буфер для Transferable сериализации
-        this.exportBuffer = new Float32Array(maxEntities * 16);
-    }
-
-    spawn(team, type, x, z, hp, maxHp, speed, radius, visionRange, attackRange, damage, attackCooldown) {
-        if (this.freeIndices.length === 0) return -1;
-        const id = this.freeIndices.pop();
-
-        this.active[id] = 1;
-        this.team[id] = team;
-        this.unitType[id] = type;
-        this.posX[id] = x;
-        this.posY[id] = 0.75;
-        this.posZ[id] = z;
-        this.rotY[id] = 0;
-        this.velX[id] = 0;
-        this.velZ[id] = 0;
-
-        this.hp[id] = hp;
-        this.maxHp[id] = maxHp;
-        this.shield[id] = 0;
-        this.maxShield[id] = 50;
-
-        this.speed[id] = speed;
-        this.radius[id] = radius;
-        this.visionRange[id] = visionRange;
-        this.attackRange[id] = attackRange;
-        this.damage[id] = damage;
-        this.attackCooldown[id] = attackCooldown;
-        this.lastAttackTime[id] = -99;
-
-        this.targetX[id] = 0;
-        this.targetZ[id] = 0;
-        this.hasTarget[id] = 0;
-        this.targetEnemyId[id] = -1;
-
-        this.state[id] = 0;
-        this.selected[id] = 0;
-        this.isSieged[id] = 0;
-        this.abilityActive[id] = 0;
-        this.abilityTimer[id] = 0;
-
-        this.activeCount++;
-        return id;
-    }
-
-    kill(id) {
-        if (id < 0 || id >= this.maxEntities || !this.active[id]) return;
-        this.active[id] = 0;
-        this.hp[id] = 0;
-        this.freeIndices.push(id);
-        this.activeCount = Math.max(0, this.activeCount - 1);
-    }
-
-    clear() {
-        this.active.fill(0);
-        this.hp.fill(0);
-        this.freeIndices.length = 0;
-        for (let i = this.maxEntities - 1; i >= 0; i--) {
-            this.freeIndices.push(i);
-        }
-        this.activeCount = 0;
-    }
-
-    syncToObjects(allies, enemiesList) {
-        for (let i = 0; i < allies.length; i++) {
-            const u = allies[i];
-            const id = u.simId;
-            if (id === undefined || id < 0 || !this.active[id]) continue;
-            u.mesh.position.x = this.posX[id];
-            u.mesh.position.z = this.posZ[id];
-            u.hp = this.hp[id];
-            u.shield = this.shield[id];
-            u.state = this.state[id];
-            if (u.velocity) {
-                u.velocity.x = this.velX[id];
-                u.velocity.z = this.velZ[id];
-            }
-        }
-
-        for (let i = 0; i < enemiesList.length; i++) {
-            const e = enemiesList[i];
-            const id = e.simId;
-            if (id === undefined || id < 0 || !this.active[id]) continue;
-            e.mesh.position.x = this.posX[id];
-            e.mesh.position.z = this.posZ[id];
-            e.hp = this.hp[id];
-            e.shield = this.shield[id];
-            e.state = this.state[id];
-            if (e.velocity) {
-                e.velocity.x = this.velX[id];
-                e.velocity.z = this.velZ[id];
-            }
-        }
-    }
-
-    syncFromObject(u, simId) {
-        if (simId < 0 || simId >= this.maxEntities) return;
-        this.posX[simId] = u.mesh.position.x;
-        this.posZ[simId] = u.mesh.position.z;
-        this.hp[simId] = u.hp;
-        this.maxHp[simId] = u.maxHp;
-        this.shield[simId] = u.shield || 0;
-        this.maxShield[simId] = u.maxShield || 50;
-        this.state[simId] = u.state;
-        this.selected[simId] = u.selected ? 1 : 0;
-        this.isSieged[simId] = u.isSieged ? 1 : 0;
-        if (u.personalTarget) {
-            this.targetX[simId] = u.personalTarget.x;
-            this.targetZ[simId] = u.personalTarget.z;
-            this.hasTarget[simId] = 1;
-        } else {
-            this.hasTarget[simId] = 0;
-        }
-    }
-
-    packExportBuffer() {
-        let offset = 0;
-        for (let i = 0; i < this.maxEntities; i++) {
-            if (!this.active[i]) continue;
-            this.exportBuffer[offset++] = this.posX[i];
-            this.exportBuffer[offset++] = this.posY[i];
-            this.exportBuffer[offset++] = this.posZ[i];
-            this.exportBuffer[offset++] = this.rotY[i];
-            this.exportBuffer[offset++] = this.velX[i];
-            this.exportBuffer[offset++] = this.velZ[i];
-            this.exportBuffer[offset++] = this.hp[i];
-            this.exportBuffer[offset++] = this.maxHp[i];
-            this.exportBuffer[offset++] = this.shield[i];
-            this.exportBuffer[offset++] = this.maxShield[i];
-            this.exportBuffer[offset++] = this.state[i];
-            this.exportBuffer[offset++] = this.unitType[i];
-            this.exportBuffer[offset++] = this.team[i];
-            this.exportBuffer[offset++] = this.selected[i];
-            this.exportBuffer[offset++] = this.isSieged[i];
-            this.exportBuffer[offset++] = i;
-        }
-        return offset;
-    }
-
-    unpackExportBuffer(buffer, floatCount) {
-        const data = new Float32Array(buffer);
-        let offset = 0;
-        while (offset < floatCount) {
-            const posX = data[offset++];
-            const posY = data[offset++];
-            const posZ = data[offset++];
-            const rotY = data[offset++];
-            const velX = data[offset++];
-            const velZ = data[offset++];
-            const hp = data[offset++];
-            const maxHp = data[offset++];
-            const shield = data[offset++];
-            const maxShield = data[offset++];
-            const state = data[offset++];
-            const unitType = data[offset++];
-            const team = data[offset++];
-            const selected = data[offset++];
-            const isSieged = data[offset++];
-            const id = data[offset++];
-
-            if (id >= 0 && id < this.maxEntities) {
-                this.posX[id] = posX;
-                this.posY[id] = posY;
-                this.posZ[id] = posZ;
-                this.rotY[id] = rotY;
-                this.velX[id] = velX;
-                this.velZ[id] = velZ;
-                this.hp[id] = hp;
-                this.maxHp[id] = maxHp;
-                this.shield[id] = shield;
-                this.maxShield[id] = maxShield;
-                this.state[id] = state;
-                this.selected[id] = selected;
-                this.isSieged[id] = isSieged;
-            }
-        }
-    }
-}
+// Код Blob-воркера собирается из единственного источника — initSimWorkerScope (js/sim_worker.js)
+const SIM_WORKER_CODE = (typeof initSimWorkerScope === 'function')
+    ? `${initSimWorkerScope.toString()}\nif (typeof window === 'undefined' && typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope) {\n    initSimWorkerScope(self);\n}\n`
+    : '';
 
 // =============================================================================
-// SimulationWorkerPool — Пул многопоточных Web Workers (Multi-Core Processing)
+// SimulationWorkerPool — Пул многопоточных Web Workers (Benchmark Sandbox)
+// Поднимается по требованию при запуске стресс-теста (ensureWorkers)
 // =============================================================================
 class SimulationWorkerPool {
     constructor(maxEntities = MAX_SIM_ENTITIES) {
@@ -688,6 +41,7 @@ class SimulationWorkerPool {
         this.isMultiThreaded = false;
         this.isBusy = false;
         this.enabled = true;
+        this._blobUrl = null;
 
         this.grid = null;
         this.gridSize = 64;
@@ -760,12 +114,10 @@ class SimulationWorkerPool {
         }
         this.workers.length = 0;
         this.isMultiThreaded = false;
-        this.isBusy = false;
-        this.pendingSlices = 0;
-        this.stepEpoch++;
+        this.clear();
     }
 
-    init(grid, worldSize = 256, cellSize = 4) {
+    init(grid, worldSize = 256, cellSize = 4, spawnWorkers = false) {
         this.terminate();
 
         this.grid = grid || (typeof window !== 'undefined' && window.grid ? window.grid : null);
@@ -777,18 +129,46 @@ class SimulationWorkerPool {
         const bRows = Math.ceil(this.worldSize / 6.0);
         this.syncHead = new Int32Array(bCols * bRows);
 
+        if (!spawnWorkers) {
+            this.isMultiThreaded = false;
+            return;
+        }
+        this._spawnWorkers();
+    }
+
+    ensureWorkers() {
+        if (!this.enabled) return false;
+        if (this.isMultiThreaded && this.workers.length >= 2) return true;
+        if (!this.grid && typeof window !== 'undefined' && window.grid) {
+            this.grid = window.grid;
+        }
+        if (!this.syncHead) {
+            const bCols = Math.ceil(this.worldSize / 6.0);
+            const bRows = Math.ceil(this.worldSize / 6.0);
+            this.syncHead = new Int32Array(bCols * bRows);
+        }
+        this._spawnWorkers();
+        return this.isMultiThreaded;
+    }
+
+    _spawnWorkers() {
+        this.terminate();
+
         if (typeof Worker === 'undefined') {
             console.log('⚡ Web Workers не поддерживаются в данном окружении. SoA симуляция активна в основном потоке.');
             this.isMultiThreaded = false;
             return;
         }
 
-        let blobUrl = null;
-        try {
-            const blob = new Blob([SIM_WORKER_CODE], { type: 'application/javascript' });
-            blobUrl = URL.createObjectURL(blob);
-        } catch (e) {
-            blobUrl = null;
+        let blobUrl = this._blobUrl || null;
+        if (!blobUrl && SIM_WORKER_CODE && typeof Blob !== 'undefined' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+            try {
+                const blob = new Blob([SIM_WORKER_CODE], { type: 'application/javascript' });
+                blobUrl = URL.createObjectURL(blob);
+                this._blobUrl = blobUrl;
+            } catch (e) {
+                blobUrl = null;
+            }
         }
 
         const createdWorkers = [];
@@ -1433,7 +813,6 @@ class SimulationWorkerPool {
     }
 }
 
-// Глобальные экземпляры мира и менеджера пула потоков
-const simWorld = new SimulationWorld();
+// Глобальный экземпляр менеджера пула стресс-теста (Benchmark Sandbox)
 const simWorkerPool = new SimulationWorkerPool();
 const simWorkerManager = simWorkerPool;
