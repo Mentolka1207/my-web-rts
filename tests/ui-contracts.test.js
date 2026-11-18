@@ -62,6 +62,29 @@ describe('Service Worker: прекэш и версия', () => {
         const missing = local.filter(u => !assets.has(u));
         expect(missing).toEqual([]);
     });
+
+    it('T-12: manifest.json ссылается на реальные файлы иконок, они валидны и включены в прекэш sw.js', () => {
+        const manifest = JSON.parse(read('manifest.json'));
+        const assets = new Set((sw.match(/'\.\/[^']+'/g) || []).map(s => s.slice(3, -1)));
+        expect(Array.isArray(manifest.icons)).toBe(true);
+        expect(manifest.icons.length).toBeGreaterThanOrEqual(2);
+
+        for (const icon of manifest.icons) {
+            expect(icon.src.startsWith('data:')).toBe(false);
+            const rel = icon.src.replace(/^\.\//, '');
+            const fullPath = path.join(ROOT, rel);
+            expect(fs.existsSync(fullPath)).toBe(true);
+            expect(assets.has(rel)).toBe(true);
+
+            if (icon.type === 'image/png') {
+                const buf = fs.readFileSync(fullPath);
+                expect(buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(true);
+                const w = buf.readUInt32BE(16);
+                const h = buf.readUInt32BE(20);
+                expect(`${w}x${h}`).toBe(icon.sizes);
+            }
+        }
+    });
 });
 
 describe('i18n: ключи разметки есть в обоих языках', () => {

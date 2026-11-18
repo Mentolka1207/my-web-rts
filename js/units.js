@@ -70,6 +70,8 @@ function createUnit(col, row, type = 'standard') {
         orderTarget: null,   // цель фокус-атаки по приказу игрока
         flowField: null,     // снимок поля потока своего приказа
         finalApproach: false,
+        attackMove: false,
+        ignoreAggro: false,
         hp: effectiveHp,
         maxHp: effectiveHp,
         speed: stats.speed,

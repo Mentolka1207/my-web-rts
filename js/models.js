@@ -126,7 +126,7 @@ function createDroneAlbedoTexture(isAlly) {
     const ctx = canvas.getContext('2d');
 
     // Базовый титановый корпус фракции
-    ctx.fillStyle = isAlly ? '#0d4a94' : '#941218';
+    ctx.fillStyle = isAlly ? '#2b72b5' : '#b83232';
     ctx.fillRect(0, 0, 256, 256);
 
     // Модульные бронепанели (4 квадранта)
@@ -134,12 +134,12 @@ function createDroneAlbedoTexture(isAlly) {
         for (let px = 0; px < 2; px++) {
             const ox = px * 128, oy = py * 128;
             ctx.fillStyle = isAlly
-                ? (((px + py) % 2 === 0) ? '#1056aa' : '#0a3d7d')
-                : (((px + py) % 2 === 0) ? '#aa161e' : '#7d0d12');
+                ? (((px + py) % 2 === 0) ? '#2b72b5' : '#1f588e')
+                : (((px + py) % 2 === 0) ? '#b83232' : '#8f2424');
             ctx.fillRect(ox + 3, oy + 3, 122, 122);
 
             // Кромка панели
-            ctx.strokeStyle = isAlly ? '#1c75e8' : '#e8232f';
+            ctx.strokeStyle = isAlly ? '#4ab3ff' : '#ff5560';
             ctx.lineWidth = 1.5;
             ctx.strokeRect(ox + 4, oy + 4, 120, 120);
 
@@ -290,11 +290,11 @@ const allyBodyMat = new THREE.MeshStandardMaterial({
     bumpMap: droneBumpTex,
     bumpScale: 0.04,
     roughnessMap: droneRoughnessTex,
-    roughness: 0.28,
-    metalness: 0.82,
+    roughness: 0.36,
+    metalness: 0.38,
     emissiveMap: allyDroneEmissiveTex,
     emissive: 0x00d4ff,
-    emissiveIntensity: 0.4,
+    emissiveIntensity: 0.62,
     vertexColors: true
 });
 const enemyBodyMat = new THREE.MeshStandardMaterial({
@@ -303,14 +303,14 @@ const enemyBodyMat = new THREE.MeshStandardMaterial({
     bumpMap: droneBumpTex,
     bumpScale: 0.04,
     roughnessMap: droneRoughnessTex,
-    roughness: 0.28,
-    metalness: 0.82,
+    roughness: 0.36,
+    metalness: 0.38,
     emissiveMap: enemyDroneEmissiveTex,
     emissive: 0xff3344,
-    emissiveIntensity: 0.4,
+    emissiveIntensity: 0.62,
     vertexColors: true
 });
-const frameMat = new THREE.MeshStandardMaterial({ color: 0x141822, metalness: 0.9, roughness: 0.25 });
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x222a3a, metalness: 0.45, roughness: 0.25 });
 const allyRotorMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, metalness: 0.3, roughness: 0.4 });
 const enemyRotorMat = new THREE.MeshStandardMaterial({ color: 0xff3333, metalness: 0.3, roughness: 0.4 });
 const allyLedMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
@@ -331,10 +331,10 @@ const bossHullMat = new THREE.MeshStandardMaterial({
     bumpScale: 0.06,
     roughnessMap: droneRoughnessTex,
     roughness: 0.35,
-    metalness: 0.85,
+    metalness: 0.42,
     emissiveMap: enemyDroneEmissiveTex,
     emissive: 0x660018,
-    emissiveIntensity: 0.45
+    emissiveIntensity: 0.65
 });
 const bossCoreMat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
 const bossShieldMat = new THREE.MeshBasicMaterial({ color: 0x00d4ff, transparent: true, opacity: 0.35, wireframe: true, depthWrite: false });

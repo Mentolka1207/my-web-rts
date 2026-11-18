@@ -131,17 +131,66 @@ describe('Базовые переходы состояний IDLE / MOVE / CHASE
         expect(unit.velocity.z).toBe(0);
     });
 
-    it('MOVE → CHASE при обнаружении врага во время марша', () => {
+    it('T-07: MOVE без attackMove (отступление / обычный марш) проходит мимо врага и не втягивается в бой', () => {
         const enemy = makeEnemy(4, 0);
         const unit = makeUnit({
             state: FSM_STATES.MOVE,
-            personalTarget: { x: 10, y: 0.75, z: 0 }
+            personalTarget: { x: 10, y: 0.75, z: 0 },
+            attackMove: false,
+            ignoreAggro: true
         });
-        const ctx = makeCtx({ findNearest: () => ({ unit: enemy, dist: 4 }) });
+        const ctx = makeCtx({
+            findNearest: () => ({ unit: enemy, dist: 4 }),
+            hasLineOfSight: () => true
+        });
 
         stepUnitFSM(unit, 1 / 30, ctx);
+        expect(unit.state).toBe(FSM_STATES.MOVE);
+        expect(unit.targetEnemy).toBeNull();
+        expect(unit.mesh.position.x).toBeGreaterThan(0);
+
+        // Без явного флага attackMove (по умолчанию false) юнит тоже не отвлекается на врагов
+        const uDefault = makeUnit({
+            state: FSM_STATES.MOVE,
+            personalTarget: { x: 10, y: 0.75, z: 0 }
+        });
+        stepUnitFSM(uDefault, 1 / 30, ctx);
+        expect(uDefault.state).toBe(FSM_STATES.MOVE);
+        expect(uDefault.targetEnemy).toBeNull();
+    });
+
+    it('T-07: MOVE с attackMove: true переходит в CHASE при обнаружении врага, а после победы продолжает марш к цели и сбрасывает флаг в IDLE', () => {
+        const enemy = makeEnemy(3.5, 0, { hp: 10 });
+        const unit = makeUnit({
+            state: FSM_STATES.MOVE,
+            personalTarget: { x: 10, y: 0.75, z: 0 },
+            attackMove: true,
+            ignoreAggro: false
+        });
+        const ctx = makeCtx({
+            findNearest: () => ({ unit: enemy.hp > 0 ? enemy : null, dist: enemy.hp > 0 ? 3.5 : Infinity }),
+            enemies: [enemy],
+            gameTime: 12
+        });
+
+        stepUnitFSM(unit, 1 / 30, ctx); // MOVE -> CHASE
         expect(unit.state).toBe(FSM_STATES.CHASE);
         expect(unit.targetEnemy).toBe(enemy);
+
+        stepUnitFSM(unit, 1 / 30, ctx); // CHASE -> ATTACK
+        expect(unit.state).toBe(FSM_STATES.ATTACK);
+
+        enemy.hp = 0; // Враг уничтожен -> возврат в MOVE к personalTarget с сохранением attackMove
+        stepUnitFSM(unit, 1 / 30, ctx);
+        expect(unit.state).toBe(FSM_STATES.MOVE);
+        expect(unit.attackMove).toBe(true);
+
+        // При достижении personalTarget переход в IDLE и сброс флагов приказа
+        unit.mesh.position.x = 9.9;
+        stepUnitFSM(unit, 1 / 30, ctx);
+        expect(unit.state).toBe(FSM_STATES.IDLE);
+        expect(unit.attackMove).toBe(false);
+        expect(unit.ignoreAggro).toBe(false);
     });
 
     it('CHASE → ATTACK при сближении на <= attackRange и CHASE → MOVE при уходе случайной цели за visionRange', () => {

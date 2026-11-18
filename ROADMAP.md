@@ -53,17 +53,18 @@
 - [x] **Развитие конечного автомата (FSM) и управления строем:**
   - [x] Добавить выбор типа боевой формации при отправке группы: шеренга (Line), клин (Wedge), защитное кольцо (Circle) с поворотом по направлению движения отряда (`js/formations.js:59-96`, `tests/formations.test.js`).
   - [x] Улучшить выбор цели в `SpatialGrid.findNearest`: приоритет по раненым целям (`woundedBonus`) и опасным целям (`threatBonus` для юнитов в осаде, танков и босса) (`js/spatialhash.js:80-126`).
-  - [x] Реализовать `Siege Mode` для Танка: ручное переключение по `R`/`F` (`js/input.js:733`, `js/units.js:289-310`), дальность $\times 2$ (`8.0`), обзор `8.5`, сплэш-урон в радиусе `2.2` (`js/fsm.js:493-521`), защита от сдвига при толкании мобильными союзниками (`js/spatialhash.js:223-239`) и пропуск приказов движения (`js/input.js:268-275`).
+  - [x] Реализовать `Siege Mode` для Танка: ручное переключение по `R`/`F` (`js/input.js:739`, `js/units.js:277-298`), дальность $\times 2$ (`8.0`), обзор `8.5`, сплэш-урон в радиусе `2.2` (`js/fsm.js:497-525`), защита от сдвига при толкании мобильными союзниками (`js/spatialhash.js:223-239`) и пропуск приказов движения (`js/input.js:270-277`).
+  - [x] Разделить приказы движения и штурм-марша (`T-07`): ПКМ — марш/отступление без агра (`attackMove: false`, `ignoreAggro: true`), `Alt+ПКМ` / `A+ЛКМ` — `attack-move`, ПКМ по врагу — фокус-атака (`js/fsm.js:297-356`, `js/input.js:207-445`, `js/effects.js:143-163`, `tests/fsm.test.js`).
 - [x] **Улучшение процедурной графики (Canvas PBR):**
-  - [x] Процедурная генерация PBR-текстур на `HTMLCanvasElement`: поверхность земли использует `map` (Albedo 512×512), `bumpMap`, `normalMap`, `roughnessMap`, `emissiveMap` (`js/terrain.js:355-374`); стены — `map`, `bumpMap`, `roughnessMap` (`js/terrain.js:457-470`); модели дронов и Левиафана — `map`, `bumpMap`, `roughnessMap`, `emissiveMap` (`js/models.js:280-338`, без `metalnessMap`). Индикация активного щита и осады выводится через `shieldBubblesMesh` / `siegeRingsMesh` (`js/instancing.js:324-325, 464-479`).
-  - [x] Добавить процедурные эффекты частиц (взрывы, искры при попадании по щиту и корпусу) на одном `THREE.Points` (`js/particles.js:8-204`), а также пулы лазеров, вспышек и следов (`js/effects.js:30-359`).
+  - [x] Процедурная генерация PBR-текстур на `HTMLCanvasElement`: поверхность земли использует `map` (Albedo 512×512), `bumpMap`, `normalMap`, `roughnessMap`, `emissiveMap` (`js/terrain.js:355-374`); стены — `map`, `bumpMap`, `roughnessMap` (`js/terrain.js:457-470`); модели дронов и Левиафана — `map`, `bumpMap`, `roughnessMap`, `emissiveMap` (`js/models.js:287-338`, без `metalnessMap`) + процедурная карта окружения `scene.environment` (`js/scene.js:11-44`, `T-08`). Индикация активного щита и осады выводится через `shieldBubblesMesh` / `siegeRingsMesh` (`js/instancing.js:324-325, 464-479`).
+  - [x] Добавить процедурные эффекты частиц (взрывы, искры при попадании по щиту и корпусу) на одном `THREE.Points` (`js/particles.js:8-204`), а также пулы лазеров, вспышек и следов (`js/effects.js:30-367`).
 - [x] **Модернизация звукового движка (Web Audio API):**
   - [x] Внедрить `DynamicsCompressorNode` на мастер-выходе для защиты от клиппинга при канонаде (`js/audio.js:80-86, 97`).
   - [ ] Привязать громкость и частотную фильтрацию (`BiquadFilterNode`) звуков выстрелов/взрывов к расстоянию от камеры до эпицентра боя: *метод `getSpatialAttenuation` написан в `js/audio.js:161-169`, но в методах синтеза (`playLaser` и др.) не вызывается, а частоты `BiquadFilterNode` фиксированы по типу звука (`js/audio.js:235-256`)*.
   - [x] Добавить лимит на максимальное число звуковых событий за тик (`maxSoundEventsPerTick = 18`) и минимальный интервал повтора по ID звука в `canPlay` (`js/audio.js:119, 148-158`).
 - [x] **Балансировка режима выживания (Survival Waves):**
-  - [x] Написать скрипт Headless-прогона волн на скорости $1000\times$ (`scripts/headless_wave_test.js:1-205`; читает `DRONE_TYPES`/`ENEMY_TYPES` из `js/config.js`, но использует упрощённую боевую модель без карты, способностей, сложности и лимита `MAX_ACTIVE_ENEMIES`).
-  - [x] Добавить комбинированные волны врагов («Рой перехватчиков», «Осадный таран», сбалансированные волны, «Левиафан» на кратных 10 волнах) (`js/ai.js:40-105`).
+  - [x] Написать скрипт Headless-прогона волн на скорости $1000\times$ (`scripts/headless_wave_test.js:1-372`, `T-12`): использует общие `buildWaveRoster`, `DIFFICULTY_CONFIGS`, `getMaxActiveEnemies()` из `js/config.js`/`js/maps.js`/`js/ai.js`, а также способности юнитов (Щит, Форсаж, Осада со сплэшем и залп Босса по 3 целям).
+  - [x] Добавить комбинированные волны врагов («Рой перехватчиков», «Осадный таран», сбалансированные волны, «Левиафан» на кратных 10 волнах) и масштабирование лимита врагов / скорости марша для 512 и 1024 (`js/config.js:138-177`, `js/ai.js:39-129, 218-385`, `T-09`).
 
 ---
 
@@ -106,4 +107,4 @@
   - [x] Официальный заголовок лицензии MIT в дистрибутиве Three.js (`libs/three.min.js:1-2`).
   - [x] Документ [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) и встроенный просмотрщик лицензий (`index.html:396-406`, `js/ui.js:705-711`).
 - [x] **PWA и офлайн-игра:**
-  - [x] Создание `manifest.json` и Service Worker `sw.js` с прекэшем всех статических ассетов и стратегией Cache First (`manifest.json`, `sw.js:5-88`, проверяется `tests/ui-contracts.test.js`).
+  - [x] Создание `manifest.json` со статическими иконками `icons/icon-192.png`, `icons/icon-512.png`, `icons/icon.svg` и Service Worker `sw.js` с прекэшем всех статических ассетов и стратегией Cache First (`manifest.json`, `sw.js:5-47`, проверяется `tests/ui-contracts.test.js` и CDP в `e2e/smoke.e2e.js`, `T-12`).

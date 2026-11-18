@@ -295,7 +295,7 @@ function stepUnitFSM(unit, delta, ctx) {
             break;
 
         case FSM_STATES.MOVE:
-            if (nearestEnemy) {
+            if (nearestEnemy && unit.attackMove === true && !unit.ignoreAggro) {
                 unit.targetEnemy = nearestEnemy;
                 unit.state = FSM_STATES.CHASE;
                 break;
@@ -308,6 +308,8 @@ function stepUnitFSM(unit, delta, ctx) {
                     unit.state = FSM_STATES.IDLE;
                     unit.personalTarget = null;
                     unit.finalApproach = false;
+                    unit.attackMove = false;
+                    unit.ignoreAggro = false;
                     fsmSetVelocity(unit, 0, 0);
                     break;
                 }
@@ -346,6 +348,8 @@ function stepUnitFSM(unit, delta, ctx) {
                             unit.state = FSM_STATES.IDLE;
                             unit.personalTarget = null;
                             unit.finalApproach = false;
+                            unit.attackMove = false;
+                            unit.ignoreAggro = false;
                             fsmSetVelocity(unit, 0, 0);
                             break;
                         }

@@ -204,7 +204,7 @@ function sanitizeTargetPosition(targetX, targetZ, fallbackX, fallbackZ) {
 
 const _formationSlot = { x: 0, z: 0 };
 
-function issueMoveOrderAtPoint(clientX, clientY) {
+function issueMoveOrderAtPoint(clientX, clientY, isAttackMove = false) {
     const selectedUnits = [];
     for (let i = 0; i < units.length; i++) {
         if (units[i].selected && units[i].hp > 0) selectedUnits.push(units[i]);
@@ -234,6 +234,8 @@ function issueMoveOrderAtPoint(clientX, clientY) {
             u.state = States.CHASE;
             u.personalTarget = null;
             u.finalApproach = false;
+            u.attackMove = false;
+            u.ignoreAggro = false;
         }
         return;
     }
@@ -278,7 +280,7 @@ function issueMoveOrderAtPoint(clientX, clientY) {
     }
 
     if (typeof spawnOrderMarker === 'function') {
-        spawnOrderMarker(targetPoint.x, targetPoint.z, false);
+        spawnOrderMarker(targetPoint.x, targetPoint.z, isAttackMove ? 'attack-move' : false);
     }
 
     const count = movers.length;
@@ -309,6 +311,8 @@ function issueMoveOrderAtPoint(clientX, clientY) {
         unit.orderTarget = null;
         unit.flowField = orderField;
         unit.finalApproach = false;
+        unit.attackMove = !!isAttackMove;
+        unit.ignoreAggro = !isAttackMove;
     }
 }
 
@@ -388,6 +392,11 @@ window.addEventListener('mouseup', (e) => {
         isSelecting = false;
         selectionBoxEl.style.display = 'none';
         if (startedOnField && !isDragging && !isUiEventTarget(e.target)) {
+            if ((keys['KeyA'] || e.altKey) && units.some(u => u.selected && u.hp > 0)) {
+                issueMoveOrderAtPoint(e.clientX, e.clientY, true);
+                isDragging = false;
+                return;
+            }
             const clickedUnit = getUnitUnderScreenPoint(e.clientX, e.clientY);
             const now = performance.now();
             const isDoubleClick = (now - lastUnitClickTime < DOUBLE_CLICK_TIME_MS) && (lastClickedUnit && lastClickedUnit === clickedUnit);
@@ -427,11 +436,11 @@ window.addEventListener('mouseup', (e) => {
     }
 });
 
-// ПКМ — приказ перемещения / атаки
+// ПКМ — приказ перемещения / отступления (Alt+ПКМ — штурм-марш, клик по врагу — фокус-атака)
 window.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     if (isUiEventTarget(e.target)) return;
-    issueMoveOrderAtPoint(e.clientX, e.clientY);
+    issueMoveOrderAtPoint(e.clientX, e.clientY, Boolean(e.altKey));
 });
 
 // Вращение колёсика мыши (Зум и Touchpad горизонтальный скролл)
@@ -447,10 +456,10 @@ window.addEventListener('wheel', (e) => {
         return;
     }
 
-    // Вертикальный зум колёсиком. Шаг масштабируется вместе с картой: при постоянном шаге 4 единицы
-    // на карте 1024 (зум 45…850) от стартового вида до общего плана нужно было 145 щелчков колеса
-    // против 34 на карте 256.
-    camZoomDist += e.deltaY * 0.04 * (BASE_CAM_DIST / 85);
+    // Вертикальный зум колёсиком. Шаг масштабируется по диапазону текущей карты (~45 щелчков от старта до общего плана),
+    // чтобы даже при стартовом зуме 64–85 можно было плавно и быстро охватить большую карту.
+    const zoomSpan = Math.max(120, MAX_ZOOM_DIST - BASE_CAM_DIST);
+    camZoomDist += (e.deltaY / 100) * (zoomSpan / 45);
     camZoomDist = THREE.MathUtils.clamp(camZoomDist, MIN_ZOOM_DIST, MAX_ZOOM_DIST);
     applyCameraTransform();
 }, { passive: false });

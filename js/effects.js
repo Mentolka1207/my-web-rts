@@ -140,11 +140,19 @@ for (let i = 0; i < MAX_ORDER_MARKERS; i++) {
     orderMarkers.push({ mesh: mesh, active: false, elapsed: 0, maxLife: 0.38 });
 }
 
-function spawnOrderMarker(x, z, isAttack = false) {
-    if (typeof playOrderSound === 'function') playOrderSound(isAttack);
+function spawnOrderMarker(x, z, orderType = false) {
+    const resolvedType = (orderType === true || orderType === 'attack')
+        ? 'attack'
+        : (orderType === 'attack-move' ? 'attack-move' : 'move');
+    const isAttackTone = resolvedType !== 'move';
+    if (typeof playOrderSound === 'function') playOrderSound(isAttackTone);
     let m = orderMarkers.find(o => !o.active);
     if (!m) m = orderMarkers[0];
-    m.mesh.material.color.setHex(isAttack ? 0xff3333 : 0x00ffcc);
+    const markerColor = resolvedType === 'attack'
+        ? 0xff3333
+        : (resolvedType === 'attack-move' ? 0xffaa00 : 0x00ffcc);
+    m.mesh.material.color.setHex(markerColor);
+    m.orderType = resolvedType;
     m.mesh.position.set(x, 0.04, z);
     m.mesh.scale.set(0.5, 0.5, 0.5);
     m.mesh.material.opacity = 0.9;

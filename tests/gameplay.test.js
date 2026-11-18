@@ -21,6 +21,7 @@ function loadGameplayContext() {
         document: { getElementById: () => null, addEventListener() {} },
         setTimeout: () => 0,
         fireLaser: () => {},
+        showTacticalAlert: () => {},
         syncSeedUI: () => {},
         gameStarted: true,
         gameOver: false
@@ -42,6 +43,7 @@ function loadGameplayContext() {
         'js/grid.js',
         'js/spatialhash.js',
         'js/flowfield.js',
+        'js/fsm.js',
         'js/scene.js',
         'js/healthbar.js',
         'js/models.js',
@@ -157,5 +159,133 @@ describe('T-11: урон по штабу игрока зависит от тип
         `, ctx);
         const hpAfter = vm.runInContext(`playerHQ.hp`, ctx);
         expect(500 - hpAfter).toBe(expectedDmg);
+    });
+});
+
+describe('T-07: инициализация флагов отступления и штурм-марша в createUnit + stepUnitFSM', () => {
+    it('createUnit задаёт attackMove=false и ignoreAggro=false, режим марша игнорирует врагов без attackMove', () => {
+        const ctx = loadGameplayContext();
+        vm.runInContext(`(() => {
+            currentMapSize = '256';
+            applyMapToGrid('canyon');
+            units.length = 0;
+            enemies.length = 0;
+            createUnit(4, 4, 'standard');
+            const u = units[0];
+            createEnemy(u.mesh.position.x + 3.0, u.mesh.position.z, 'standard', false);
+            spatialGrid.clear();
+            spatialGrid.insert(u, false);
+            spatialGrid.insert(enemies[0], true);
+        })()`, ctx);
+
+        const defaults = vm.runInContext(`({ attackMove: units[0].attackMove, ignoreAggro: units[0].ignoreAggro })`, ctx);
+        expect(defaults).toEqual({ attackMove: false, ignoreAggro: false });
+
+        // Обычный марш мимо врага
+        vm.runInContext(`(() => {
+            const u = units[0];
+            u.state = States.MOVE;
+            u.personalTarget = new THREE.Vector3(u.mesh.position.x + 12, 0.75, u.mesh.position.z);
+            u.attackMove = false;
+            u.ignoreAggro = true;
+            stepUnitFSM(u, 1 / 30, {
+                grid,
+                gridSize: GRID_SIZE,
+                cellSize: CELL_SIZE,
+                halfWorld: MAP_WORLD_SIZE * 0.5,
+                flowField: flowFieldGen,
+                enemyHQ,
+                enemies,
+                findNearest: (p, r, t) => spatialGrid.findNearest(p, r, t),
+                hasLineOfSight,
+                findBypassDirection,
+                gameTime: 5.0
+            });
+        })()`, ctx);
+        expect(vm.runInContext(`units[0].state`, ctx)).toBe('MOVE');
+
+        // Штурм-марш (attackMove = true) вступает в бой с врагом на пути
+        vm.runInContext(`(() => {
+            const u = units[0];
+            u.attackMove = true;
+            u.ignoreAggro = false;
+            stepUnitFSM(u, 1 / 30, {
+                grid,
+                gridSize: GRID_SIZE,
+                cellSize: CELL_SIZE,
+                halfWorld: MAP_WORLD_SIZE * 0.5,
+                flowField: flowFieldGen,
+                enemyHQ,
+                enemies,
+                findNearest: (p, r, t) => spatialGrid.findNearest(p, r, t),
+                hasLineOfSight,
+                findBypassDirection,
+                gameTime: 5.1
+            });
+        })()`, ctx);
+        expect(vm.runInContext(`units[0].state`, ctx)).toBe('CHASE');
+    });
+});
+
+describe('T-09: баланс волн и скорость марша на больших картах (512 и 1024)', () => {
+    it('лимит активных врагов и множитель марша масштабируются по размеру карты (256/512/1024)', () => {
+        const ctx = loadGameplayContext();
+        const checkSize = (sizeId) => vm.runInContext(
+            `currentMapSize = '${sizeId}'; ({ max: getMaxActiveEnemies(), speedMult: getEnemyMarchSpeedMult() })`,
+            ctx
+        );
+        expect(checkSize('256')).toEqual({ max: 50, speedMult: 1.0 });
+        expect(checkSize('512')).toEqual({ max: 75, speedMult: 1.5 });
+        expect(checkSize('1024')).toEqual({ max: 110, speedMult: 2.6 });
+    });
+
+    it('на карте 1024 (canyon) волна доходит до штаба игрока и наносит урон', () => {
+        const ctx = loadGameplayContext();
+        const result = vm.runInContext(`(() => {
+            currentMapSize = '1024';
+            currentDifficulty = 'normal';
+            applyMapToGrid('canyon');
+            units.length = 0;
+            enemies.length = 0;
+            spatialGrid.clear();
+            playerHQ.hp = 500;
+            waveNumber = 2; // Волна 3: рой разведчиков + танк
+            spawnWave();
+            const dt = 0.25;
+            let t = 0;
+            while (t < 240 && playerHQ.hp === 500) {
+                t += dt;
+                updateEnemiesAI(t, dt);
+            }
+            return { hp: playerHQ.hp, arrivedAtSec: t, spawned: enemies.length };
+        })()`, ctx);
+
+        expect(result.spawned).toBeGreaterThan(0);
+        expect(result.hp).toBeLessThan(500);
+        expect(result.arrivedAtSec).toBeLessThan(240);
+    });
+});
+
+describe('T-12: синхронизация headless_wave_test.js с js/ai.js и DIFFICULTY_CONFIGS', () => {
+    const headless = require('../scripts/headless_wave_test.js');
+
+    it('generateWaveRoster берёт состав волн из buildWaveRoster (js/ai.js) и учитывает лимиты карты', () => {
+        const sim = headless.loadSimulationContext('normal', '1024');
+        const roster10 = headless.generateWaveRoster(10, '1024');
+        expect(roster10).toEqual(sim.buildWaveRoster(10, sim.MAX_WAVE_SIZE));
+        expect(roster10[0]).toBe('boss');
+    });
+
+    it('simulateWaveBattle учитывает сложность DIFFICULTY_CONFIGS и способности юнитов', () => {
+        const easyW10 = headless.simulateWaveBattle(10, { difficulty: 'easy', mapSize: '256' });
+        const hardW10 = headless.simulateWaveBattle(10, { difficulty: 'hard', mapSize: '256' });
+        expect(easyW10.result).toBe('VICTORY');
+        expect(easyW10.abilitiesUsed.shield).toBeGreaterThan(0);
+        expect(easyW10.abilitiesUsed.siegeShots).toBeGreaterThan(0);
+        expect(easyW10.abilitiesUsed.bossVolleys).toBeGreaterThan(0);
+        // На высокой сложности волна объективно тяжелее (меньше выживших или дольше бой / поражение)
+        const easySurvived = easyW10.alliesSurvived || 0;
+        const hardSurvived = hardW10.alliesSurvived || 0;
+        expect(easySurvived >= hardSurvived).toBe(true);
     });
 });

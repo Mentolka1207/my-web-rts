@@ -36,6 +36,63 @@ function applyDamageToAlly(target, amount) {
     }
 }
 
+function getMaxActiveEnemies() {
+    if (typeof MAP_SIZE_CONFIGS !== 'undefined' && typeof currentMapSize !== 'undefined' &&
+        MAP_SIZE_CONFIGS[currentMapSize] && typeof MAP_SIZE_CONFIGS[currentMapSize].maxActiveEnemies === 'number') {
+        return MAP_SIZE_CONFIGS[currentMapSize].maxActiveEnemies;
+    }
+    return (typeof MAX_ACTIVE_ENEMIES !== 'undefined') ? MAX_ACTIVE_ENEMIES : 50;
+}
+
+function getEnemyMarchSpeedMult() {
+    if (typeof MAP_SIZE_CONFIGS !== 'undefined' && typeof currentMapSize !== 'undefined' &&
+        MAP_SIZE_CONFIGS[currentMapSize] && typeof MAP_SIZE_CONFIGS[currentMapSize].enemyMarchSpeedMult === 'number') {
+        return MAP_SIZE_CONFIGS[currentMapSize].enemyMarchSpeedMult;
+    }
+    return 1.0;
+}
+
+function buildWaveRoster(targetWave, maxWaveSize = (typeof MAX_WAVE_SIZE !== 'undefined' ? MAX_WAVE_SIZE : 25)) {
+    const waveRoster = [];
+
+    if (targetWave === 10 || (targetWave > 10 && targetWave % 10 === 0)) {
+        // БОСС-ВОЛНА: Левиафан во главе ударной флотилии
+        waveRoster.push('boss');
+        waveRoster.push('tank', 'tank');
+        for (let i = 0; i < 4; i++) waveRoster.push('scout');
+        for (let i = 0; i < 3; i++) waveRoster.push('standard');
+    } else if (targetWave % 3 === 0) {
+        // Волна «Рой перехватчиков»
+        const swarmCount = Math.min(8, 3 + Math.floor(targetWave * 0.7));
+        for (let i = 0; i < swarmCount; i++) waveRoster.push('scout');
+        waveRoster.push('tank');
+    } else if (targetWave % 4 === 0) {
+        // Волна «Осадный таран»
+        const armorTanks = Math.min(4, 2 + Math.floor(targetWave / 3));
+        for (let i = 0; i < armorTanks; i++) waveRoster.push('tank');
+        for (let i = 0; i < 4; i++) waveRoster.push('standard');
+    } else {
+        // Сбалансированная волна
+        const standardCount = Math.min(8, 3 + Math.floor(targetWave * 0.5));
+        for (let i = 0; i < standardCount; i++) waveRoster.push('standard');
+
+        if (targetWave >= 3) {
+            const scoutCount = Math.min(6, 1 + Math.floor((targetWave - 2) * 0.8));
+            for (let i = 0; i < scoutCount; i++) waveRoster.push('scout');
+        }
+
+        if (targetWave >= 5) {
+            const tankCount = Math.min(4, 1 + Math.floor((targetWave - 4) * 0.5));
+            for (let i = 0; i < tankCount; i++) waveRoster.push('tank');
+        }
+    }
+
+    if (waveRoster.length > maxWaveSize) {
+        waveRoster.length = maxWaveSize;
+    }
+    return waveRoster;
+}
+
 // Спавн волн врагов
 function spawnWave() {
     waveWarningGiven = false;
@@ -44,56 +101,23 @@ function spawnWave() {
     const isBossWave = (waveNumber === 10 || (waveNumber > 10 && waveNumber % 10 === 0));
     if (typeof playWaveSound === 'function') playWaveSound(isBossWave);
 
-    const waveRoster = [];
+    const waveRoster = buildWaveRoster(waveNumber, MAX_WAVE_SIZE);
 
-    if (waveNumber === 10 || (waveNumber > 10 && waveNumber % 10 === 0)) {
-        // БОСС-ВОЛНА: Левиафан во главе ударной флотилии
-        waveRoster.push('boss');
-        waveRoster.push('tank', 'tank');
-        for (let i = 0; i < 4; i++) waveRoster.push('scout');
-        for (let i = 0; i < 3; i++) waveRoster.push('standard');
-        showTacticalAlert(typeof t === 'function' ? t('ALERT_LEVIATHAN', waveNumber) : `⚠️ ВНИМАНИЕ: ВОЛНА ${waveNumber} — ПРИБЛИЖАЕТСЯ ЛЕВИАФАН!`, true);
-    } else {
-        // Комбинированные тактические волны
-        if (waveNumber % 3 === 0) {
-            // Волна «Рой перехватчиков»
-            const swarmCount = Math.min(8, 3 + Math.floor(waveNumber * 0.7));
-            for (let i = 0; i < swarmCount; i++) waveRoster.push('scout');
-            waveRoster.push('tank');
+    if (typeof showTacticalAlert === 'function') {
+        if (isBossWave) {
+            showTacticalAlert(typeof t === 'function' ? t('ALERT_LEVIATHAN', waveNumber) : `⚠️ ВНИМАНИЕ: ВОЛНА ${waveNumber} — ПРИБЛИЖАЕТСЯ ЛЕВИАФАН!`, true);
+        } else if (waveNumber % 3 === 0) {
             showTacticalAlert(typeof t === 'function' ? t('ALERT_SWARM', waveNumber) : `🌊 Волна ${waveNumber}: РОЙ ПЕРЕХВАТЧИКОВ! Приготовьте плотный строй!`, false);
         } else if (waveNumber % 4 === 0) {
-            // Волна «Осадный таран»
-            const armorTanks = Math.min(4, 2 + Math.floor(waveNumber / 3));
-            for (let i = 0; i < armorTanks; i++) waveRoster.push('tank');
-            for (let i = 0; i < 4; i++) waveRoster.push('standard');
             showTacticalAlert(typeof t === 'function' ? t('ALERT_ARMORED', waveNumber) : `🌊 Волна ${waveNumber}: ОСАДНЫЙ ТАРАН! Требуется осадный режим или фокус огня!`, false);
         } else {
-            // Сбалансированная волна
-            const standardCount = Math.min(8, 3 + Math.floor(waveNumber * 0.5));
-            for (let i = 0; i < standardCount; i++) waveRoster.push('standard');
-
-            if (waveNumber >= 3) {
-                const scoutCount = Math.min(6, 1 + Math.floor((waveNumber - 2) * 0.8));
-                for (let i = 0; i < scoutCount; i++) waveRoster.push('scout');
-            }
-
-            if (waveNumber >= 5) {
-                const tankCount = Math.min(4, 1 + Math.floor((waveNumber - 4) * 0.5));
-                for (let i = 0; i < tankCount; i++) waveRoster.push('tank');
-            }
-
             showTacticalAlert(typeof t === 'function' ? t('ALERT_STANDARD', waveNumber) : `🌊 Надвигается Волна ${waveNumber}! Защищайте периметр базы!`, false);
         }
     }
 
-    // Ограничение максимального размера волны (Cap)
-    if (waveRoster.length > MAX_WAVE_SIZE) {
-        waveRoster.length = MAX_WAVE_SIZE;
-    }
-
-    // Ограничение общего количества активных врагов на карте для сохранения 60 FPS
+    // Ограничение общего количества активных врагов на карте с учётом масштаба карты
     const activeCount = enemies.length;
-    const spawnBudget = Math.max(0, MAX_ACTIVE_ENEMIES - activeCount);
+    const spawnBudget = Math.max(0, getMaxActiveEnemies() - activeCount);
     const countToSpawn = Math.min(waveRoster.length, spawnBudget);
 
     for (let i = 0; i < countToSpawn; i++) {
@@ -194,6 +218,7 @@ function getEnemyHQDamage(enemy) {
 
 // Поведение и логика FSM для всех вражеских юнитов
 function updateEnemiesAI(currentTime, delta) {
+    const marchMult = getEnemyMarchSpeedMult();
     for (let i = 0; i < enemies.length; i++) {
         const enemy = enemies[i];
         if (enemy.hp <= 0) continue;
@@ -306,8 +331,9 @@ function updateEnemiesAI(currentTime, delta) {
                         }
                         if (!followsField) findBypassDirection(pos.x, pos.z, targetPos.x, targetPos.z, _v1);
                     }
-                    pos.addScaledVector(_v1, enemy.speed * delta);
-                    enemy.velocity.copy(_v1).multiplyScalar(enemy.speed);
+                    const marchSpeed = enemy.speed * marchMult;
+                    pos.addScaledVector(_v1, marchSpeed * delta);
+                    enemy.velocity.copy(_v1).multiplyScalar(marchSpeed);
                     enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
                 }
             }
@@ -352,8 +378,9 @@ function updateEnemiesAI(currentTime, delta) {
                     }
                 }
 
-                pos.addScaledVector(_v1, enemy.speed * delta);
-                enemy.velocity.copy(_v1).multiplyScalar(enemy.speed);
+                const marchSpeed = enemy.speed * marchMult;
+                pos.addScaledVector(_v1, marchSpeed * delta);
+                enemy.velocity.copy(_v1).multiplyScalar(marchSpeed);
                 enemy.mesh.rotation.y = THREE.MathUtils.lerpAngle(enemy.mesh.rotation.y, Math.atan2(-_v1.z, _v1.x), 10 * delta);
             }
         } else {

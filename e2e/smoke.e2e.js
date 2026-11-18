@@ -25,3 +25,15 @@ for (const [name, url] of [
         expect(totals).toMatchObject({ matchesPlayed: 1, victories: 1 });
     });
 }
+
+test('T-12 PWA manifest и Service Worker проходят проверку установки Chromium CDP без ошибок', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'CDP Page.getInstallabilityErrors поддерживается только в Chromium');
+    await openGame(page, '/index.html');
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    const manifestHref = await page.evaluate(() => document.querySelector('link[rel="manifest"]')?.getAttribute('href'));
+    expect(manifestHref).toBe('manifest.json');
+
+    const cdp = await page.context().newCDPSession(page);
+    const res = await cdp.send('Page.getInstallabilityErrors');
+    expect(res.installabilityErrors || []).toEqual([]);
+});

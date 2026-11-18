@@ -7,6 +7,42 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x090c16);
 scene.fog = new THREE.Fog(0x090c16, 65, 125);
 
+// Процедурная эквиректангулярная карта окружения (T-08): даёт блики и читаемость металлических корпусов без внешних HDRI
+function createProceduralEnvMap() {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    const grad = ctx.createLinearGradient(0, 0, 0, 64);
+    grad.addColorStop(0.0, '#cfe8ff');
+    grad.addColorStop(0.28, '#5ea8e8');
+    grad.addColorStop(0.50, '#2a5885');
+    grad.addColorStop(0.55, '#19324d');
+    grad.addColorStop(1.0, '#0d1524');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 64);
+
+    ctx.fillStyle = 'rgba(180, 245, 255, 0.55)';
+    ctx.fillRect(0, 10, 128, 5);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.fillRect(16, 4, 32, 4);
+    ctx.fillRect(78, 6, 30, 4);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    if (typeof THREE.SRGBColorSpace !== 'undefined') {
+        tex.colorSpace = THREE.SRGBColorSpace;
+    }
+    return tex;
+}
+const proceduralEnvMap = createProceduralEnvMap();
+if (proceduralEnvMap) {
+    scene.environment = proceduralEnvMap;
+}
+
 const camera = new THREE.PerspectiveCamera(45, (typeof window !== 'undefined' && window.innerWidth ? window.innerWidth / window.innerHeight : 1), 1, 3500);
 const camDir = new THREE.Vector3(0, 42, 32).normalize();
 let BASE_CAM_DIST = Math.hypot(42, 32);

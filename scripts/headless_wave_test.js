@@ -1,7 +1,6 @@
 // =============================================================================
 // scripts/headless_wave_test.js — Headless-симуляция волн выживания на 1000x
-// Позволяет за секунды протестировать баланс 20+ волн без графического рендера:
-// экономику, DPS, кулдауны, состав волн и шансы выживания.
+// Использует общие константы и функции волн/сложности из js/config.js, js/maps.js, js/ai.js.
 // Запуск: node scripts/headless_wave_test.js
 // =============================================================================
 
@@ -10,108 +9,202 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const ROOT = path.resolve(__dirname, '..');
-const configCode = fs.readFileSync(path.join(ROOT, 'js', 'config.js'), 'utf8');
-const ctx = vm.createContext({
-    console,
-    THREE: { Vector3: class { constructor() { this.x = 0; this.y = 0; this.z = 0; } } },
-    window: { addEventListener() {} }
-});
-vm.runInContext(configCode, ctx);
 
-const { DRONE_TYPES, ENEMY_TYPES } = vm.runInContext(`({ DRONE_TYPES, ENEMY_TYPES })`, ctx);
-
-function generateWaveRoster(waveNumber) {
-    const waveRoster = [];
-
-    if (waveNumber === 10 || (waveNumber > 10 && waveNumber % 10 === 0)) {
-        waveRoster.push('boss');
-        waveRoster.push('tank', 'tank');
-        for (let i = 0; i < 4; i++) waveRoster.push('scout');
-        for (let i = 0; i < 3; i++) waveRoster.push('standard');
-    } else {
-        if (waveNumber % 3 === 0) {
-            const swarmCount = Math.min(8, 3 + Math.floor(waveNumber * 0.7));
-            for (let i = 0; i < swarmCount; i++) waveRoster.push('scout');
-            waveRoster.push('tank');
-        } else if (waveNumber % 4 === 0) {
-            const armorTanks = Math.min(4, 2 + Math.floor(waveNumber / 3));
-            for (let i = 0; i < armorTanks; i++) waveRoster.push('tank');
-            for (let i = 0; i < 4; i++) waveRoster.push('standard');
-        } else {
-            const standardCount = Math.min(8, 3 + Math.floor(waveNumber * 0.5));
-            for (let i = 0; i < standardCount; i++) waveRoster.push('standard');
-
-            if (waveNumber >= 3) {
-                const scoutCount = Math.min(6, 1 + Math.floor((waveNumber - 2) * 0.8));
-                for (let i = 0; i < scoutCount; i++) waveRoster.push('scout');
+function loadSimulationContext(difficulty = 'normal', mapSize = '256') {
+    const ctx = vm.createContext({
+        console,
+        THREE: {
+            Vector3: class {
+                constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+                set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
             }
+        },
+        window: { addEventListener() {} },
+        document: { getElementById: () => null, addEventListener() {} },
+        setTimeout: () => 0
+    });
+    ctx.globalThis = ctx;
 
-            if (waveNumber >= 5) {
-                const tankCount = Math.min(4, 1 + Math.floor((waveNumber - 4) * 0.5));
-                for (let i = 0; i < tankCount; i++) waveRoster.push('tank');
-            }
-        }
+    for (const rel of ['js/config.js', 'js/maps.js', 'js/ai.js']) {
+        const filename = path.join(ROOT, rel);
+        vm.runInContext(fs.readFileSync(filename, 'utf8'), ctx, { filename });
     }
 
-    if (waveRoster.length > 25) {
-        waveRoster.length = 25;
-    }
-    return waveRoster;
+    vm.runInContext(
+        `currentDifficulty = ${JSON.stringify(difficulty)}; currentMapSize = ${JSON.stringify(String(mapSize))};`,
+        ctx
+    );
+
+    return vm.runInContext(`({
+        DRONE_TYPES,
+        ENEMY_TYPES,
+        DIFFICULTY_CONFIGS,
+        MAP_SIZE_CONFIGS,
+        MAX_WAVE_SIZE,
+        buildWaveRoster,
+        getMaxActiveEnemies,
+        getWaveInterval
+    })`, ctx);
 }
 
-function simulateWaveBattle(waveNumber, strategy = 'balanced') {
+function generateWaveRoster(waveNumber, mapSize = '256') {
+    const sim = loadSimulationContext('normal', mapSize);
+    const roster = sim.buildWaveRoster(waveNumber, sim.MAX_WAVE_SIZE);
+    const maxActive = sim.getMaxActiveEnemies();
+    return roster.slice(0, maxActive);
+}
+
+function applyDamageToAllyHeadless(target, amount) {
+    if (target.shield && target.shield > 0) {
+        if (target.shield >= amount) {
+            target.shield -= amount;
+        } else {
+            const remainder = amount - target.shield;
+            target.shield = 0;
+            target.hp -= remainder;
+        }
+    } else {
+        target.hp -= amount;
+    }
+}
+
+function applyDamageToEnemyHeadless(target, amount) {
+    if (target.shield && target.shield > 0) {
+        target.shield -= amount;
+        if (target.shield < 0) target.shield = 0;
+    } else {
+        target.hp -= amount;
+    }
+}
+
+function simulateWaveBattle(waveNumber, strategyOrOptions = 'balanced') {
+    const opts = typeof strategyOrOptions === 'string'
+        ? { strategy: strategyOrOptions }
+        : (strategyOrOptions || {});
+    const strategy = opts.strategy || 'balanced';
+    const difficulty = opts.difficulty || 'normal';
+    const mapSize = String(opts.mapSize || '256');
+    const capturedNodes = typeof opts.capturedNodes === 'number' ? opts.capturedNodes : 1;
+
+    const sim = loadSimulationContext(difficulty, mapSize);
+    const { DRONE_TYPES, ENEMY_TYPES, DIFFICULTY_CONFIGS } = sim;
+    const diff = DIFFICULTY_CONFIGS[difficulty] || DIFFICULTY_CONFIGS.normal;
+    const waveInterval = sim.getWaveInterval();
+    const maxActiveEnemies = sim.getMaxActiveEnemies();
+
     let energy = 100;
     const allies = [];
     const enemies = [];
 
-    // Начальный гарнизон игрока
-    for (let i = 0; i < 4; i++) {
-        allies.push({ ...DRONE_TYPES.standard, hp: DRONE_TYPES.standard.hp, lastAttack: 0 });
+    const createAllyUnit = (type, spawnTime = 0) => {
+        const stats = DRONE_TYPES[type] || DRONE_TYPES.standard;
+        const hp = Math.round(stats.hp * diff.allyHpMult);
+        return {
+            ...stats,
+            type,
+            hp,
+            maxHp: hp,
+            shield: 0,
+            shieldTimer: 0,
+            abilityActive: false,
+            abilityTimer: 0,
+            lastAbilityTime: -99,
+            isSieged: type === 'tank',
+            lastAttack: spawnTime
+        };
+    };
+
+    // Начальный гарнизон игрока (5 стандартных дронов, как в initStartingUnits)
+    for (let i = 0; i < 5; i++) {
+        allies.push(createAllyUnit('standard', 0));
     }
 
-    // Доход игрока за время подготовки (60с) + 1 захваченная точка
-    const prepIncome = 60 * (5 + 3);
+    // Доход игрока за интервал волны (зависит от сложности) + удержанные точки сбора
+    const prepIncome = waveInterval * (diff.passiveIncome + capturedNodes * 3);
     energy += prepIncome;
 
-    // Производство по выбранной стратегии
     if (strategy === 'balanced') {
         while (energy >= DRONE_TYPES.tank.cost) {
-            allies.push({ ...DRONE_TYPES.tank, hp: DRONE_TYPES.tank.hp, lastAttack: 0 });
+            allies.push(createAllyUnit('tank', 0));
             energy -= DRONE_TYPES.tank.cost;
         }
         while (energy >= DRONE_TYPES.standard.cost) {
-            allies.push({ ...DRONE_TYPES.standard, hp: DRONE_TYPES.standard.hp, lastAttack: 0 });
+            allies.push(createAllyUnit('standard', 0));
             energy -= DRONE_TYPES.standard.cost;
         }
     } else if (strategy === 'scouts') {
         while (energy >= DRONE_TYPES.scout.cost) {
-            allies.push({ ...DRONE_TYPES.scout, hp: DRONE_TYPES.scout.hp, lastAttack: 0 });
+            allies.push(createAllyUnit('scout', 0));
             energy -= DRONE_TYPES.scout.cost;
         }
     }
 
-    // Спавн вражеской волны
-    const roster = generateWaveRoster(waveNumber);
+    // Спавн вражеской волны из общего генератора js/ai.js с учётом лимита карты
+    const fullRoster = sim.buildWaveRoster(waveNumber, sim.MAX_WAVE_SIZE);
+    const roster = fullRoster.slice(0, maxActiveEnemies);
     for (const eType of roster) {
-        const stats = ENEMY_TYPES[eType];
-        enemies.push({ ...stats, hp: stats.hp, shield: stats.shield || 0, lastAttack: 0 });
+        const stats = ENEMY_TYPES[eType] || ENEMY_TYPES.standard;
+        const hp = Math.round(stats.hp * diff.enemyHpMult);
+        const damage = Math.round(stats.damage * diff.enemyDamageMult);
+        const shield = stats.shield ? Math.round(stats.shield * diff.enemyHpMult) : 0;
+        enemies.push({
+            ...stats,
+            type: eType,
+            hp,
+            maxHp: hp,
+            damage,
+            shield,
+            maxShield: shield,
+            lastAttack: 0
+        });
     }
 
     // Headless-симуляция с фиксированным шагом 0.05с (1000x скорость)
     const dt = 0.05;
     let simTime = 0;
-    const maxTime = 120.0; // 2 минуты макс
+    const maxTime = 120.0;
+    const abilitiesUsed = { shield: 0, overdrive: 0, siegeShots: 0, bossVolleys: 0 };
 
     while (simTime < maxTime) {
         simTime += dt;
 
-        // Огонь союзников по врагам (Focus Fire: раненые цели в приоритете)
+        // Обновление таймеров и активация способностей юнитов
         for (const a of allies) {
             if (a.hp <= 0) continue;
-            if (simTime - a.lastAttack >= a.attackCooldown) {
-                // Выбор цели с наименьшим текущим HP
+            if (a.type === 'standard') {
+                if (a.shield > 0) {
+                    a.shieldTimer -= dt;
+                    if (a.shieldTimer <= 0) a.shield = 0;
+                }
+                if (simTime - a.lastAbilityTime >= 12.0 && a.shield <= 0) {
+                    a.lastAbilityTime = simTime;
+                    a.shield = 50;
+                    a.shieldTimer = 6.0;
+                    abilitiesUsed.shield++;
+                }
+            } else if (a.type === 'scout') {
+                if (a.abilityActive) {
+                    a.abilityTimer -= dt;
+                    if (a.abilityTimer <= 0) a.abilityActive = false;
+                }
+                if (simTime - a.lastAbilityTime >= 10.0 && !a.abilityActive) {
+                    a.lastAbilityTime = simTime;
+                    a.abilityActive = true;
+                    a.abilityTimer = 3.0;
+                    abilitiesUsed.overdrive++;
+                }
+            }
+        }
+
+        // Огонь союзников (Focus Fire + осадный сплэш танков + ускоренный темп разведчика в форсаже)
+        for (const a of allies) {
+            if (a.hp <= 0) continue;
+            const effectiveCd = (a.type === 'scout' && a.abilityActive)
+                ? a.attackCooldown * 0.75
+                : a.attackCooldown;
+            if (simTime - a.lastAttack >= effectiveCd) {
                 let target = null;
-                let minHp = 999999;
+                let minHp = Infinity;
                 for (const e of enemies) {
                     if (e.hp > 0 && e.hp < minHp) {
                         minHp = e.hp;
@@ -120,39 +213,69 @@ function simulateWaveBattle(waveNumber, strategy = 'balanced') {
                 }
                 if (target) {
                     a.lastAttack = simTime;
-                    if (target.shield && target.shield > 0) {
-                        target.shield -= a.damage;
-                        if (target.shield < 0) {
-                            target.hp += target.shield;
-                            target.shield = 0;
+                    applyDamageToEnemyHeadless(target, a.damage);
+
+                    // Сплэш осадного танка (радиус 2.2: до 2 ближайших живых врагов получают 50% урона)
+                    if (a.isSieged) {
+                        abilitiesUsed.siegeShots++;
+                        let splashHits = 0;
+                        const splashDmg = Math.floor(a.damage * 0.5);
+                        for (const other of enemies) {
+                            if (other !== target && other.hp > 0) {
+                                applyDamageToEnemyHeadless(other, splashDmg);
+                                splashHits++;
+                                if (splashHits >= 2) break;
+                            }
                         }
-                    } else {
-                        target.hp -= a.damage;
                     }
-                    if (target.hp <= 0 && !target.rewardGiven) {
-                        target.rewardGiven = true;
-                        energy += (target.reward || 10);
-                        // Экстренный заказ подкрепления при накоплении энергии
-                        if (energy >= DRONE_TYPES.standard.cost) {
-                            allies.push({ ...DRONE_TYPES.standard, hp: DRONE_TYPES.standard.hp, lastAttack: simTime });
-                            energy -= DRONE_TYPES.standard.cost;
+
+                    for (const e of enemies) {
+                        if (e.hp <= 0 && !e.rewardGiven) {
+                            e.rewardGiven = true;
+                            energy += (e.reward || 10);
+                            if (energy >= DRONE_TYPES.standard.cost) {
+                                allies.push(createAllyUnit('standard', simTime));
+                                energy -= DRONE_TYPES.standard.cost;
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Огонь врагов по союзникам
+        // Огонь врагов по союзникам (учёт залпа Босса по 3 целям)
         for (const e of enemies) {
             if (e.hp <= 0) continue;
             if (simTime - e.lastAttack >= e.attackCooldown) {
-                let target = null;
-                for (const a of allies) {
-                    if (a.hp > 0) { target = a; break; }
-                }
-                if (target) {
-                    e.lastAttack = simTime;
-                    target.hp -= e.damage;
+                if (e.type === 'boss') {
+                    const targets = [];
+                    for (const a of allies) {
+                        if (a.hp > 0) {
+                            targets.push(a);
+                            if (targets.length >= 3) break;
+                        }
+                    }
+                    if (targets.length > 0) {
+                        e.lastAttack = simTime;
+                        abilitiesUsed.bossVolleys++;
+                        if (targets.length <= 1) {
+                            applyDamageToAllyHeadless(targets[0], e.damage);
+                        } else {
+                            const splitDmg = Math.floor(e.damage * 0.75);
+                            for (const tgt of targets) {
+                                applyDamageToAllyHeadless(tgt, splitDmg);
+                            }
+                        }
+                    }
+                } else {
+                    let target = null;
+                    for (const a of allies) {
+                        if (a.hp > 0) { target = a; break; }
+                    }
+                    if (target) {
+                        e.lastAttack = simTime;
+                        applyDamageToAllyHeadless(target, e.damage);
+                    }
                 }
             }
         }
@@ -163,43 +286,87 @@ function simulateWaveBattle(waveNumber, strategy = 'balanced') {
         if (livingEnemies === 0) {
             return {
                 wave: waveNumber,
+                difficulty,
+                mapSize,
                 result: 'VICTORY',
                 time: simTime,
                 alliesSurvived: livingAllies,
-                enemiesRosterSize: roster.length
+                enemiesRosterSize: roster.length,
+                maxActiveEnemies,
+                abilitiesUsed
             };
         }
         if (livingAllies === 0) {
             return {
                 wave: waveNumber,
+                difficulty,
+                mapSize,
                 result: 'DEFEAT',
                 time: simTime,
                 enemiesRemaining: livingEnemies,
-                enemiesRosterSize: roster.length
+                enemiesRosterSize: roster.length,
+                maxActiveEnemies,
+                abilitiesUsed
             };
         }
     }
 
-    return { wave: waveNumber, result: 'TIMEOUT', time: maxTime };
+    return {
+        wave: waveNumber,
+        difficulty,
+        mapSize,
+        result: 'TIMEOUT',
+        time: maxTime,
+        enemiesRosterSize: roster.length,
+        maxActiveEnemies,
+        abilitiesUsed
+    };
 }
 
-console.log('===============================================================');
-console.log('🛰️ HEADLESS SIMULATION: Баланс 15 волн выживания на скорости 1000x');
-console.log('===============================================================');
-
-let passedWaves = 0;
-for (let w = 1; w <= 15; w++) {
-    const res = simulateWaveBattle(w, 'balanced');
-    const statusIcon = res.result === 'VICTORY' ? '✅' : '❌';
-    console.log(
-        `${statusIcon} Волна ${String(w).padStart(2)}: ${res.result.padEnd(8)} | ` +
-        `Врагов: ${String(res.enemiesRosterSize).padStart(2)} | ` +
-        `Время боя: ${res.time.toFixed(1)}с | ` +
-        `Выжило союзников: ${res.alliesSurvived !== undefined ? res.alliesSurvived : 0}`
-    );
-    if (res.result === 'VICTORY') passedWaves++;
+function runSimulationSuite(options = {}) {
+    const maxWaves = options.waves || 15;
+    const results = [];
+    let passedWaves = 0;
+    for (let w = 1; w <= maxWaves; w++) {
+        const res = simulateWaveBattle(w, options);
+        results.push(res);
+        if (res.result === 'VICTORY') passedWaves++;
+    }
+    return { passedWaves, totalWaves: maxWaves, results };
 }
 
-console.log('---------------------------------------------------------------');
-console.log(`Итог прогона: ${passedWaves}/15 волн успешно сбалансированы.`);
-console.log('===============================================================');
+if (require.main === module) {
+    const difficulty = process.argv[2] || 'normal';
+    const mapSize = process.argv[3] || '256';
+    console.log('===============================================================');
+    console.log(`🛰️ HEADLESS SIMULATION: 15 волн (diff=${difficulty}, map=${mapSize})`);
+    console.log('===============================================================');
+
+    const { passedWaves, totalWaves, results } = runSimulationSuite({
+        strategy: 'balanced',
+        difficulty,
+        mapSize
+    });
+    for (const res of results) {
+        const statusIcon = res.result === 'VICTORY' ? '✅' : '❌';
+        console.log(
+            `${statusIcon} Волна ${String(res.wave).padStart(2)}: ${res.result.padEnd(8)} | ` +
+            `Врагов: ${String(res.enemiesRosterSize).padStart(2)} | ` +
+            `Время боя: ${res.time.toFixed(1)}с | ` +
+            `Выжило союзников: ${res.alliesSurvived !== undefined ? res.alliesSurvived : 0}`
+        );
+    }
+
+    console.log('---------------------------------------------------------------');
+    console.log(`Итог прогона: ${passedWaves}/${totalWaves} волн успешно сбалансированы.`);
+    console.log('===============================================================');
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        loadSimulationContext,
+        generateWaveRoster,
+        simulateWaveBattle,
+        runSimulationSuite
+    };
+}
