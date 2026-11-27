@@ -12,6 +12,9 @@ module.exports = defineConfig({
     testDir: './e2e',
     testMatch: '**/*.e2e.js',
     timeout: 90_000,
+    // В CI весь прогон останавливается сам за 40 мин (job — 45 мин, .github/workflows/test.yml):
+    // так Playwright успевает записать json/html-отчёты, а не обрывается отменой job (T-18)
+    globalTimeout: process.env.CI ? 40 * 60_000 : 0,
     expect: { timeout: 15_000 },
     fullyParallel: false,
     workers: 1, // программный WebGL тяжёлый: последовательный прогон стабильнее

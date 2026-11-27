@@ -1,5 +1,7 @@
 # Tabhold
 
+[![Tests](https://github.com/Mentolka1207/my-web-rts/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Mentolka1207/my-web-rts/actions/workflows/test.yml?query=branch%3Amain)
+
 **Рой дронов против волн. Только ты и ИИ.**
 
 Минималистичная 3D RTS на Three.js с продвинутым поиском пути, групповым ИИ и высокой производительностью.  
@@ -113,6 +115,11 @@ npm test            # юнит-тесты (Vitest)
 npm run e2e         # e2e-тесты (Playwright: npx playwright install chromium webkit)
 npm run e2e:desktop # только Chromium (так же гоняет CI, плюс проект mobile)
 ```
+
+Бейдж **Tests** вверху показывает результат последнего прогона CI на `main` (`.github/workflows/test.yml`), а не
+число, записанное вручную. Сколько тестов прошло, упало и сколько шёл прогон — в сводке на странице прогона
+(`scripts/ci-summary.js` читает json-отчёты Vitest и Playwright). Там же артефакты `vitest-results` и
+`playwright-report` (html-отчёт, trace и скриншоты упавших тестов), хранятся 14 дней.
 
 Подробнее:
 - [`AGENTS.md`](AGENTS.md) — архитектура, соглашения, правила для ИИ-агентов

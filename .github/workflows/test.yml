@@ -15,13 +15,27 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
+      # json-отчёт — источник чисел для сводки прогона (T-18); default-репортер оставляет лог как был
+      - run: npx vitest run --reporter=default --reporter=json --outputFile.json=vitest-results.json
+      - name: Test summary (unit)
+        if: ${{ !cancelled() }}
+        run: node scripts/ci-summary.js vitest vitest-results.json
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: vitest-results
+          path: vitest-results.json
+          if-no-files-found: warn
+          retention-days: 14
 
-  # Playwright e2e: 36 тестов, которые сторожат S1/S2-регрессии из bugs.md.
+  # Playwright e2e (desktop + mobile, Chromium): регрессии S1/S2 из bugs.md. Число тестов — в сводке прогона.
   # WebGL в контейнере без GPU рисуется через SwiftShader (см. playwright.config.js).
+  # Время: 19.0 мин (main @ d79351f, 18.11) и 19.7 мин (PR #5, 27.11); один медленный раннер не уложился в 30.
+  # Поэтому Playwright сам останавливается по globalTimeout (40 мин, playwright.config.js) и пишет отчёты,
+  # а job (45 мин) — запасной предохранитель. Отмена job не даёт выгрузить отчёт: !cancelled() её пропускает.
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,12 +51,17 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Run e2e (desktop + mobile, Chromium)
         run: npm run e2e:ci
+      - name: Test summary (e2e)
+        if: ${{ !cancelled() }}
+        run: node scripts/ci-summary.js e2e e2e/results.json
+      # Отчёт выгружается при любом исходе, кроме отмены: html-отчёт, json и trace/скриншоты упавших тестов
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: ${{ !cancelled() }}
         with:
           name: playwright-report
           path: |
             playwright-report/
             test-results/
             e2e/results.json
+          if-no-files-found: warn
           retention-days: 14
