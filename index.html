@@ -3,9 +3,10 @@
 
 <head>
     <meta charset="UTF-8">
-    <!-- Масштаб страницы заблокирован намеренно: щипок на поле — это зум камеры.
-         Известное исключение из WCAG 1.4.4, см. build-log.md. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <!-- Масштаб страницы не заблокирован (WCAG 1.4.4, T-13): щипок по меню и панелям увеличивает страницу.
+         Щипок по полю — зум камеры: холст #canvas-container ловит касания и запрещает браузерные жесты
+         через touch-action: none (style.css), обработчики в js/input.js. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Tabhold</title>
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
