@@ -1,0 +1,2710 @@
+{
+  "generatedAt": "2026-11-27T15:22:39.181Z",
+  "waves": 12,
+  "seed": "11",
+  "difficulty": "normal",
+  "runs": [
+    {
+      "cellSize": 4,
+      "routeLen": 334,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "DEFEAT",
+      "wavesSeen": 12,
+      "simSeconds": 748,
+      "unitsProduced": 58,
+      "enemiesKilled": 83,
+      "alliesLost": 62,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 67.2,
+          "lastReachSec": 68.6,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 67.2,
+          "lastReachSec": 68.6,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 4
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 35.6,
+          "lastReachSec": 117.8,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 10,
+          "backlogAtNextWave": 1
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 67.8,
+          "lastReachSec": 119.6,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 8,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 36,
+          "lastReachSec": 108,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 3,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 35.6,
+          "lastReachSec": 120.8,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 15,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 2
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 35,
+          "lastReachSec": 118.8,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 3,
+          "peakEnemiesAlive": 15,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 68,
+          "lastReachSec": 119.6,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 10
+        },
+        {
+          "wave": 9,
+          "spawnAt": 539,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 35.8,
+          "lastReachSec": 104.6,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 8,
+          "peakEnemiesAlive": 19,
+          "backlogAtNextWave": 5
+        },
+        {
+          "wave": 10,
+          "spawnAt": 599,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": 35.8,
+          "lastReachSec": 119.4,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 14,
+          "peakEnemiesAlive": 15,
+          "backlogAtNextWave": 6
+        },
+        {
+          "wave": 11,
+          "spawnAt": 659,
+          "spawned": 18,
+          "roster": {
+            "standard": 8,
+            "scout": 6,
+            "tank": 4
+          },
+          "firstReachSec": 35.2,
+          "lastReachSec": 71.6,
+          "reached": 14,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 2,
+          "peakEnemiesAlive": 24,
+          "backlogAtNextWave": 15
+        },
+        {
+          "wave": 12,
+          "spawnAt": 719,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": null,
+          "lastReachSec": null,
+          "reached": 0,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 0,
+          "alliesLost": 9,
+          "peakEnemiesAlive": 24,
+          "backlogAtNextWave": null
+        }
+      ],
+      "size": "256",
+      "map": "canyon",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 18,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 334,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "SURVIVED",
+      "wavesSeen": 13,
+      "simSeconds": 780,
+      "unitsProduced": 62,
+      "enemiesKilled": 100,
+      "alliesLost": 58,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 67.3,
+          "lastReachSec": 69.3,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 67.3,
+          "lastReachSec": 70.3,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 4
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 35.7,
+          "lastReachSec": 118.9,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 10,
+          "backlogAtNextWave": 1
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 68.5,
+          "lastReachSec": 120.7,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 8,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 300,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 36.5,
+          "lastReachSec": 104.3,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 12,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 6,
+          "spawnAt": 360,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 35.9,
+          "lastReachSec": 121.5,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 8,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 1
+        },
+        {
+          "wave": 7,
+          "spawnAt": 420,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 34.9,
+          "lastReachSec": 117.3,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 1,
+          "peakEnemiesAlive": 14,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 8,
+          "spawnAt": 480,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 68.7,
+          "lastReachSec": 121.5,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 8,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 9,
+          "spawnAt": 540,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 35.9,
+          "lastReachSec": 100.7,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 18,
+          "backlogAtNextWave": 6
+        },
+        {
+          "wave": 10,
+          "spawnAt": 600,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": 36.3,
+          "lastReachSec": 167.9,
+          "reached": 10,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 9,
+          "peakEnemiesAlive": 16,
+          "backlogAtNextWave": 6
+        },
+        {
+          "wave": 11,
+          "spawnAt": 660,
+          "spawned": 18,
+          "roster": {
+            "standard": 8,
+            "scout": 6,
+            "tank": 4
+          },
+          "firstReachSec": 35.5,
+          "lastReachSec": 106.9,
+          "reached": 17,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 3,
+          "peakEnemiesAlive": 24,
+          "backlogAtNextWave": 15
+        },
+        {
+          "wave": 12,
+          "spawnAt": 720,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 36.1,
+          "lastReachSec": 59.7,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 13,
+          "peakEnemiesAlive": 24,
+          "backlogAtNextWave": 5
+        }
+      ],
+      "size": "256",
+      "map": "arena",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 19,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 334,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "DEFEAT",
+      "wavesSeen": 12,
+      "simSeconds": 744,
+      "unitsProduced": 57,
+      "enemiesKilled": 80,
+      "alliesLost": 60,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 66.6,
+          "lastReachSec": 68,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 66.6,
+          "lastReachSec": 68,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 4
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 35.2,
+          "lastReachSec": 117.8,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 2,
+          "peakEnemiesAlive": 10,
+          "backlogAtNextWave": 1
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 67,
+          "lastReachSec": 117.4,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 1,
+          "peakEnemiesAlive": 8,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 36.2,
+          "lastReachSec": 102.4,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 35.4,
+          "lastReachSec": 120,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 13,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 1
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 34.8,
+          "lastReachSec": 116.8,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 2,
+          "peakEnemiesAlive": 14,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 68,
+          "lastReachSec": 117.4,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 3,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 9,
+          "spawnAt": 539,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 35.6,
+          "lastReachSec": 98.2,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 6,
+          "peakEnemiesAlive": 18,
+          "backlogAtNextWave": 6
+        },
+        {
+          "wave": 10,
+          "spawnAt": 599,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": 36,
+          "lastReachSec": 117.2,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 13,
+          "peakEnemiesAlive": 16,
+          "backlogAtNextWave": 6
+        },
+        {
+          "wave": 11,
+          "spawnAt": 659,
+          "spawned": 18,
+          "roster": {
+            "standard": 8,
+            "scout": 6,
+            "tank": 4
+          },
+          "firstReachSec": 35,
+          "lastReachSec": 71.8,
+          "reached": 14,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 24,
+          "backlogAtNextWave": 15
+        },
+        {
+          "wave": 12,
+          "spawnAt": 719,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": null,
+          "lastReachSec": null,
+          "reached": 0,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 0,
+          "alliesLost": 10,
+          "peakEnemiesAlive": 24,
+          "backlogAtNextWave": null
+        }
+      ],
+      "size": "256",
+      "map": "maze",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 18,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 334,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "DEFEAT",
+      "wavesSeen": 10,
+      "simSeconds": 617,
+      "unitsProduced": 47,
+      "enemiesKilled": 62,
+      "alliesLost": 51,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 68.4,
+          "lastReachSec": 70.2,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 68.4,
+          "lastReachSec": 70.2,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 4
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 36.2,
+          "lastReachSec": 119.6,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 10,
+          "backlogAtNextWave": 1
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 68.8,
+          "lastReachSec": 122.4,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 8,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 36.8,
+          "lastReachSec": 112.6,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 36.6,
+          "lastReachSec": 122.4,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 18,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 2
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 35.8,
+          "lastReachSec": 120.8,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 3,
+          "peakEnemiesAlive": 15,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 69.2,
+          "lastReachSec": 122.2,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 7,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 9,
+          "spawnAt": 539,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 36.6,
+          "lastReachSec": 42.8,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 464,
+          "alliesLost": 11,
+          "peakEnemiesAlive": 18,
+          "backlogAtNextWave": 7
+        },
+        {
+          "wave": 10,
+          "spawnAt": 599,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": null,
+          "lastReachSec": null,
+          "reached": 0,
+          "killedBeforeBase": 0,
+          "hqHpStart": 464,
+          "hqHpEnd": 0,
+          "alliesLost": 3,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": null
+        }
+      ],
+      "size": "256",
+      "map": "crossroads",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 14,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 696,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "SURVIVED",
+      "wavesSeen": 13,
+      "simSeconds": 779,
+      "unitsProduced": 60,
+      "enemiesKilled": 91,
+      "alliesLost": 63,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 98,
+          "lastReachSec": 98.6,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 98,
+          "lastReachSec": 98.6,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 4
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 52,
+          "lastReachSec": 172.2,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 10,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 98.6,
+          "lastReachSec": 170.4,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 1,
+          "peakEnemiesAlive": 10,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 52.8,
+          "lastReachSec": 156.4,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 3,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 12
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 52.2,
+          "lastReachSec": 174.6,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 7,
+          "peakEnemiesAlive": 20,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 51.6,
+          "lastReachSec": 169.8,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 12,
+          "peakEnemiesAlive": 21,
+          "backlogAtNextWave": 12
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 99.4,
+          "lastReachSec": 170.8,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 20,
+          "backlogAtNextWave": 11
+        },
+        {
+          "wave": 9,
+          "spawnAt": 539,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 52.2,
+          "lastReachSec": 152.4,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 20,
+          "backlogAtNextWave": 7
+        },
+        {
+          "wave": 10,
+          "spawnAt": 599,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": 52.4,
+          "lastReachSec": 170.2,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 12
+        },
+        {
+          "wave": 11,
+          "spawnAt": 659,
+          "spawned": 18,
+          "roster": {
+            "standard": 8,
+            "scout": 6,
+            "tank": 4
+          },
+          "firstReachSec": 52,
+          "lastReachSec": 105,
+          "reached": 14,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 382,
+          "alliesLost": 15,
+          "peakEnemiesAlive": 30,
+          "backlogAtNextWave": 20
+        },
+        {
+          "wave": 12,
+          "spawnAt": 719,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 52.4,
+          "lastReachSec": 53.6,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 382,
+          "hqHpEnd": 5,
+          "alliesLost": 7,
+          "peakEnemiesAlive": 29,
+          "backlogAtNextWave": 13
+        }
+      ],
+      "size": "512",
+      "map": "canyon",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 45,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 696,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "DEFEAT",
+      "wavesSeen": 11,
+      "simSeconds": 704,
+      "unitsProduced": 53,
+      "enemiesKilled": 70,
+      "alliesLost": 53,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 99.2,
+          "lastReachSec": 99.6,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 99.2,
+          "lastReachSec": 99.8,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 1,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 4
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 52.6,
+          "lastReachSec": 172.8,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 1,
+          "peakEnemiesAlive": 10,
+          "backlogAtNextWave": 1
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 100,
+          "lastReachSec": 172,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 8,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 53,
+          "lastReachSec": 154.8,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 3,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 12
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 52.6,
+          "lastReachSec": 174.8,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 9,
+          "peakEnemiesAlive": 20,
+          "backlogAtNextWave": 11
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 52,
+          "lastReachSec": 170.6,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 11,
+          "peakEnemiesAlive": 24,
+          "backlogAtNextWave": 10
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 100.2,
+          "lastReachSec": 172.6,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 18,
+          "backlogAtNextWave": 11
+        },
+        {
+          "wave": 9,
+          "spawnAt": 539,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 53,
+          "lastReachSec": 149,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 7,
+          "peakEnemiesAlive": 20,
+          "backlogAtNextWave": 12
+        },
+        {
+          "wave": 10,
+          "spawnAt": 599,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": 53,
+          "lastReachSec": 101.2,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 6,
+          "peakEnemiesAlive": 22,
+          "backlogAtNextWave": 11
+        },
+        {
+          "wave": 11,
+          "spawnAt": 659,
+          "spawned": 18,
+          "roster": {
+            "standard": 8,
+            "scout": 6,
+            "tank": 4
+          },
+          "firstReachSec": null,
+          "lastReachSec": null,
+          "reached": 0,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 0,
+          "alliesLost": 11,
+          "peakEnemiesAlive": 29,
+          "backlogAtNextWave": null
+        }
+      ],
+      "size": "512",
+      "map": "arena",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 42,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 696,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "DEFEAT",
+      "wavesSeen": 11,
+      "simSeconds": 687,
+      "unitsProduced": 51,
+      "enemiesKilled": 68,
+      "alliesLost": 55,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 98,
+          "lastReachSec": 99,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 98,
+          "lastReachSec": 99,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 4
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 52,
+          "lastReachSec": 171,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 10,
+          "backlogAtNextWave": 4
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 98.8,
+          "lastReachSec": 171.6,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 1,
+          "peakEnemiesAlive": 11,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 52.8,
+          "lastReachSec": 152.6,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 1,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 9
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 52.2,
+          "lastReachSec": 172.6,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 8,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 10
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 51.4,
+          "lastReachSec": 170.4,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 9,
+          "peakEnemiesAlive": 23,
+          "backlogAtNextWave": 11
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 99.2,
+          "lastReachSec": 171,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 7,
+          "peakEnemiesAlive": 19,
+          "backlogAtNextWave": 11
+        },
+        {
+          "wave": 9,
+          "spawnAt": 539,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 52,
+          "lastReachSec": 146.6,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 20,
+          "backlogAtNextWave": 12
+        },
+        {
+          "wave": 10,
+          "spawnAt": 599,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": 52.2,
+          "lastReachSec": 52.6,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 11,
+          "peakEnemiesAlive": 22,
+          "backlogAtNextWave": 13
+        },
+        {
+          "wave": 11,
+          "spawnAt": 659,
+          "spawned": 18,
+          "roster": {
+            "standard": 8,
+            "scout": 6,
+            "tank": 4
+          },
+          "firstReachSec": null,
+          "lastReachSec": null,
+          "reached": 0,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 0,
+          "alliesLost": 9,
+          "peakEnemiesAlive": 31,
+          "backlogAtNextWave": null
+        }
+      ],
+      "size": "512",
+      "map": "maze",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 42,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 696,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "SURVIVED",
+      "wavesSeen": 13,
+      "simSeconds": 779,
+      "unitsProduced": 60,
+      "enemiesKilled": 86,
+      "alliesLost": 57,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 100.4,
+          "lastReachSec": 101.6,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 100.4,
+          "lastReachSec": 101.6,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 4
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 53.2,
+          "lastReachSec": 174.2,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 2,
+          "peakEnemiesAlive": 10,
+          "backlogAtNextWave": 1
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 101,
+          "lastReachSec": 175.4,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 8,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 53.6,
+          "lastReachSec": 166.6,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 10
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 53.4,
+          "lastReachSec": 176,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 8,
+          "peakEnemiesAlive": 18,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 52.8,
+          "lastReachSec": 174.8,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 10,
+          "peakEnemiesAlive": 21,
+          "backlogAtNextWave": 12
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 101.6,
+          "lastReachSec": 175.6,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 2,
+          "peakEnemiesAlive": 20,
+          "backlogAtNextWave": 11
+        },
+        {
+          "wave": 9,
+          "spawnAt": 539,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 53.6,
+          "lastReachSec": 164.4,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 20,
+          "backlogAtNextWave": 10
+        },
+        {
+          "wave": 10,
+          "spawnAt": 599,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": 53.6,
+          "lastReachSec": 175.6,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 6,
+          "peakEnemiesAlive": 20,
+          "backlogAtNextWave": 13
+        },
+        {
+          "wave": 11,
+          "spawnAt": 659,
+          "spawned": 18,
+          "roster": {
+            "standard": 8,
+            "scout": 6,
+            "tank": 4
+          },
+          "firstReachSec": 53,
+          "lastReachSec": 103.8,
+          "reached": 14,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 11,
+          "peakEnemiesAlive": 31,
+          "backlogAtNextWave": 22
+        },
+        {
+          "wave": 12,
+          "spawnAt": 719,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 53.6,
+          "lastReachSec": 54.2,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 9,
+          "peakEnemiesAlive": 31,
+          "backlogAtNextWave": 18
+        }
+      ],
+      "size": "512",
+      "map": "crossroads",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 52,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 1420,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "SURVIVED",
+      "wavesSeen": 13,
+      "simSeconds": 779,
+      "unitsProduced": 59,
+      "enemiesKilled": 80,
+      "alliesLost": 50,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 118.6,
+          "lastReachSec": 118.8,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 118.6,
+          "lastReachSec": 119,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 7
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 62.8,
+          "lastReachSec": 216.4,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 13,
+          "backlogAtNextWave": 10
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 119,
+          "lastReachSec": 205.8,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 63.8,
+          "lastReachSec": 194.2,
+          "reached": 8,
+          "killedBeforeBase": 1,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 1,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 17
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 63.2,
+          "lastReachSec": 207,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 25,
+          "backlogAtNextWave": 16
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 62.6,
+          "lastReachSec": 205,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 12,
+          "peakEnemiesAlive": 29,
+          "backlogAtNextWave": 15
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 119.2,
+          "lastReachSec": 205.8,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 23,
+          "backlogAtNextWave": 17
+        },
+        {
+          "wave": 9,
+          "spawnAt": 539,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 63,
+          "lastReachSec": 190.4,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 26,
+          "backlogAtNextWave": 19
+        },
+        {
+          "wave": 10,
+          "spawnAt": 599,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": 63,
+          "lastReachSec": 119.8,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 9,
+          "peakEnemiesAlive": 29,
+          "backlogAtNextWave": 15
+        },
+        {
+          "wave": 11,
+          "spawnAt": 659,
+          "spawned": 18,
+          "roster": {
+            "standard": 8,
+            "scout": 6,
+            "tank": 4
+          },
+          "firstReachSec": 62.8,
+          "lastReachSec": 119.8,
+          "reached": 10,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 9,
+          "peakEnemiesAlive": 33,
+          "backlogAtNextWave": 25
+        },
+        {
+          "wave": 12,
+          "spawnAt": 719,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": null,
+          "lastReachSec": null,
+          "reached": 0,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 34,
+          "backlogAtNextWave": 24
+        }
+      ],
+      "size": "1024",
+      "map": "canyon",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 141,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 1420,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "DEFEAT",
+      "wavesSeen": 11,
+      "simSeconds": 708,
+      "unitsProduced": 53,
+      "enemiesKilled": 67,
+      "alliesLost": 56,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 119.8,
+          "lastReachSec": 120.2,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 119.8,
+          "lastReachSec": 120.2,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 7
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 63.4,
+          "lastReachSec": 208.2,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 13,
+          "backlogAtNextWave": 10
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 120.4,
+          "lastReachSec": 207.6,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 6,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 64,
+          "lastReachSec": 196.2,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 17
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 63.4,
+          "lastReachSec": 209.4,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 2,
+          "peakEnemiesAlive": 25,
+          "backlogAtNextWave": 17
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 63.2,
+          "lastReachSec": 207,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 16,
+          "peakEnemiesAlive": 30,
+          "backlogAtNextWave": 16
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 120.4,
+          "lastReachSec": 208,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 24,
+          "backlogAtNextWave": 17
+        },
+        {
+          "wave": 9,
+          "spawnAt": 539,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 63.6,
+          "lastReachSec": 87.2,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 26,
+          "backlogAtNextWave": 19
+        },
+        {
+          "wave": 10,
+          "spawnAt": 599,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": 63.8,
+          "lastReachSec": 64,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 360,
+          "alliesLost": 17,
+          "peakEnemiesAlive": 29,
+          "backlogAtNextWave": 15
+        },
+        {
+          "wave": 11,
+          "spawnAt": 659,
+          "spawned": 18,
+          "roster": {
+            "standard": 8,
+            "scout": 6,
+            "tank": 4
+          },
+          "firstReachSec": null,
+          "lastReachSec": null,
+          "reached": 0,
+          "killedBeforeBase": 0,
+          "hqHpStart": 360,
+          "hqHpEnd": 0,
+          "alliesLost": 7,
+          "peakEnemiesAlive": 33,
+          "backlogAtNextWave": null
+        }
+      ],
+      "size": "1024",
+      "map": "arena",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 127,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 1420,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "DEFEAT",
+      "wavesSeen": 12,
+      "simSeconds": 736,
+      "unitsProduced": 55,
+      "enemiesKilled": 72,
+      "alliesLost": 58,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 119,
+          "lastReachSec": 119.4,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 119,
+          "lastReachSec": 119.4,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 7
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 63,
+          "lastReachSec": 206.6,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 13,
+          "backlogAtNextWave": 10
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 119.2,
+          "lastReachSec": 206.2,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 2,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 63.6,
+          "lastReachSec": 194.4,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 17
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 63.2,
+          "lastReachSec": 207,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 4,
+          "peakEnemiesAlive": 25,
+          "backlogAtNextWave": 17
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 62.8,
+          "lastReachSec": 206.2,
+          "reached": 13,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 13,
+          "peakEnemiesAlive": 30,
+          "backlogAtNextWave": 15
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": 119.6,
+          "lastReachSec": 206.6,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 23,
+          "backlogAtNextWave": 17
+        },
+        {
+          "wave": 9,
+          "spawnAt": 539,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": 63.2,
+          "lastReachSec": 190.2,
+          "reached": 9,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 3,
+          "peakEnemiesAlive": 26,
+          "backlogAtNextWave": 19
+        },
+        {
+          "wave": 10,
+          "spawnAt": 599,
+          "spawned": 10,
+          "roster": {
+            "boss": 1,
+            "tank": 2,
+            "scout": 4,
+            "standard": 3
+          },
+          "firstReachSec": 63.2,
+          "lastReachSec": 120,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 11,
+          "peakEnemiesAlive": 29,
+          "backlogAtNextWave": 15
+        },
+        {
+          "wave": 11,
+          "spawnAt": 659,
+          "spawned": 18,
+          "roster": {
+            "standard": 8,
+            "scout": 6,
+            "tank": 4
+          },
+          "firstReachSec": 62.8,
+          "lastReachSec": 66.6,
+          "reached": 5,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 15,
+          "peakEnemiesAlive": 33,
+          "backlogAtNextWave": 25
+        },
+        {
+          "wave": 12,
+          "spawnAt": 719,
+          "spawned": 9,
+          "roster": {
+            "scout": 8,
+            "tank": 1
+          },
+          "firstReachSec": null,
+          "lastReachSec": null,
+          "reached": 0,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 0,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 34,
+          "backlogAtNextWave": null
+        }
+      ],
+      "size": "1024",
+      "map": "maze",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 145,
+      "pageErrors": []
+    },
+    {
+      "cellSize": 4,
+      "routeLen": 1420,
+      "reachR": 32,
+      "hqMaxHp": 500,
+      "result": "DEFEAT",
+      "wavesSeen": 8,
+      "simSeconds": 500,
+      "unitsProduced": 35,
+      "enemiesKilled": 37,
+      "alliesLost": 33,
+      "waves": [
+        {
+          "wave": 1,
+          "spawnAt": 59,
+          "spawned": 3,
+          "roster": {
+            "standard": 3
+          },
+          "firstReachSec": 121,
+          "lastReachSec": 121.6,
+          "reached": 3,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 3,
+          "backlogAtNextWave": 3
+        },
+        {
+          "wave": 2,
+          "spawnAt": 119,
+          "spawned": 4,
+          "roster": {
+            "standard": 4
+          },
+          "firstReachSec": 121,
+          "lastReachSec": 121.6,
+          "reached": 4,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 7,
+          "backlogAtNextWave": 7
+        },
+        {
+          "wave": 3,
+          "spawnAt": 179,
+          "spawned": 6,
+          "roster": {
+            "scout": 5,
+            "tank": 1
+          },
+          "firstReachSec": 64,
+          "lastReachSec": 209.2,
+          "reached": 6,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 13,
+          "backlogAtNextWave": 10
+        },
+        {
+          "wave": 4,
+          "spawnAt": 239,
+          "spawned": 7,
+          "roster": {
+            "tank": 3,
+            "standard": 4
+          },
+          "firstReachSec": 121.2,
+          "lastReachSec": 209.8,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 6,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 8
+        },
+        {
+          "wave": 5,
+          "spawnAt": 299,
+          "spawned": 9,
+          "roster": {
+            "standard": 5,
+            "scout": 3,
+            "tank": 1
+          },
+          "firstReachSec": 64.4,
+          "lastReachSec": 129.8,
+          "reached": 8,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 0,
+          "peakEnemiesAlive": 17,
+          "backlogAtNextWave": 17
+        },
+        {
+          "wave": 6,
+          "spawnAt": 359,
+          "spawned": 8,
+          "roster": {
+            "scout": 7,
+            "tank": 1
+          },
+          "firstReachSec": 64.2,
+          "lastReachSec": 64.6,
+          "reached": 7,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 5,
+          "peakEnemiesAlive": 25,
+          "backlogAtNextWave": 17
+        },
+        {
+          "wave": 7,
+          "spawnAt": 419,
+          "spawned": 13,
+          "roster": {
+            "standard": 6,
+            "scout": 5,
+            "tank": 2
+          },
+          "firstReachSec": 64,
+          "lastReachSec": 64.8,
+          "reached": 5,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 500,
+          "alliesLost": 19,
+          "peakEnemiesAlive": 30,
+          "backlogAtNextWave": 16
+        },
+        {
+          "wave": 8,
+          "spawnAt": 479,
+          "spawned": 8,
+          "roster": {
+            "tank": 4,
+            "standard": 4
+          },
+          "firstReachSec": null,
+          "lastReachSec": null,
+          "reached": 0,
+          "killedBeforeBase": 0,
+          "hqHpStart": 500,
+          "hqHpEnd": 0,
+          "alliesLost": 3,
+          "peakEnemiesAlive": 24,
+          "backlogAtNextWave": null
+        }
+      ],
+      "size": "1024",
+      "map": "crossroads",
+      "seed": "11",
+      "difficulty": "normal",
+      "wallSeconds": 92,
+      "pageErrors": []
+    }
+  ]
+}
