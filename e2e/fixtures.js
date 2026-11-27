@@ -75,11 +75,10 @@ function state(page) {
     }));
 }
 
-// axe WCAG 2.2 AA. meta-viewport исключён осознанно: щипок на поле — зум камеры (build-log.md).
+// axe WCAG 2.2 AA без исключений: с T-13 масштаб страницы не заблокирован, правило meta-viewport включено.
 async function a11y(page) {
     const res = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
-        .disableRules(['meta-viewport'])
         .analyze();
     return res.violations.map(v => `${v.id} (${v.nodes.length}): ${v.nodes.slice(0, 2).map(n => n.target.join(' ')).join(' | ')}`);
 }

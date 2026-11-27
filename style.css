@@ -21,15 +21,19 @@ body {
     color: var(--color-text);
     background-color: var(--color-bg);
     user-select: none;
+    /* Щипок по интерфейсу масштабирует страницу (WCAG 1.4.4); двойной тап не зумит — это не жест игры */
+    touch-action: manipulation;
 }
 
+/* Поле — цель касаний: браузер не панорамирует и не масштабирует страницу, жесты получает js/input.js
+   (свайп — панорама камеры, щипок — зум камеры). Панели HUD лежат выше (--z-hud) и касания поля не крадут. */
 #canvas-container {
     width: 100vw;
     height: 100vh;
     position: absolute;
     inset: 0;
     z-index: var(--z-scene);
-    pointer-events: none;
+    pointer-events: auto;
     touch-action: none;
 }
 

@@ -294,3 +294,53 @@ test('@mobile тап по кнопке HUD сразу после тапа по �
     });
     expect(res.moved).toBe(0);
 });
+
+// T-13: настоящий щипок через CDP Input.dispatchTouchEvent — проходит через hit-test и touch-action браузера,
+// в отличие от синтетических TouchEvent. Щипок по полю — зум камеры, страница не масштабируется;
+// щипок по интерфейсу (окно паузы) — браузерный зум страницы (WCAG 1.4.4).
+async function cdpPinch(page, cx, cy, from, to, steps = 8) {
+    const cdp = await page.context().newCDPSession(page);
+    const pts = d => [{ x: cx - d / 2, y: cy, id: 1 }, { x: cx + d / 2, y: cy, id: 2 }];
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pts(from) });
+    for (let i = 1; i <= steps; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pts(from + (to - from) * i / steps) });
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+}
+
+test('T-13 @mobile щипок по полю — зум камеры, щипок по интерфейсу — зум страницы', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'только тач');
+    await openGame(page);
+    const meta = await page.getAttribute('meta[name="viewport"]', 'content');
+    expect(meta).not.toMatch(/user-scalable\s*=\s*(no|0)|maximum-scale/);
+
+    await startMatch(page);
+    await clearBattlefield(page);
+    const vp = page.viewportSize();
+    const cx = vp.width / 2, cy = vp.height / 2;
+
+    const field = await page.evaluate(([x, y]) => {
+        camPivot.set(0, 0, 0); applyCameraTransform();
+        const hit = document.elementFromPoint(x, y);
+        return {
+            hitIsCanvas: hit === renderer.domElement,
+            touchAction: getComputedStyle(document.getElementById('canvas-container')).touchAction,
+            zoom: camZoomDist
+        };
+    }, [cx, cy]);
+    expect(field.hitIsCanvas).toBe(true);
+    expect(field.touchAction).toBe('none');
+
+    await cdpPinch(page, cx, cy, 80, 260); // пальцы расходятся — приблизить
+    const afterField = await page.evaluate(() => ({ zoom: camZoomDist, scale: window.visualViewport.scale }));
+    expect(afterField.zoom).toBeLessThan(field.zoom);
+    expect(afterField.scale).toBe(1);
+
+    await page.evaluate(() => togglePause());
+    await expect(page.locator('#pause-overlay')).toBeVisible();
+    const pauseZoom = await page.evaluate(() => camZoomDist);
+    await cdpPinch(page, cx, cy, 80, 260);
+    await expect.poll(() => page.evaluate(() => window.visualViewport.scale)).toBeGreaterThan(1.05);
+    expect(await page.evaluate(() => camZoomDist)).toBe(pauseZoom);
+});
