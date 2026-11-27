@@ -23,7 +23,10 @@ test('BUG-021 строй стоит поперёк движения в любу�
     await openGame(page);
     await startMatch(page);
     await clearBattlefield(page);
-    await page.evaluate(() => { energy = 5000; for (let i = 0; i < 4; i++) produceUnit('standard'); setFormation('line'); units.forEach(u => { u.selected = true; }); });
+    // Реальный цикл заморожен (BUG-035): строй разворачивается от текущего центра отряда к цели (js/input.js),
+    // а без заморозки отряд между приказами успевает уйти к прошлой цели — направление и «глубина» зависели от
+    // скорости раннера (CI 27.11: 2.27 при допуске 2). Приказы issueMoveOrderAtPoint на паузе работают.
+    await page.evaluate(() => { energy = 5000; for (let i = 0; i < 4; i++) produceUnit('standard'); setFormation('line'); units.forEach(u => { u.selected = true; }); isGamePaused = true; });
     const center = await page.evaluate(() => ({
         x: units.reduce((a, u) => a + u.mesh.position.x, 0) / units.length,
         z: units.reduce((a, u) => a + u.mesh.position.z, 0) / units.length
@@ -94,6 +97,9 @@ test('BUG-024 с кольца захвата кристалла отряд ух�
 });
 
 test('BUG-025 армия проходит лабиринт без застрявших на углах стен', async ({ page }) => {
+    // Четыре перехода по лабиринту — сотни секунд игрового времени через fastForward. На медленном раннере CI
+    // тест упирался в 90 с уже после всех проверок маршрута (BUG-036, прогоны #27 и #32): лимит как у BUG-032.
+    test.setTimeout(180_000);
     await openGame(page);
     await pickMap(page, 'maze', 11);
     await startMatch(page);
